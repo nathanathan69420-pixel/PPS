@@ -23,6 +23,12 @@ local homeTab = mainWindow:AddTab({
     Description = "Greetings from plow."
 })
 
+local shootingTab = mainWindow:AddTab({ -- Correctly added as a top-level tab
+    Name = "Shooting",
+    Icon = "gauge",
+    Description = "Basketball shooting features."
+})
+
 local settingsTab = mainWindow:AddTab({
     Name = "Settings",
     Icon = "settings",
@@ -31,15 +37,6 @@ local settingsTab = mainWindow:AddTab({
 
 local homeGroupbox = homeTab:AddGroupbox({
     Name = "Greetings"
-})
-
--- Adding a Tabbox within the Home tab to contain the "Shooting" sub-tab
-local homeTabShootingTabbox = homeTab:AddLeftTabbox() -- Using AddLeftTabbox as an example
-
-local shootingTab = homeTabShootingTabbox:AddTab({ -- "Shooting" tab is now inside the Tabbox
-    Name = "Shooting",
-    Icon = "gauge",
-    Description = "Basketball shooting features."
 })
 
 local configGroupbox = settingsTab:AddGroupbox({
@@ -114,24 +111,12 @@ aimingGroupbox:AddToggle("HighArcToggle", {
     Text = "High Arc",
     Default = false,
     Callback = function(value)
+        -- This callback is triggered when the toggle state changes.
+        -- We now have the 'value' (true/false) of the toggle
+        -- and can check if the player is holding the ball.
         local holdingBall = isLocalPlayerHoldingBall()
-        -- Implement High Arc logic here
-        -- For now, we'll just acknowledge the ball holding status
-        if value then
-            if holdingBall then
-                Library:Notify({
-                    Title = "High Arc Enabled",
-                    Description = "Player is holding the ball. High Arc active.",
-                    Time = 2,
-                })
-            else
-                Library:Notify({
-                    Title = "High Arc Enabled",
-                    Description = "Player is not holding the ball. Waiting...",
-                    Time = 2,
-                })
-            end
-        end
+        -- You can now implement your High Arc logic here,
+        -- potentially starting/stopping routines based on 'value' and 'holdingBall'.
     end,
 })
 
@@ -141,21 +126,6 @@ aimingGroupbox:AddToggle("LowArcToggle", {
     Callback = function(value)
         local holdingBall = isLocalPlayerHoldingBall()
         -- Implement Low Arc logic here
-        if value then
-            if holdingBall then
-                Library:Notify({
-                    Title = "Low Arc Enabled",
-                    Description = "Player is holding the ball. Low Arc active.",
-                    Time = 2,
-                })
-            else
-                Library:Notify({
-                    Title = "Low Arc Enabled",
-                    Description = "Player is not holding the ball. Waiting...",
-                    Time = 2,
-                })
-            end
-        end
     end,
 })
 
@@ -165,21 +135,6 @@ aimingGroupbox:AddToggle("MixedArcToggle", {
     Callback = function(value)
         local holdingBall = isLocalPlayerHoldingBall()
         -- Implement Mixed Arc logic here
-        if value then
-            if holdingBall then
-                Library:Notify({
-                    Title = "Mixed Arc Enabled",
-                    Description = "Player is holding the ball. Mixed Arc active.",
-                    Time = 2,
-                })
-            else
-                Library:Notify({
-                    Title = "Mixed Arc Enabled",
-                    Description = "Player is not holding the ball. Waiting...",
-                    Time = 2,
-                })
-            end
-        end
     end,
 })
 
