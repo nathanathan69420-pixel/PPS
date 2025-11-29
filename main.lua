@@ -2,14 +2,19 @@ local FALLBACK_SCRIPT_URL = "https://raw.githubusercontent.com/nathanathan69420-
 local BASE_SCRIPT_REPO = "https://raw.githubusercontent.com/nathanathan69420-pixel/PPS/main/"
 
 local GAME_SCRIPTS = {
-    [6229116934] = BASE_SCRIPT_REPO .. "hoopz_script.lua",       -- Corrected PlaceId for Hoopz
-    [73956553001240] = BASE_SCRIPT_REPO .. "volleyball_script.lua", -- Corrected PlaceId for Volleyball Legends
+    [6229116934] = BASE_SCRIPT_REPO .. "hoopz_script.lua",
+    [73956553001240] = BASE_SCRIPT_REPO .. "volleyball_script.lua",
 }
 
 local scriptToExecuteURL = FALLBACK_SCRIPT_URL
 
+warn("Plow's Script Loader: Current game.PlaceId is: " .. tostring(game.PlaceId))
+
 if GAME_SCRIPTS[game.PlaceId] then
     scriptToExecuteURL = GAME_SCRIPTS[game.PlaceId]
+    warn("Plow's Script Loader: Found specific script for PlaceId. Will load: " .. scriptToExecuteURL)
+else
+    warn("Plow's Script Loader: No specific script found for PlaceId. Will load fallback: " .. scriptToExecuteURL)
 end
 
 local success, result = pcall(function()
