@@ -42,6 +42,7 @@ local settingsGroup = settingsTab:AddGroupbox({ Name = "Menu Settings" })
 local HitboxSize = 20
 local HitboxTransparency = 0.6
 local HitboxEnabled = false
+local BypassEnabled = true
 local EnforceLoop = nil
 local SpawnConnection = nil
 local ProcessedBalls = {}
@@ -50,6 +51,33 @@ local function CheckName(name)
     local n = name:lower()
     return n:find("client_ball") or n:find("volleyball") or n == "ball"
 end
+
+local function GetOriginalBallProperties(ball)
+    return {
+        Size = Vector3.new(2.06, 2.06, 2.06),
+        Transparency = 0,
+        CanCollide = true,
+        Material = Enum.Material.Plastic
+    }
+end
+
+local __index
+pcall(function()
+    if hookmetamethod and newcclosure and checkcaller then
+        __index = hookmetamethod(game, "__index", newcclosure(function(self, key)
+            if BypassEnabled and not checkcaller() and self:IsA("BasePart") then
+                if CheckName(self.Name) then
+                    local fakeProps = GetOriginalBallProperties(self)
+                    if key == "Size" then return fakeProps.Size end
+                    if key == "Transparency" then return fakeProps.Transparency end
+                    if key == "CanCollide" then return fakeProps.CanCollide end
+                    if key == "Material" then return fakeProps.Material end
+                end
+            end
+            return __index(self, key)
+        end))
+    end
+end)
 
 local function CreateVisualClone(realBall)
     if ProcessedBalls[realBall] and ProcessedBalls[realBall].Parent then return end
@@ -162,6 +190,15 @@ hitboxGroup:AddToggle("EnableHitbox", {
             if SpawnConnection then SpawnConnection:Disconnect() end
             if EnforceLoop then task.cancel(EnforceLoop) end
         end
+    end,
+})
+
+hitboxGroup:AddToggle("EnableBypass", {
+    Text = "Safe Mode (Ghost Bypass)",
+    Default = true,
+    Tooltip = "Spoofs Size, Transparency, and Collision to game scripts",
+    Callback = function(Value)
+        BypassEnabled = Value
     end,
 })
 
