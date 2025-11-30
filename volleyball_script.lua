@@ -24,7 +24,7 @@ local Toggles = Library.Toggles
 
 local mainWindow = Library:CreateWindow({
     Title = "Volleyball Legends\nPrivate Script",
-    Footer = "Small Update v1.0.1",
+    Footer = "Update v1.1.1",
     NotifySide = "Right",
     ShowCustomCursor = true,
 })
@@ -42,7 +42,7 @@ local settingsGroup = settingsTab:AddGroupbox({ Name = "Menu Settings" })
 local HitboxSize = 20
 local HitboxTransparency = 0.6
 local HitboxEnabled = false
-local BypassEnabled = true
+local BypassEnabled = true -- Always enabled by default
 local EnforceLoop = nil
 local SpawnConnection = nil
 local ProcessedBalls = {}
@@ -190,15 +190,6 @@ hitboxGroup:AddToggle("EnableHitbox", {
             if SpawnConnection then SpawnConnection:Disconnect() end
             if EnforceLoop then task.cancel(EnforceLoop) end
         end
-    end,
-})
-
-hitboxGroup:AddToggle("EnableBypass", {
-    Text = "Safe Mode (Ghost Bypass)",
-    Default = true,
-    Tooltip = "Spoofs Size, Transparency, and Collision to game scripts",
-    Callback = function(Value)
-        BypassEnabled = Value
     end,
 })
 
