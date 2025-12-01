@@ -24,20 +24,18 @@ local Toggles = Library.Toggles
 
 local mainWindow = Library:CreateWindow({
     Title = "Plow's Volleyball Legends Script",
-    Footer = "v1.1.2",
+    Footer = "v1.2.2",
     NotifySide = "Right",
     ShowCustomCursor = true,
 })
 
 local homeTab = mainWindow:AddTab("Home", "house")
 local mainTab = mainWindow:AddTab("Main", "volleyball")
-local visualsTab = mainWindow:AddTab("Visuals", "eye")
 local settingsTab = mainWindow:AddTab("Settings", "settings")
 
 local homeGroup = homeTab:AddLeftGroupbox("Information")
 local hitboxGroup = mainTab:AddLeftGroupbox("Hitbox System")
 local predictionGroup = mainTab:AddRightGroupbox("Ball Prediction")
-local visualsGroup = visualsTab:AddLeftGroupbox("Player Visuals")
 local settingsGroup = settingsTab:AddLeftGroupbox("Menu Settings")
 
 local hitboxSize = 20
@@ -49,8 +47,6 @@ local ballSpawnListener = nil
 local trackedBalls = {}
 local predictionEnabled = false
 local predictionMarker = nil
-local playerHighlightsEnabled = false
-local playerHighlights = {}
 local predictionUpdateLoop = nil
 
 local function isBallObject(name)
@@ -325,63 +321,6 @@ predictionGroup:AddToggle("EnablePrediction", {
 predictionGroup:AddLabel("Shows where the ball is headed", true)
 predictionGroup:AddLabel("and where it might land", true)
 
-visualsGroup:AddToggle("EnablePlayerESP", {
-    Text = "Player ESP Highlight",
-    Default = false,
-    Callback = function(Value)
-        playerHighlightsEnabled = Value
-        
-        if Value then
-            local Players = game:GetService("Players")
-            local myPlayer = Players.LocalPlayer
-            
-            local function highlightPlayer(player)
-                if player == myPlayer or playerHighlights[player] then return end
-                
-                local highlightEffect = Instance.new("Highlight")
-                highlightEffect.Name = "PlayerHighlight_" .. player.Name
-                highlightEffect.FillColor = Color3.fromRGB(255, 50, 50)
-                highlightEffect.OutlineColor = Color3.fromRGB(255, 255, 255)
-                highlightEffect.FillTransparency = 0.7
-                highlightEffect.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                
-                local playerCharacter = player.Character or player.CharacterAdded:Wait()
-                highlightEffect.Parent = playerCharacter
-                
-                playerHighlights[player] = highlightEffect
-                
-                player.CharacterAdded:Connect(function(newCharacter)
-                    if playerHighlights[player] then
-                        playerHighlights[player].Parent = newCharacter
-                    end
-                end)
-            end
-            
-            for _, player in ipairs(Players:GetPlayers()) do
-                highlightPlayer(player)
-            end
-            
-            Players.PlayerAdded:Connect(highlightPlayer)
-            Players.PlayerRemoving:Connect(function(player)
-                if playerHighlights[player] then
-                    playerHighlights[player]:Destroy()
-                    playerHighlights[player] = nil
-                end
-            end)
-        else
-            for player, highlightEffect in pairs(playerHighlights) do
-                if highlightEffect then
-                    highlightEffect:Destroy()
-                end
-            end
-            playerHighlights = {}
-        end
-    end
-})
-
-visualsGroup:AddLabel("Makes players easier to see", true)
-visualsGroup:AddLabel("through walls and objects", true)
-
 local myPlayer = game.Players.LocalPlayer
 local playerName = myPlayer and myPlayer.DisplayName or "Player"
 homeGroup:AddLabel("Welcome, " .. playerName, true)
@@ -446,10 +385,5 @@ Library:OnUnload(function()
     end
     if predictionMarker then
         predictionMarker:Destroy()
-    end
-    for player, highlightEffect in pairs(playerHighlights) do
-        if highlightEffect then
-            highlightEffect:Destroy()
-        end
     end
 end)
