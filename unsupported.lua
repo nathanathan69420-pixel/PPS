@@ -12,7 +12,7 @@ end
 
 local mainWindow = Library:CreateWindow({
     Title = "Plow's\nPrivate Script",
-    Footer = "v1.1.3",
+    Footer = "v1.1.2",
     NotifySide = "Right",
     ShowCustomCursor = true,
 })
