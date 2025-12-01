@@ -26,7 +26,7 @@ local mainWindow = Library:CreateWindow({
     Title = "Plow's Volleyball \nLegends Script",
     Footer = "v1.2.2",
     NotifySide = "Right",
-    ShowCustomCursor = true,
+    ShowCustomCursor = false,
 })
 
 local homeTab = mainWindow:AddTab("Home", "house")
@@ -41,7 +41,6 @@ local settingsGroup = settingsTab:AddLeftGroupbox("Menu Settings")
 local hitboxSize = 20
 local hitboxTransparency = 0.6
 local hitboxEnabled = false
-local antiCheatBypass = true
 local hitboxUpdateLoop = nil
 local ballSpawnListener = nil
 local trackedBalls = {}
@@ -53,33 +52,6 @@ local function isBallObject(name)
     local lowerName = name:lower()
     return lowerName:find("client_ball") or lowerName:find("volleyball") or lowerName == "ball"
 end
-
-local function getNormalBallProperties()
-    return {
-        Size = Vector3.new(2.06, 2.06, 2.06),
-        Transparency = 0,
-        CanCollide = true,
-        Material = Enum.Material.Plastic
-    }
-end
-
-local originalIndexMethod
-pcall(function()
-    if hookmetamethod and newcclosure and checkcaller then
-        originalIndexMethod = hookmetamethod(game, "__index", newcclosure(function(self, key)
-            if antiCheatBypass and not checkcaller() and self:IsA("BasePart") then
-                if isBallObject(self.Name) then
-                    local normalProps = getNormalBallProperties()
-                    if key == "Size" then return normalProps.Size end
-                    if key == "Transparency" then return normalProps.Transparency end
-                    if key == "CanCollide" then return normalProps.CanCollide end
-                    if key == "Material" then return normalProps.Material end
-                end
-            end
-            return originalIndexMethod(self, key)
-        end))
-    end
-end)
 
 local function makeBallVisible(actualBall)
     if trackedBalls[actualBall] and trackedBalls[actualBall].Parent then return end
@@ -337,26 +309,8 @@ predictionGroup:AddLabel("and where it might land", true)
 
 local LocalPlayer = game.Players.LocalPlayer
 local displayName = LocalPlayer and LocalPlayer.DisplayName or "Player"
-local currentTime = os.date("%A, %B %d, %Y %H:%M:%S", os.time())
-local supportedJobIds = {}
-local currentGameJobId = game.JobId
-local supportMessage = ""
-local isSupported = false
-
-for _, jobId in ipairs(supportedJobIds) do
-    if jobId == currentGameJobId then
-        isSupported = true
-        break
-    end
-end
-
-if isSupported then
-    supportMessage = "supports."
-else
-    supportMessage = "doesn't support."
-end
-
-local welcomeLabelText = string.format("Hello, %s\nToday is %s (Local Time)\nYou are currently in a game that this script %s", displayName, currentTime, supportMessage)
+local currentTime = os.date("%A, %B %d, %Y %I:%M %p", os.time())
+local welcomeLabelText = string.format("Welcome, %s\nCurrent time: %s\nPlaying: Volleyball Legends", displayName, currentTime)
 
 homeGroup:AddLabel(welcomeLabelText, true)
 
@@ -377,7 +331,7 @@ settingsGroup:AddToggle("KeybindMenuOpen", {
 
 settingsGroup:AddToggle("ShowCustomCursor", {
     Text = "Custom Cursor",
-    Default = true,
+    Default = false,
     Callback = function(Value)
         Library.ShowCustomCursor = Value
     end
@@ -411,6 +365,19 @@ SaveManager:BuildConfigSection(settingsTab)
 ThemeManager:ApplyToTab(settingsTab)
 SaveManager:LoadAutoloadConfig()
 
+task.spawn(function()
+    task.wait(2)
+    pcall(function()
+        local Players = game:GetService("Players")
+        local player = Players.LocalPlayer
+        if player then
+            player.CameraMaxZoomDistance = 100
+            player.CameraMinZoomDistance = 0.5
+            player.CameraMode = Enum.CameraMode.Classic
+        end
+    end)
+end)
+
 Library:OnUnload(function()
     if ballSpawnListener then ballSpawnListener:Disconnect() end
     if hitboxUpdateLoop then task.cancel(hitboxUpdateLoop) end
@@ -432,24 +399,4 @@ Library:OnUnload(function()
     if predictionMarker then
         predictionMarker:Destroy()
     end
-end)
-
-task.spawn(function()
-    task.wait(1)
-    pcall(function()
-        local Players = game:GetService("Players")
-        local player = Players.LocalPlayer
-        local camera = workspace.CurrentCamera
-        
-        if player and camera then
-            camera.CameraType = Enum.CameraType.Custom
-            player.CameraMaxZoomDistance = 100
-            player.CameraMinZoomDistance = 0.5
-            player.CameraMode = Enum.CameraMode.Classic
-            
-            if player:GetMouse() then
-                player:GetMouse().Icon = ""
-            end
-        end
-    end)
 end)
