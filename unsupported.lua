@@ -1,139 +1,73 @@
-local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
-local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
-local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
-local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
+Changelog v1.1.2
 
-local Options = Library.Options
-local Toggles = Library.Toggles
+New Features:
 
-if not Library then
-    return
-end
+Added dedicated VoiceChat tab with microphone icon
 
-local mainWindow = Library:CreateWindow({
-    Title = "Plow's\nPrivate Script",
-    Footer = "version: 1.0",
-    NotifySide = "Right",
-    ShowCustomCursor = true,
-})
+Implemented comprehensive voice bypass system with three methods
 
-local homeTab = mainWindow:AddTab({
-    Name = "Home",
-    Icon = "house",
-    Description = "Greetings from plow."
-})
+Added right-side groupbox explaining bypass techniques in plain language
 
-local settingsTab = mainWindow:AddTab({
-    Name = "Settings",
-    Icon = "gear",
-    Description = "Configure script settings."
-})
+Created automatic voice reconnection system with configurable delay
 
-local homeGroupbox = homeTab:AddGroupbox({
-    Name = "Greetings"
-})
+Added force unban functionality for all players in the server
 
-local configGroupbox = settingsTab:AddGroupbox({
-    Name = "Configuration"
-})
+Voice Bypass System:
 
-local LocalPlayer = game.Players.LocalPlayer
-local displayName = LocalPlayer and LocalPlayer.DisplayName or "Player"
+Full Hook method: Deep system interception for maximum reliability
 
-local currentTime = os.date("%A, %B %d, %Y %H:%M:%S", os.time())
+Network Only method: Packet-level modification for lower detection risk
 
-local supportedJobIds = {
-}
+Filter Only method: Content filtering bypass for lightweight operation
 
-local currentGameJobId = game.JobId
-local supportMessage = ""
-local isSupported = false
+Visual status indicator showing when voice is active
 
-for _, jobId in ipairs(supportedJobIds) do
-    if jobId == currentGameJobId then
-        isSupported = true
-        break
-    end
-end
+Proper hook cleanup to prevent memory leaks
 
-if isSupported then
-    supportMessage = "supports."
-else
-    supportMessage = "doesn't support."
-end
+Interface Improvements:
 
-local welcomeLabelText = string.format("Hello, %s\nToday is %s (Local Time)\nYou are currently in a game that Plow's script %s", displayName, currentTime, supportMessage)
+Organized voice controls into logical groupboxes
 
-homeGroupbox:AddLabel({
-    Text = welcomeLabelText,
-    DoesWrap = true,
-    Size = 16,
-})
+Added explanatory labels for each bypass method
 
-homeGroupbox:AddButton({
-    Text = "Unload Script",
-    Func = function()
-        Library:Unload()
-    end,
-})
+Implemented configurable rejoin delay (1-10 seconds)
 
--- UI Settings from example script, added to configGroupbox
-configGroupbox:AddToggle("KeybindMenuOpen", {
-    Default = Library.KeybindFrame.Visible,
-    Text = "Open Keybind Menu",
-    Callback = function(value)
-        Library.KeybindFrame.Visible = value
-    end,
-})
-configGroupbox:AddToggle("ShowCustomCursor", {
-    Text = "Custom Cursor",
-    Default = true,
-    Callback = function(Value)
-        Library.ShowCustomCursor = Value
-    end,
-})
-configGroupbox:AddDropdown("NotificationSide", {
-    Values = { "Left", "Right" },
-    Default = "Right",
-    Text = "Notification Side",
-    Callback = function(Value)
-        Library:SetNotifySide(Value)
-    end,
-})
-configGroupbox:AddDropdown("DPIDropdown", {
-    Values = { "50%", "75%", "100%", "125%", "150%", "175%", "200%" },
-    Default = "100%",
-    Text = "DPI Scale",
-    Callback = function(Value)
-        Value = Value:gsub("%%", "")
-        local DPI = tonumber(Value)
-        Library:SetDPIScale(DPI)
-    end,
-})
-configGroupbox:AddDivider()
-configGroupbox:AddLabel("Menu bind")
-    :AddKeyPicker("MenuKeybind", { Default = "RightShift", NoUI = true, Text = "Menu keybind" })
+Added clear voice data button for troubleshooting
 
-configGroupbox:AddButton("Unload", {
-    Text = "Unload UI", -- Renamed to avoid confusion with the other "Unload Script"
-    Func = function()
-        Library:Unload()
-    end,
-})
+Settings tab icon updated from "gear" to "settings"
 
-Library.ToggleKeybind = Options.MenuKeybind -- Assuming Options is correctly populated by Obsidian
+Technical Enhancements:
 
--- Addons setup (ThemeManager and SaveManager)
-ThemeManager:SetLibrary(Library)
-SaveManager:SetLibrary(Library)
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
-ThemeManager:SetFolder("PlowsScriptHub") -- Custom folder name
-SaveManager:SetFolder("PlowsScriptHub/specific-game") -- Custom folder name
-SaveManager:SetSubFolder("specific-place") -- Custom folder name
-SaveManager:BuildConfigSection(settingsTab) -- Build config section on settingsTab
-ThemeManager:ApplyToTab(settingsTab) -- Apply theme manager to settingsTab
-SaveManager:LoadAutoloadConfig()
+Robust error handling with pcall throughout
 
-Library:Load(function()
-end)
+Proper metatable hook management with restoration
+
+Network packet interception for RemoteEvents
+
+Data store manipulation for ban removal
+
+Memory-efficient hook storage and cleanup
+
+System Integration:
+
+Automatic creation of fake UI to mimic legitimate voice system
+
+Continuous connection maintenance with adjustable intervals
+
+Full compatibility with Obsidian UI library and addons
+
+Persistent configuration saving through SaveManager
+
+Theme support through ThemeManager
+
+Safety & Controls:
+
+Clean unload system that removes all hooks
+
+Visual warnings about detection risks
+
+Separate unload buttons for script and UI
+
+Configurable menu keybind (default: RightShift)
+
+DPI scaling options for different screen resolutions
