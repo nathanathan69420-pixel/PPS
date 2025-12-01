@@ -23,7 +23,7 @@ local Options = Library.Options
 local Toggles = Library.Toggles
 
 local mainWindow = Library:CreateWindow({
-    Title = "Plow's Volleyball Legends Script",
+    Title = "Plow's Volleyball \nLegends Script",
     Footer = "v1.2.2",
     NotifySide = "Right",
     ShowCustomCursor = true,
@@ -191,6 +191,20 @@ hitboxGroup:AddToggle("EnableHitbox", {
         else
             if ballSpawnListener then ballSpawnListener:Disconnect() end
             if hitboxUpdateLoop then task.cancel(hitboxUpdateLoop) end
+            
+            for actualBall, visibleVersion in pairs(trackedBalls) do
+                if actualBall and actualBall.Parent then
+                    actualBall.Size = Vector3.new(2.06, 2.06, 2.06)
+                    actualBall.Transparency = 0
+                    actualBall.Material = Enum.Material.Plastic
+                    actualBall.CanCollide = true
+                    actualBall.Massless = false
+                end
+                if visibleVersion then
+                    visibleVersion:Destroy()
+                end
+            end
+            trackedBalls = {}
         end
     end
 })
@@ -321,10 +335,31 @@ predictionGroup:AddToggle("EnablePrediction", {
 predictionGroup:AddLabel("Shows where the ball is headed", true)
 predictionGroup:AddLabel("and where it might land", true)
 
-local myPlayer = game.Players.LocalPlayer
-local playerName = myPlayer and myPlayer.DisplayName or "Player"
-homeGroup:AddLabel("Welcome, " .. playerName, true)
-homeGroup:AddLabel("Game: Volleyball Legends", true)
+local LocalPlayer = game.Players.LocalPlayer
+local displayName = LocalPlayer and LocalPlayer.DisplayName or "Player"
+local currentTime = os.date("%A, %B %d, %Y %H:%M:%S", os.time())
+local supportedJobIds = {}
+local currentGameJobId = game.JobId
+local supportMessage = ""
+local isSupported = false
+
+for _, jobId in ipairs(supportedJobIds) do
+    if jobId == currentGameJobId then
+        isSupported = true
+        break
+    end
+end
+
+if isSupported then
+    supportMessage = "supports."
+else
+    supportMessage = "doesn't support."
+end
+
+local welcomeLabelText = string.format("Hello, %s\nToday is %s (Local Time)\nYou are currently in a game that this script %s", displayName, currentTime, supportMessage)
+
+homeGroup:AddLabel(welcomeLabelText, true)
+
 homeGroup:AddButton({
     Text = "Unload Script",
     Func = function()
@@ -380,10 +415,41 @@ Library:OnUnload(function()
     if ballSpawnListener then ballSpawnListener:Disconnect() end
     if hitboxUpdateLoop then task.cancel(hitboxUpdateLoop) end
     if predictionUpdateLoop then task.cancel(predictionUpdateLoop) end
-    for _, visibleBall in pairs(trackedBalls) do
-        if visibleBall then visibleBall:Destroy() end
+    
+    for actualBall, visibleVersion in pairs(trackedBalls) do
+        if actualBall and actualBall.Parent then
+            actualBall.Size = Vector3.new(2.06, 2.06, 2.06)
+            actualBall.Transparency = 0
+            actualBall.Material = Enum.Material.Plastic
+            actualBall.CanCollide = true
+            actualBall.Massless = false
+        end
+        if visibleVersion then
+            visibleVersion:Destroy()
+        end
     end
+    
     if predictionMarker then
         predictionMarker:Destroy()
     end
+end)
+
+task.spawn(function()
+    task.wait(1)
+    pcall(function()
+        local Players = game:GetService("Players")
+        local player = Players.LocalPlayer
+        local camera = workspace.CurrentCamera
+        
+        if player and camera then
+            camera.CameraType = Enum.CameraType.Custom
+            player.CameraMaxZoomDistance = 100
+            player.CameraMinZoomDistance = 0.5
+            player.CameraMode = Enum.CameraMode.Classic
+            
+            if player:GetMouse() then
+                player:GetMouse().Icon = ""
+            end
+        end
+    end)
 end)
