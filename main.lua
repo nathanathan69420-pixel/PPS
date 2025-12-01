@@ -7,13 +7,20 @@ local GAME_SCRIPTS = {
 
 local scriptToExecuteURL = FALLBACK_SCRIPT_URL
 
-warn("Plow's Script Loader: Current game.PlaceId is: " .. tostring(game.PlaceId))
+local function showNotification(title, message, duration)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = title,
+            Text = message,
+            Duration = duration or 5
+        })
+    end)
+end
 
 if GAME_SCRIPTS[game.PlaceId] then
     scriptToExecuteURL = GAME_SCRIPTS[game.PlaceId]
-    warn("Plow's Script Loader: Found specific script for PlaceId. Will load: " .. scriptToExecuteURL)
 else
-    warn("Plow's Script Loader: No specific script found for PlaceId. Will load fallback: " .. scriptToExecuteURL)
+    showNotification("Script Loader", "Unsupported Game detected! Loading universal fallback...", 3)
 end
 
 local success, result = pcall(function()
@@ -22,10 +29,10 @@ local success, result = pcall(function()
     if loadedFunction then
         loadedFunction()
     else
-        warn("Plow's Script Loader: Failed to compile script from URL: " .. scriptToExecuteURL)
+        showNotification("Script Loader", "Failed to compile script", 3)
     end
 end)
 
 if not success then
-    warn("Plow's Script Loader: An error occurred during script execution: " .. tostring(result))
+    showNotification("Script Loader", "Error during execution: " .. tostring(result), 5)
 end
