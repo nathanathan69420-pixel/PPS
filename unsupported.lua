@@ -1,14 +1,10 @@
-local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
+local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/"
 local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
 local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
 local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
 local Options = Library.Options
 local Toggles = Library.Toggles
-
-if not Library then
-    return
-end
 
 local mainWindow = Library:CreateWindow({
     Title = "Plow's\nPrivate Script",
@@ -22,44 +18,22 @@ local voiceChatTab = mainWindow:AddTab("VoiceChat", "mic")
 local settingsTab = mainWindow:AddTab("Settings", "settings")
 
 local homeGroupbox = homeTab:AddLeftGroupbox("Greetings")
-local voiceLeftGroup = voiceChatTab:AddLeftGroupbox("Voice System")
-local voiceRightGroup = voiceChatTab:AddRightGroupbox("Bypass Methods Info")
+local voiceGroup = voiceChatTab:AddLeftGroupbox("Voice System")
 local configGroupbox = settingsTab:AddLeftGroupbox("Configuration")
-
-voiceRightGroup:AddLabel("Full Hook", true)
-voiceRightGroup:AddLabel("Intercepts both voice permission checks and chat filters at the deepest level. Most reliable but detectable.", true)
-
-voiceRightGroup:AddLabel("Network Only", true)
-voiceRightGroup:AddLabel("Only modifies network packets sent to servers. Less detectable but may miss some filter checks.", true)
-
-voiceRightGroup:AddLabel("Filter Only", true)
-voiceRightGroup:AddLabel("Only bypasses text/voice content filtering. Lightweight but doesn't handle permission bans.", true)
-
-voiceRightGroup:AddDivider()
-voiceRightGroup:AddLabel("How it works:", true)
-voiceRightGroup:AddLabel("1. Hooks system functions to always return 'enabled'", true)
-voiceRightGroup:AddLabel("2. Clears ban records from data stores", true)
-voiceRightGroup:AddLabel("3. Creates fake UI to mimic normal voice system", true)
-voiceRightGroup:AddLabel("4. Auto-rejoins to maintain connection", true)
-
-voiceRightGroup:AddDivider()
-voiceRightGroup:AddLabel("Warning: Overuse may trigger", true)
-voiceRightGroup:AddLabel("additional detection systems.", true)
 
 local bypassActive = false
 local voiceHooks = {}
 local networkHooks = {}
+local bypassLoop = nil
 
-local function createVoiceHook()
+local function activateFullBypass()
     pcall(function()
         local VoiceService = game:GetService("VoiceService")
         local Players = game:GetService("Players")
         local TextService = game:GetService("TextService")
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
-        local HttpService = game:GetService("HttpService")
         
         voiceHooks.originalVoiceCheck = VoiceService.IsVoiceEnabledForUserIdAsync
-        voiceHooks.originalFilter = TextService.FilterStringAsync
         
         VoiceService.IsVoiceEnabledForUserIdAsync = function(self, userId)
             if userId == Players.LocalPlayer.UserId then
@@ -73,27 +47,23 @@ local function createVoiceHook()
         
         TextService.FilterStringAsync = function(self, text, userId, context)
             local result = {
-                GetNonChatStringForBroadcastAsync = function() 
-                    return text 
-                end,
-                GetChatStringForUserAsync = function() 
-                    return text 
-                end
+                GetNonChatStringForBroadcastAsync = function() return text end,
+                GetChatStringForUserAsync = function() return text end
             }
             return result
         end
         
         for _, remote in pairs(ReplicatedStorage:GetChildren()) do
-            if remote:IsA("RemoteEvent") and (remote.Name:find("Voice") or remote.Name:find("Chat")) then
-                local oldFire = remote.FireServer
+            if remote:IsA("RemoteEvent") and remote.Name:find("Voice") then
+                local originalFire = remote.FireServer
                 remote.FireServer = function(self, ...)
                     local args = {...}
                     if remote.Name:find("Voice") then
-                        args[1] = "UNRESTRICTED_VOICE_" .. HttpService:GenerateGUID(false)
+                        args[1] = "BYPASS_" .. tostring(math.random(10000, 99999))
                     end
-                    return oldFire(self, unpack(args))
+                    return originalFire(self, unpack(args))
                 end
-                networkHooks[remote] = oldFire
+                networkHooks[remote] = originalFire
             end
         end
         
@@ -127,64 +97,54 @@ local function createVoiceHook()
             setreadonly(mt, true)
         end
         
-        local success, voiceBanStore = pcall(function()
-            return game:GetService("DataStoreService"):GetDataStore("VoiceChatBans")
-        end)
-        
-        if success and voiceBanStore then
-            pcall(function()
-                voiceBanStore:RemoveAsync(tostring(Players.LocalPlayer.UserId))
-            end)
-        end
-        
-        local success2, settings = pcall(function()
+        local success, settings = pcall(function()
             return settings()
         end)
         
-        if success2 and settings.VoiceChat then
+        if success and settings.VoiceChat then
             settings.VoiceChat.Banned = false
             settings.VoiceChat.Moderated = false
+            settings.VoiceChat.Enabled = true
         end
         
-        spawn(function()
+        local DataStoreService = game:GetService("DataStoreService")
+        pcall(function()
+            local banStore = DataStoreService:GetDataStore("VoiceChatBans")
+            banStore:RemoveAsync(tostring(Players.LocalPlayer.UserId))
+        end)
+        
+        bypassLoop = task.spawn(function()
             while bypassActive do
                 pcall(function()
-                    local VoiceChatService = game:GetService("VoiceChatService")
-                    local joinSuccess = pcall(function()
-                        VoiceChatService:JoinVoice()
-                    end)
+                    local CoreGui = game:GetService("CoreGui")
+                    local existingUI = CoreGui:FindFirstChild("VoiceBypassUI")
                     
-                    if not joinSuccess then
-                        local CoreGui = game:GetService("CoreGui")
-                        local existingUI = CoreGui:FindFirstChild("VoiceBypassUI")
+                    if not existingUI then
+                        local screenUI = Instance.new("ScreenGui")
+                        screenUI.Name = "VoiceBypassUI"
+                        screenUI.Parent = CoreGui
                         
-                        if not existingUI then
-                            local screenGui = Instance.new("ScreenGui")
-                            screenGui.Name = "VoiceBypassUI"
-                            screenGui.Parent = CoreGui
-                            
-                            local frame = Instance.new("Frame")
-                            frame.Size = UDim2.new(0, 100, 0, 40)
-                            frame.Position = UDim2.new(1, -110, 1, -50)
-                            frame.BackgroundTransparency = 0.8
-                            frame.Parent = screenGui
-                            
-                            local label = Instance.new("TextLabel")
-                            label.Size = UDim2.new(1, 0, 1, 0)
-                            label.Text = "VOICE ACTIVE"
-                            label.TextColor3 = Color3.new(0, 1, 0)
-                            label.BackgroundTransparency = 1
-                            label.Parent = frame
-                        end
+                        local statusFrame = Instance.new("Frame")
+                        statusFrame.Size = UDim2.new(0, 120, 0, 40)
+                        statusFrame.Position = UDim2.new(1, -130, 1, -50)
+                        statusFrame.BackgroundTransparency = 0.7
+                        statusFrame.Parent = screenUI
+                        
+                        local statusText = Instance.new("TextLabel")
+                        statusText.Size = UDim2.new(1, 0, 1, 0)
+                        statusText.Text = "VOICE ACTIVE"
+                        statusText.TextColor3 = Color3.new(0, 1, 0)
+                        statusText.BackgroundTransparency = 1
+                        statusText.Parent = statusFrame
                     end
                 end)
-                wait(2)
+                task.wait(5)
             end
         end)
     end)
 end
 
-local function removeVoiceHook()
+local function deactivateBypass()
     pcall(function()
         local VoiceService = game:GetService("VoiceService")
         local TextService = game:GetService("TextService")
@@ -194,13 +154,9 @@ local function removeVoiceHook()
             VoiceService.IsVoiceEnabledForUserIdAsync = voiceHooks.originalVoiceCheck
         end
         
-        if voiceHooks.originalFilter then
-            TextService.FilterStringAsync = voiceHooks.originalFilter
-        end
-        
-        for remote, oldFire in pairs(networkHooks) do
-            if remote and oldFire then
-                remote.FireServer = oldFire
+        for remote, originalFire in pairs(networkHooks) do
+            if remote and originalFire then
+                remote.FireServer = originalFire
             end
         end
         
@@ -220,77 +176,27 @@ local function removeVoiceHook()
         voiceHooks = {}
         networkHooks = {}
     end)
+    
+    if bypassLoop then
+        task.cancel(bypassLoop)
+    end
 end
 
-voiceLeftGroup:AddToggle("BypassVoiceChat", {
-    Text = "Voice Bypass System",
+voiceGroup:AddToggle("VoiceBypass", {
+    Text = "Voice Chat Bypass",
     Default = false,
     Callback = function(Value)
         bypassActive = Value
         if Value then
-            createVoiceHook()
+            activateFullBypass()
         else
-            removeVoiceHook()
+            deactivateBypass()
         end
     end
 })
 
-voiceLeftGroup:AddSlider("RejoinDelay", {
-    Text = "Rejoin Delay",
-    Default = 2,
-    Min = 1,
-    Max = 10,
-    Rounding = 1,
-    Suffix = "s",
-    Callback = function(Value)
-    end
-})
-
-voiceLeftGroup:AddDropdown("BypassMethod", {
-    Values = {"Full Hook", "Network Only", "Filter Only"},
-    Default = "Full Hook",
-    Text = "Bypass Method",
-    Callback = function(Value)
-    end
-})
-
-voiceLeftGroup:AddButton({
-    Text = "Clear Voice Data",
-    Func = function()
-        pcall(function()
-            game:GetService("VoiceChatService"):LeaveVoice()
-            wait(0.5)
-            local CoreGui = game:GetService("CoreGui")
-            for _, obj in pairs(CoreGui:GetChildren()) do
-                if obj.Name:find("Voice") then
-                    obj:Destroy()
-                end
-            end
-        end)
-    end
-})
-
-voiceLeftGroup:AddButton({
-    Text = "Force Unban All",
-    Func = function()
-        pcall(function()
-            local Players = game:GetService("Players")
-            local DataStoreService = game:GetService("DataStoreService")
-            local voiceBanStore = DataStoreService:GetDataStore("VoiceChatBans")
-            
-            for _, player in pairs(Players:GetPlayers()) do
-                pcall(function()
-                    voiceBanStore:RemoveAsync(tostring(player.UserId))
-                end)
-            end
-            
-            if settings().VoiceChat then
-                settings().VoiceChat.Banned = false
-                settings().VoiceChat.Moderated = false
-            end
-        end)
-    end
-})
+voiceGroup:AddLabel("Advanced bypass system", true)
+voiceGroup:AddLabel("Multiple method integration", true)
 
 local LocalPlayer = game.Players.LocalPlayer
 local displayName = LocalPlayer and LocalPlayer.DisplayName or "Player"
@@ -313,16 +219,14 @@ else
     supportMessage = "doesn't support."
 end
 
-local welcomeLabelText = string.format("Hello, %s\nToday is %s (Local Time)\nYou are currently in a game that Plow's script %s", displayName, currentTime, supportMessage)
+local welcomeLabelText = string.format("Hello, %s\nToday is %s (Local Time)\nYou are currently in a game that this script %s", displayName, currentTime, supportMessage)
 
 homeGroupbox:AddLabel(welcomeLabelText, true)
 
 homeGroupbox:AddButton({
     Text = "Unload Script",
     Func = function()
-        if bypassActive then
-            removeVoiceHook()
-        end
+        deactivateBypass()
         Library:Unload()
     end,
 })
@@ -366,12 +270,10 @@ configGroupbox:AddDropdown("DPIDropdown", {
 configGroupbox:AddDivider()
 configGroupbox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightShift", NoUI = true, Text = "Menu keybind" })
 
-configGroupbox:AddButton({
+configGroupbox:AddButton("Unload", {
     Text = "Unload UI",
     Func = function()
-        if bypassActive then
-            removeVoiceHook()
-        end
+        deactivateBypass()
         Library:Unload()
     end,
 })
