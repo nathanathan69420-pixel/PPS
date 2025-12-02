@@ -1,355 +1,615 @@
-local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/"
-
-local libraryLoadSuccess, libraryLoadResult = pcall(function()
-    return loadstring(game:HttpGet(repo .. "Library.lua"))()
-end)
-
-if not libraryLoadSuccess or typeof(libraryLoadResult) ~= "table" then
-    return
-end
-local Library = libraryLoadResult
-
-local themeLoadSuccess, themeLoadResult = pcall(function()
-    return loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
-end)
-local ThemeManager = (themeLoadSuccess and typeof(themeLoadResult) == "table") and themeLoadResult or { SetLibrary = function() end, SetFolder = function() end, ApplyToTab = function() end }
-
-local saveLoadSuccess, saveLoadResult = pcall(function()
-    return loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
-end)
-local SaveManager = (saveLoadSuccess and typeof(saveLoadResult) == "table") and saveLoadResult or { SetLibrary = function() end, SetFolder = function() end, SetSubFolder = function() end, SetIgnoreIndexes = function() end, IgnoreThemeSettings = function() end, BuildConfigSection = function() end, LoadAutoloadConfig = function() end }
+local repoUrl = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/"
+local Library = loadstring(game:HttpGet(repoUrl .. "Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(repoUrl .. "addons/ThemeManager.lua"))()
+local SaveManager = loadstring(game:HttpGet(repoUrl .. "addons/SaveManager.lua"))()
 
 local Options = Library.Options
 local Toggles = Library.Toggles
 
-local mainWindow = Library:CreateWindow({
-    Title = "Plow's Volleyball \nLegends Script",
+local window = Library:CreateWindow({
+    Title = "Plow's\nPrivate Script",
     Footer = "v1.2.2",
     NotifySide = "Right",
-    ShowCustomCursor = false,
+    ShowCustomCursor = true,
 })
 
-local homeTab = mainWindow:AddTab("Home", "house")
-local mainTab = mainWindow:AddTab("Main", "volleyball")
-local settingsTab = mainWindow:AddTab("Settings", "settings")
+local homeTab = window:AddTab("Home", "house")
+local homeStatusGroup = homeTab:AddLeftGroupbox("Status")
 
-local homeGroup = homeTab:AddLeftGroupbox("Information")
-local hitboxGroup = mainTab:AddLeftGroupbox("Hitbox System")
-local predictionGroup = mainTab:AddRightGroupbox("Ball Prediction")
-local settingsGroup = settingsTab:AddLeftGroupbox("Menu Settings")
+local localPlayer = game.Players.LocalPlayer
+local displayName = localPlayer and localPlayer.DisplayName or "Player"
+local currentTime = os.date("%H:%M:%S")
+local welcomeText = string.format(
+    "Welcome, %s\nCurrent time: %s\nYou are currently in a game that Plow's script doesn't support.",
+    displayName,
+    currentTime
+)
 
-local hitboxSize = 20
-local hitboxTransparency = 0.6
-local hitboxEnabled = false
-local hitboxUpdateLoop = nil
-local ballSpawnListener = nil
-local trackedBalls = {}
-local predictionEnabled = false
-local predictionMarker = nil
-local predictionUpdateLoop = nil
+homeStatusGroup:AddLabel(welcomeText, true)
 
-local function isBallObject(name)
-    local lowerName = name:lower()
-    return lowerName:find("client_ball") or lowerName:find("volleyball") or lowerName == "ball"
-end
-
-local function makeBallVisible(actualBall)
-    if trackedBalls[actualBall] and trackedBalls[actualBall].Parent then return end
-
-    local visibleBall = Instance.new("Part")
-    visibleBall.Name = "VisibleBall"
-    visibleBall.Size = Vector3.new(2, 2, 2)
-    visibleBall.Shape = Enum.PartType.Ball
-    visibleBall.Color = actualBall.Color
-    visibleBall.Material = Enum.Material.Plastic
-    visibleBall.CanCollide = false
-    visibleBall.CanTouch = false
-    visibleBall.Anchored = false
-    visibleBall.Massless = true
-    
-    if actualBall:IsA("MeshPart") then
-        visibleBall.Color = actualBall.Color
-    end
-    
-    local connector = Instance.new("WeldConstraint")
-    connector.Part0 = actualBall
-    connector.Part1 = visibleBall
-    connector.Parent = visibleBall
-    
-    visibleBall.CFrame = actualBall.CFrame
-    visibleBall.Parent = actualBall.Parent
-    
-    trackedBalls[actualBall] = visibleBall
-end
-
-local function updateBallProperties(ballPart)
-    if ballPart:IsA("BasePart") then
-        makeBallVisible(ballPart)
-        
-        if math.abs(ballPart.Size.X - hitboxSize) > 0.5 then
-            ballPart.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-        end
-        
-        ballPart.Transparency = hitboxTransparency
-        ballPart.Material = Enum.Material.ForceField
-        ballPart.CanCollide = false
-        ballPart.Massless = true
-    end
-end
-
-local function checkAndModifyObject(object)
-    if not object then return end
-    
-    if isBallObject(object.Name) then
-        if object:IsA("Model") then
-            for _, child in ipairs(object:GetChildren()) do
-                updateBallProperties(child)
-            end
-            object.ChildAdded:Connect(function(newChild)
-                task.wait()
-                updateBallProperties(newChild)
-            end)
-        elseif object:IsA("BasePart") then
-            updateBallProperties(object)
-        end
-    end
-end
-
-hitboxGroup:AddToggle("EnableHitbox", {
-    Text = "Enable Hitbox Expander",
-    Default = false,
-    Callback = function(Value)
-        hitboxEnabled = Value
-        
-        if Value then
-            for _, child in ipairs(workspace:GetChildren()) do
-                checkAndModifyObject(child)
-            end
-            
-            if ballSpawnListener then ballSpawnListener:Disconnect() end
-            ballSpawnListener = workspace.ChildAdded:Connect(function(child)
-                if hitboxEnabled then
-                    checkAndModifyObject(child)
-                end
-            end)
-
-            if hitboxUpdateLoop then task.cancel(hitboxUpdateLoop) end
-            hitboxUpdateLoop = task.spawn(function()
-                while hitboxEnabled and not Library.Unloaded do
-                    for actualBall, visibleVersion in pairs(trackedBalls) do
-                        if actualBall and actualBall.Parent then
-                            if math.abs(actualBall.Size.X - hitboxSize) > 0.5 then
-                                actualBall.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-                            end
-                            
-                            actualBall.Transparency = hitboxTransparency
-                            actualBall.Material = Enum.Material.ForceField
-                            actualBall.CanCollide = false
-                            
-                            if visibleVersion and visibleVersion.Parent then
-                                visibleVersion.Size = Vector3.new(1.8, 1.8, 1.8)
-                                visibleVersion.Transparency = 0
-                                visibleVersion.Material = Enum.Material.Plastic
-                                visibleVersion.Color = Color3.fromRGB(255, 255, 255)
-                            end
-                        else
-                            if visibleVersion then visibleVersion:Destroy() end
-                            trackedBalls[actualBall] = nil
-                        end
-                    end
-                    task.wait(0.5)
-                end
-            end)
-        else
-            if ballSpawnListener then ballSpawnListener:Disconnect() end
-            if hitboxUpdateLoop then task.cancel(hitboxUpdateLoop) end
-            
-            for actualBall, visibleVersion in pairs(trackedBalls) do
-                if actualBall and actualBall.Parent then
-                    actualBall.Size = Vector3.new(2.06, 2.06, 2.06)
-                    actualBall.Transparency = 0
-                    actualBall.Material = Enum.Material.Plastic
-                    actualBall.CanCollide = true
-                    actualBall.Massless = false
-                end
-                if visibleVersion then
-                    visibleVersion:Destroy()
-                end
-            end
-            trackedBalls = {}
-        end
-    end
-})
-
-hitboxGroup:AddSlider("HitboxSize", {
-    Text = "Hitbox Size",
-    Default = 20,
-    Min = 5,
-    Max = 50,
-    Rounding = 0,
-    Callback = function(Value)
-        hitboxSize = Value
-        if hitboxEnabled then
-            for actualBall, _ in pairs(trackedBalls) do
-                if actualBall and actualBall.Parent then
-                    actualBall.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-                end
-            end
-        end
-    end
-})
-
-hitboxGroup:AddSlider("HitboxTransparency", {
-    Text = "Hitbox Transparency",
-    Default = 0.6,
-    Min = 0,
-    Max = 1,
-    Rounding = 1,
-    Callback = function(Value)
-        hitboxTransparency = Value
-        if hitboxEnabled then
-            for actualBall, _ in pairs(trackedBalls) do
-                if actualBall and actualBall.Parent then
-                    actualBall.Transparency = hitboxTransparency
-                end
-            end
-        end
-    end
-})
-
-predictionGroup:AddToggle("EnablePrediction", {
-    Text = "Ball Trajectory Prediction",
-    Default = false,
-    Callback = function(Value)
-        predictionEnabled = Value
-        
-        if Value then
-            if predictionUpdateLoop then task.cancel(predictionUpdateLoop) end
-            
-            if not predictionMarker then
-                predictionMarker = Instance.new("Part")
-                predictionMarker.Name = "BallPathMarker"
-                predictionMarker.Size = Vector3.new(2, 2, 2)
-                predictionMarker.Shape = Enum.PartType.Ball
-                predictionMarker.Color = Color3.fromRGB(255, 0, 0)
-                predictionMarker.Material = Enum.Material.Neon
-                predictionMarker.Transparency = 0.3
-                predictionMarker.CanCollide = false
-                predictionMarker.Anchored = true
-                predictionMarker.Parent = workspace
-            end
-            
-            predictionUpdateLoop = task.spawn(function()
-                while predictionEnabled and not Library.Unloaded do
-                    local currentBall = nil
-                    
-                    for _, object in ipairs(workspace:GetChildren()) do
-                        if isBallObject(object.Name) then
-                            if object:IsA("BasePart") then
-                                currentBall = object
-                                break
-                            elseif object:IsA("Model") then
-                                for _, child in ipairs(object:GetChildren()) do
-                                    if child:IsA("BasePart") then
-                                        currentBall = child
-                                        break
-                                    end
-                                end
-                            end
-                        end
-                        if currentBall then break end
-                    end
-                    
-                    if currentBall and predictionMarker then
-                        local ballSpeed = currentBall.AssemblyLinearVelocity
-                        local ballPosition = currentBall.Position
-                        
-                        predictionMarker.Position = ballPosition + (ballSpeed * 0.5) + Vector3.new(0, -4.9 * 0.25, 0)
-                        
-                        local estimatedLanding = ballPosition + (ballSpeed * 1.0) + Vector3.new(0, -4.9 * 1.0, 0)
-                        
-                        local pathLine = predictionMarker:FindFirstChild("PathLine")
-                        if not pathLine then
-                            pathLine = Instance.new("Beam")
-                            pathLine.Name = "PathLine"
-                            pathLine.Color = ColorSequence.new(Color3.fromRGB(255, 0, 0))
-                            pathLine.Width0 = 0.2
-                            pathLine.Width1 = 0.2
-                            pathLine.Attachment0 = Instance.new("Attachment")
-                            pathLine.Attachment0.Parent = predictionMarker
-                            pathLine.Attachment1 = Instance.new("Attachment")
-                            pathLine.Attachment1.Position = estimatedLanding - ballPosition
-                            pathLine.Attachment1.Parent = predictionMarker
-                            pathLine.Parent = predictionMarker
-                        else
-                            pathLine.Attachment1.Position = estimatedLanding - ballPosition
-                        end
-                    end
-                    
-                    task.wait(0.1)
-                end
-                
-                if predictionMarker then
-                    predictionMarker:Destroy()
-                    predictionMarker = nil
-                end
-            end)
-        else
-            if predictionUpdateLoop then task.cancel(predictionUpdateLoop) end
-            if predictionMarker then
-                predictionMarker:Destroy()
-                predictionMarker = nil
-            end
-        end
-    end
-})
-
-predictionGroup:AddLabel("Shows where the ball is headed", true)
-predictionGroup:AddLabel("and where it might land", true)
-
-local LocalPlayer = game.Players.LocalPlayer
-local displayName = LocalPlayer and LocalPlayer.DisplayName or "Player"
-local currentTime = os.date("%A, %B %d, %Y %I:%M %p", os.time())
-local welcomeLabelText = string.format("Welcome, %s\nCurrent time: %s\nPlaying: Volleyball Legends", displayName, currentTime)
-
-homeGroup:AddLabel(welcomeLabelText, true)
-
-homeGroup:AddButton({
-    Text = "Unload Script",
+homeStatusGroup:AddButton({
+    Text = "Unload",
     Func = function()
         Library:Unload()
     end
 })
 
-settingsGroup:AddToggle("KeybindMenuOpen", {
-    Default = Library.KeybindFrame.Visible,
-    Text = "Open Keybind Menu",
-    Callback = function(value)
-        Library.KeybindFrame.Visible = value
-    end
-})
+local statsGroup = homeTab:AddRightGroupbox("FPS & Ping display")
 
-settingsGroup:AddToggle("ShowCustomCursor", {
-    Text = "Custom Cursor",
+local fpsLabel = statsGroup:AddLabel("FPS: calculating...", true)
+local pingLabel = statsGroup:AddLabel("Ping: calculating...", true)
+
+local runService = game:GetService("RunService")
+local statsService = game:GetService("Stats")
+local userInputService = game:GetService("UserInputService")
+local playersService = game:GetService("Players")
+local lightingService = game:GetService("Lighting")
+
+local elapsedTime = 0
+local frameCounter = 0
+local fpsConnection
+
+fpsConnection = runService.RenderStepped:Connect(function(deltaTime)
+    frameCounter = frameCounter + 1
+    elapsedTime = elapsedTime + deltaTime
+
+    if elapsedTime >= 1 then
+        local fps = math.floor(frameCounter / elapsedTime + 0.5)
+        fpsLabel:SetText("FPS: " .. tostring(fps))
+
+        local networkStats = statsService.Network.ServerStatsItem["Data Ping"]
+        local ping = networkStats and math.floor(networkStats:GetValue()) or 0
+        pingLabel:SetText("Ping: " .. tostring(ping) .. " ms")
+
+        frameCounter = 0
+        elapsedTime = 0
+    end
+end)
+
+local localPlayerTab = window:AddTab("Local Player", "user")
+
+local modifiersGroup = localPlayerTab:AddLeftGroupbox("Modifiers")
+local visualsGroup = localPlayerTab:AddLeftGroupbox("Visuals")
+local keybindsGroup = localPlayerTab:AddRightGroupbox("Keybinds")
+
+local defaultWalkspeed = 16
+local selectedWalkspeed = defaultWalkspeed
+local defaultJumppower = 50
+local selectedJumppower = defaultJumppower
+
+local defaultFlySpeed = 50
+local selectedFlySpeed = defaultFlySpeed
+
+local walkspeedConnection
+local jumppowerConnection
+local flyConnection
+local noclipConnection
+local espConnection
+local originalGravity = workspace.Gravity
+
+local espHighlights = {}
+local espColor = Color3.new(1, 1, 1)
+
+local savedCollisionStates = {}
+
+local originalLighting = {
+    ClockTime = lightingService.ClockTime,
+    FogEnd = lightingService.FogEnd,
+    FogStart = lightingService.FogStart
+}
+
+local function getLocalCharacter()
+    local character = localPlayer.Character
+    if not character then
+        character = localPlayer.CharacterAdded:Wait()
+    end
+    return character
+end
+
+local function getLocalHumanoid()
+    local character = getLocalCharacter()
+    return character:FindFirstChildOfClass("Humanoid")
+end
+
+local function getCameraRelativeMoveDirection()
+    local camera = workspace.CurrentCamera
+    if not camera then
+        return Vector3.zero
+    end
+
+    local camCF = camera.CFrame
+    local look = camCF.LookVector
+    local right = camCF.RightVector
+
+    local moveVector = Vector3.zero
+
+    if userInputService:IsKeyDown(Enum.KeyCode.W) then
+        moveVector = moveVector + look
+    end
+    if userInputService:IsKeyDown(Enum.KeyCode.S) then
+        moveVector = moveVector - look
+    end
+    if userInputService:IsKeyDown(Enum.KeyCode.A) then
+        moveVector = moveVector - right
+    end
+    if userInputService:IsKeyDown(Enum.KeyCode.D) then
+        moveVector = moveVector + right
+    end
+
+    if userInputService:IsKeyDown(Enum.KeyCode.Space) then
+        moveVector = moveVector + Vector3.new(0, 1, 0)
+    end
+    if userInputService:IsKeyDown(Enum.KeyCode.LeftControl) or userInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+        moveVector = moveVector + Vector3.new(0, -1, 0)
+    end
+
+    if moveVector.Magnitude > 0 then
+        return moveVector.Unit
+    else
+        return Vector3.zero
+    end
+end
+
+local function getCameraYawCFrame()
+    local camera = workspace.CurrentCamera
+    if not camera then
+        return CFrame.new()
+    end
+
+    local camCF = camera.CFrame
+    local _, yaw, _ = camCF:ToOrientation()
+
+    local character = getLocalCharacter()
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    local rootPos = rootPart and rootPart.Position or camCF.Position
+
+    return CFrame.new(rootPos) * CFrame.Angles(0, yaw, 0)
+end
+
+modifiersGroup:AddToggle("EnableWalkspeed", {
+    Text = "Enable Walkspeed",
     Default = false,
-    Callback = function(Value)
-        Library.ShowCustomCursor = Value
+    Callback = function(isEnabled)
+        if isEnabled then
+            if walkspeedConnection then
+                walkspeedConnection:Disconnect()
+                walkspeedConnection = nil
+            end
+            walkspeedConnection = runService.Heartbeat:Connect(function()
+                local humanoid = getLocalHumanoid()
+                if humanoid then
+                    humanoid.WalkSpeed = selectedWalkspeed
+                end
+            end)
+        else
+            if walkspeedConnection then
+                walkspeedConnection:Disconnect()
+                walkspeedConnection = nil
+            end
+            local humanoid = getLocalHumanoid()
+            if humanoid then
+                humanoid.WalkSpeed = defaultWalkspeed
+            end
+        end
     end
 })
 
-settingsGroup:AddDropdown("NotificationSide", {
+modifiersGroup:AddSlider("WalkspeedSlider", {
+    Text = "Walkspeed",
+    Default = defaultWalkspeed,
+    Min = 16,
+    Max = 100,
+    Rounding = 0,
+    Compact = false,
+    Callback = function(value)
+        selectedWalkspeed = value
+    end
+})
+
+modifiersGroup:AddToggle("EnableJumppower", {
+    Text = "Enable Jumppower",
+    Default = false,
+    Callback = function(isEnabled)
+        if isEnabled then
+            if jumppowerConnection then
+                jumppowerConnection:Disconnect()
+                jumppowerConnection = nil
+            end
+            jumppowerConnection = runService.Heartbeat:Connect(function()
+                local humanoid = getLocalHumanoid()
+                if humanoid then
+                    humanoid.UseJumpPower = true
+                    humanoid.JumpPower = selectedJumppower
+                end
+            end)
+        else
+            if jumppowerConnection then
+                jumppowerConnection:Disconnect()
+                jumppowerConnection = nil
+            end
+            local humanoid = getLocalHumanoid()
+            if humanoid then
+                humanoid.JumpPower = defaultJumppower
+            end
+        end
+    end
+})
+
+modifiersGroup:AddSlider("JumppowerSlider", {
+    Text = "Jumppower",
+    Default = defaultJumppower,
+    Min = 50,
+    Max = 500,
+    Rounding = 0,
+    Compact = false,
+    Callback = function(value)
+        selectedJumppower = value
+    end
+})
+
+modifiersGroup:AddToggle("Fly", {
+    Text = "Fly",
+    Default = false,
+    Callback = function(isEnabled)
+        local character = getLocalCharacter()
+        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+        if isEnabled then
+            if flyConnection then
+                flyConnection:Disconnect()
+                flyConnection = nil
+            end
+
+            workspace.Gravity = 0
+
+            if humanoid then
+                humanoid.PlatformStand = true
+            end
+
+            flyConnection = runService.Heartbeat:Connect(function()
+                if not character.Parent then
+                    return
+                end
+
+                humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+                humanoid = character:FindFirstChildOfClass("Humanoid")
+
+                if humanoid and humanoidRootPart then
+                    humanoidRootPart.CFrame = getCameraYawCFrame()
+
+                    local moveDir = getCameraRelativeMoveDirection()
+                    if moveDir.Magnitude > 0 then
+                        humanoidRootPart.Velocity = moveDir * selectedFlySpeed
+                    else
+                        humanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+                    end
+                end
+            end)
+        else
+            if flyConnection then
+                flyConnection:Disconnect()
+                flyConnection = nil
+            end
+
+            workspace.Gravity = originalGravity
+
+            if humanoid then
+                humanoid.PlatformStand = false
+            end
+            if humanoidRootPart then
+                humanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+            end
+        end
+    end
+})
+
+modifiersGroup:AddSlider("FlySpeedSlider", {
+    Text = "Fly Speed",
+    Default = defaultFlySpeed,
+    Min = 16,
+    Max = 100,
+    Rounding = 0,
+    Compact = false,
+    Callback = function(value)
+        selectedFlySpeed = value
+    end
+})
+
+modifiersGroup:AddToggle("Noclip", {
+    Text = "Noclip",
+    Default = false,
+    Callback = function(isEnabled)
+        if isEnabled then
+            if noclipConnection then
+                noclipConnection:Disconnect()
+                noclipConnection = nil
+            end
+
+            savedCollisionStates = {}
+
+            local character = localPlayer.Character
+            if character then
+                for _, part in ipairs(character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        savedCollisionStates[part] = part.CanCollide
+                        part.CanCollide = false
+                    end
+                end
+            end
+
+            noclipConnection = runService.Heartbeat:Connect(function()
+                local char = localPlayer.Character
+                if not char then
+                    return
+                end
+                for part, state in pairs(savedCollisionStates) do
+                    if part and part.Parent == char and part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end)
+        else
+            if noclipConnection then
+                noclipConnection:Disconnect()
+                noclipConnection = nil
+            end
+            local character = localPlayer.Character
+            if character then
+                for part, state in pairs(savedCollisionStates) do
+                    if part and part.Parent == character and part:IsA("BasePart") then
+                        part.CanCollide = state
+                    end
+                end
+            end
+            savedCollisionStates = {}
+        end
+    end
+})
+
+local function clearESP()
+    for _, hl in pairs(espHighlights) do
+        if hl and hl.Destroy then
+            hl:Destroy()
+        end
+    end
+    espHighlights = {}
+end
+
+local function createHighlightForPlayer(player)
+    if player == localPlayer then
+        return
+    end
+
+    local character = player.Character
+    if not character then
+        return
+    end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = character
+    highlight.FillTransparency = 0.55
+    highlight.OutlineTransparency = 0
+    highlight.FillColor = espColor
+    highlight.OutlineColor = espColor
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Parent = game:GetService("CoreGui")
+
+    espHighlights[player] = highlight
+end
+
+local function updateESPColor(newColor)
+    espColor = newColor
+    for _, hl in pairs(espHighlights) do
+        if hl then
+            hl.FillColor = espColor
+            hl.OutlineColor = espColor
+        end
+    end
+end
+
+local function setupPlayerESP(player)
+    createHighlightForPlayer(player)
+end
+
+local function startESP()
+    clearESP()
+
+    for _, player in ipairs(playersService:GetPlayers()) do
+        if player ~= localPlayer then
+            setupPlayerESP(player)
+        end
+    end
+
+    if espConnection then
+        espConnection:Disconnect()
+        espConnection = nil
+    end
+
+    espConnection = playersService.PlayerAdded:Connect(function(player)
+        if Toggles.ESP and Toggles.ESP.Value then
+            setupPlayerESP(player)
+        end
+    end)
+
+    playersService.PlayerRemoving:Connect(function(player)
+        local hl = espHighlights[player]
+        if hl and hl.Destroy then
+            hl:Destroy()
+        end
+        espHighlights[player] = nil
+    end)
+end
+
+local espToggle = visualsGroup:AddToggle("ESP", {
+    Text = "ESP",
+    Default = false,
+    Callback = function(isEnabled)
+        if isEnabled then
+            startESP()
+        else
+            if espConnection then
+                espConnection:Disconnect()
+                espConnection = nil
+            end
+            clearESP()
+        end
+    end
+})
+
+espToggle:AddColorPicker("ESPColor", {
+    Default = Color3.new(1, 1, 1),
+    Title = "ESP Color",
+    Callback = function(color)
+        updateESPColor(color)
+    end
+})
+
+visualsGroup:AddToggle("Fullbright", {
+    Text = "Fullbright",
+    Default = false,
+    Callback = function(isEnabled)
+        if isEnabled then
+            originalLighting.ClockTime = lightingService.ClockTime
+            originalLighting.FogEnd = lightingService.FogEnd
+            originalLighting.FogStart = lightingService.FogStart
+
+            lightingService.ClockTime = 14
+            lightingService.FogEnd = 100000
+            lightingService.FogStart = 0
+        else
+            lightingService.ClockTime = originalLighting.ClockTime
+            lightingService.FogEnd = originalLighting.FogEnd
+            lightingService.FogStart = originalLighting.FogStart
+        end
+    end
+})
+
+keybindsGroup:AddLabel("Walkspeed Toggle Keybind")
+    :AddKeyPicker("WalkspeedKeybind", {
+        Default = nil,
+        NoUI = false,
+        Text = "Toggle Walkspeed",
+        Callback = function()
+            if Toggles.EnableWalkspeed then
+                Toggles.EnableWalkspeed:SetValue(not Toggles.EnableWalkspeed.Value)
+            end
+        end
+    })
+
+keybindsGroup:AddLabel("Jumppower Toggle Keybind")
+    :AddKeyPicker("JumppowerKeybind", {
+        Default = nil,
+        NoUI = false,
+        Text = "Toggle Jumppower",
+        Callback = function()
+            if Toggles.EnableJumppower then
+                Toggles.EnableJumppower:SetValue(not Toggles.EnableJumppower.Value)
+            end
+        end
+    })
+
+keybindsGroup:AddLabel("Fly Toggle Keybind")
+    :AddKeyPicker("FlyKeybind", {
+        Default = nil,
+        NoUI = false,
+        Text = "Toggle Fly",
+        Callback = function()
+            if Toggles.Fly then
+                Toggles.Fly:SetValue(not Toggles.Fly.Value)
+            end
+        end
+    })
+
+keybindsGroup:AddLabel("Noclip Toggle Keybind")
+    :AddKeyPicker("NoclipKeybind", {
+        Default = nil,
+        NoUI = false,
+        Text = "Toggle Noclip",
+        Callback = function()
+            if Toggles.Noclip then
+                Toggles.Noclip:SetValue(not Toggles.Noclip.Value)
+            end
+        end
+    })
+
+keybindsGroup:AddLabel("ESP Toggle Keybind")
+    :AddKeyPicker("ESPKeybind", {
+        Default = nil,
+        NoUI = false,
+        Text = "Toggle ESP",
+        Callback = function()
+            if Toggles.ESP then
+                Toggles.ESP:SetValue(not Toggles.ESP.Value)
+            end
+        end
+    })
+
+keybindsGroup:AddLabel("Fullbright Toggle Keybind")
+    :AddKeyPicker("FullbrightKeybind", {
+        Default = nil,
+        NoUI = false,
+        Text = "Toggle Fullbright",
+        Callback = function()
+            if Toggles.Fullbright then
+                Toggles.Fullbright:SetValue(not Toggles.Fullbright.Value)
+            end
+        end
+    })
+
+local settingsTab = window:AddTab("Settings", "settings")
+local configGroup = settingsTab:AddLeftGroupbox("Configuration")
+
+configGroup:AddToggle("KeybindMenu", {
+    Default = Library.KeybindFrame.Visible,
+    Text = "Keybind Menu",
+    Callback = function(isVisible)
+        Library.KeybindFrame.Visible = isVisible
+    end
+})
+
+configGroup:AddToggle("CustomCursor", {
+    Text = "Custom Cursor",
+    Default = true,
+    Callback = function(isEnabled)
+        Library.ShowCustomCursor = isEnabled
+    end
+})
+
+configGroup:AddDropdown("NotifySide", {
     Values = { "Left", "Right" },
     Default = "Right",
     Text = "Notification Side",
-    Callback = function(Value)
-        Library:SetNotifySide(Value)
+    Callback = function(side)
+        Library:SetNotifySide(side)
     end
 })
 
-settingsGroup:AddLabel("Menu Keybind"):AddKeyPicker("MenuKeybind", {
+configGroup:AddDropdown("DPIScale", {
+    Values = { "50%", "75%", "100%", "125%", "150%", "175%", "200%" },
+    Default = "100%",
+    Text = "DPI Scale",
+    Callback = function(scaleText)
+        scaleText = scaleText:gsub("%%", "")
+        local scaleNumber = tonumber(scaleText)
+        if scaleNumber then
+            Library:SetDPIScale(scaleNumber / 100)
+        end
+    end
+})
+
+configGroup:AddDivider()
+configGroup:AddLabel("Keybind"):AddKeyPicker("MenuKeybind", {
     Default = "RightShift",
     NoUI = true,
     Text = "Menu keybind"
+})
+
+configGroup:AddButton({
+    Text = "Unload",
+    Func = function()
+        Library:Unload()
+    end
 })
 
 Library.ToggleKeybind = Options.MenuKeybind
@@ -358,45 +618,88 @@ ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
+
 ThemeManager:SetFolder("PlowsScriptHub")
-SaveManager:SetFolder("PlowsScriptHub/VolleyballLegends")
-SaveManager:SetSubFolder("universal")
+SaveManager:SetFolder("PlowsScriptHub/General")
+SaveManager:SetSubFolder("Universal")
+
 SaveManager:BuildConfigSection(settingsTab)
 ThemeManager:ApplyToTab(settingsTab)
+
 SaveManager:LoadAutoloadConfig()
 
-task.spawn(function()
-    task.wait(2)
-    pcall(function()
-        local Players = game:GetService("Players")
-        local player = Players.LocalPlayer
-        if player then
-            player.CameraMaxZoomDistance = 100
-            player.CameraMinZoomDistance = 0.5
-            player.CameraMode = Enum.CameraMode.Classic
-        end
-    end)
-end)
-
 Library:OnUnload(function()
-    if ballSpawnListener then ballSpawnListener:Disconnect() end
-    if hitboxUpdateLoop then task.cancel(hitboxUpdateLoop) end
-    if predictionUpdateLoop then task.cancel(predictionUpdateLoop) end
-    
-    for actualBall, visibleVersion in pairs(trackedBalls) do
-        if actualBall and actualBall.Parent then
-            actualBall.Size = Vector3.new(2.06, 2.06, 2.06)
-            actualBall.Transparency = 0
-            actualBall.Material = Enum.Material.Plastic
-            actualBall.CanCollide = true
-            actualBall.Massless = false
-        end
-        if visibleVersion then
-            visibleVersion:Destroy()
+    if Toggles.EnableWalkspeed and Toggles.EnableWalkspeed.Value then
+        Toggles.EnableWalkspeed:SetValue(false)
+    end
+    if Toggles.EnableJumppower and Toggles.EnableJumppower.Value then
+        Toggles.EnableJumppower:SetValue(false)
+    end
+    if Toggles.Fly and Toggles.Fly.Value then
+        Toggles.Fly:SetValue(false)
+    end
+    if Toggles.Noclip and Toggles.Noclip.Value then
+        Toggles.Noclip:SetValue(false)
+    end
+    if Toggles.ESP and Toggles.ESP.Value then
+        Toggles.ESP:SetValue(false)
+    end
+    if Toggles.Fullbright and Toggles.Fullbright.Value then
+        Toggles.Fullbright:SetValue(false)
+    end
+
+    if fpsConnection then
+        fpsConnection:Disconnect()
+        fpsConnection = nil
+    end
+    if walkspeedConnection then
+        walkspeedConnection:Disconnect()
+        walkspeedConnection = nil
+    end
+    if jumppowerConnection then
+        jumppowerConnection:Disconnect()
+        jumppowerConnection = nil
+    end
+    if flyConnection then
+        flyConnection:Disconnect()
+        flyConnection = nil
+    end
+    if noclipConnection then
+        noclipConnection:Disconnect()
+        noclipConnection = nil
+    end
+    if espConnection then
+        espConnection:Disconnect()
+        espConnection = nil
+    end
+
+    workspace.Gravity = originalGravity
+
+    lightingService.ClockTime = originalLighting.ClockTime
+    lightingService.FogEnd = originalLighting.FogEnd
+    lightingService.FogStart = originalLighting.FogStart
+
+    local character = localPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+
+    if humanoid then
+        humanoid.WalkSpeed = defaultWalkspeed
+        humanoid.JumpPower = defaultJumppower
+        humanoid.PlatformStand = false
+    end
+
+    if rootPart then
+        rootPart.Velocity = Vector3.new(0, 0, 0)
+    end
+
+    if character then
+        for part, state in pairs(savedCollisionStates) do
+            if part and part.Parent == character and part:IsA("BasePart") then
+                part.CanCollide = state
+            end
         end
     end
-    
-    if predictionMarker then
-        predictionMarker:Destroy()
-    end
+
+    clearESP()
 end)
