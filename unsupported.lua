@@ -1,705 +1,371 @@
-local repoUrl = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/"
-local Library = loadstring(game:HttpGet(repoUrl .. "Library.lua"))()
-local ThemeManager = loadstring(game:HttpGet(repoUrl .. "addons/ThemeManager.lua"))()
-local SaveManager = loadstring(game:HttpGet(repoUrl .. "addons/SaveManager.lua"))()
+local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/"
+local lib = loadstring(game:HttpGet(repo .. "Library.lua"))()
+local theme = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
-local Options = Library.Options
-local Toggles = Library.Toggles
-
-local window = Library:CreateWindow({
-    Title = "Plow's\nPrivate Script",
+local win = lib:CreateWindow({
+    Title = "Plow's Private Script",
     Footer = "v1.2.2",
     NotifySide = "Right",
     ShowCustomCursor = true,
 })
 
-local homeTab = window:AddTab("Home", "house")
-local homeStatusGroup = homeTab:AddLeftGroupbox("Status")
+local tab = win:AddTab("Home", "house")
+local status = tab:AddLeftGroupbox("Status")
 
-local localPlayer = game.Players.LocalPlayer
-local displayName = localPlayer and localPlayer.DisplayName or "Player"
-local currentTime = os.date("%H:%M:%S")
-local welcomeText = string.format(
-    "Welcome, %s\nCurrent time: %s\nYou are currently in a game that Plow's script doesn't support.",
-    displayName,
-    currentTime
-)
+local lp = game.Players.LocalPlayer
+local name = lp and lp.DisplayName or "Player"
+local time = os.date("%H:%M:%S")
 
-homeStatusGroup:AddLabel(welcomeText, true)
+status:AddLabel(string.format("Welcome, %s\nCurrent time: %s\nGame not supported.", name, time), true)
 
-homeStatusGroup:AddButton({
-    Text = "Unload",
-    Func = function()
-        Library:Unload()
-    end
-})
+status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
-local statsGroup = homeTab:AddRightGroupbox("FPS & Ping display")
+local stats = tab:AddRightGroupbox("FPS & Ping")
+local fpsLbl = stats:AddLabel("FPS: ...", true)
+local pingLbl = stats:AddLabel("Ping: ...", true)
 
-local fpsLabel = statsGroup:AddLabel("FPS: calculating...", true)
-local pingLabel = statsGroup:AddLabel("Ping: calculating...", true)
+local rs = game:GetService("RunService")
+local statService = game:GetService("Stats")
+local uis = game:GetService("UserInputService")
+local plrs = game:GetService("Players")
+local light = game:GetService("Lighting")
 
-local runService = game:GetService("RunService")
-local statsService = game:GetService("Stats")
-local userInputService = game:GetService("UserInputService")
-local playersService = game:GetService("Players")
-local lightingService = game:GetService("Lighting")
+local elap, frames = 0, 0
+local conn_fps
 
-local elapsedTime = 0
-local frameCounter = 0
-local fpsConnection
-
-fpsConnection = runService.RenderStepped:Connect(function(deltaTime)
-    frameCounter = frameCounter + 1
-    elapsedTime = elapsedTime + deltaTime
-
-    if elapsedTime >= 1 then
-        local fps = math.floor(frameCounter / elapsedTime + 0.5)
-        fpsLabel:SetText("FPS: " .. tostring(fps))
-
-        local networkStats = statsService.Network.ServerStatsItem["Data Ping"]
-        local ping = networkStats and math.floor(networkStats:GetValue()) or 0
-        pingLabel:SetText("Ping: " .. tostring(ping) .. " ms")
-
-        frameCounter = 0
-        elapsedTime = 0
+conn_fps = rs.RenderStepped:Connect(function(dt)
+    frames = frames + 1
+    elap = elap + dt
+    if elap >= 1 then
+        fpsLbl:SetText("FPS: " .. math.floor(frames / elap + 0.5))
+        local net = statService.Network.ServerStatsItem["Data Ping"]
+        pingLbl:SetText("Ping: " .. (net and math.floor(net:GetValue()) or 0) .. " ms")
+        frames, elap = 0, 0
     end
 end)
 
-local localPlayerTab = window:AddTab("Local Player", "user")
+local lpTab = win:AddTab("Local Player", "user")
+local mods = lpTab:AddLeftGroupbox("Modifiers")
+local vis = lpTab:AddLeftGroupbox("Visuals")
+local binds = lpTab:AddRightGroupbox("Keybinds")
 
-local modifiersGroup = localPlayerTab:AddLeftGroupbox("Modifiers")
-local visualsGroup = localPlayerTab:AddLeftGroupbox("Visuals")
-local keybindsGroup = localPlayerTab:AddRightGroupbox("Keybinds")
+local defWs, selWs = 16, 16
+local defJp, selJp = 50, 50
+local defFly, selFly = 50, 50
 
-local defaultWalkspeed = 16
-local selectedWalkspeed = defaultWalkspeed
-local defaultJumppower = 50
-local selectedJumppower = defaultJumppower
+local c_ws, c_jp, c_fly, c_nc, c_esp
+local origGrav = workspace.Gravity
+local espItems = {}
+local espCol = Color3.new(1, 1, 1)
+local saveCol = {}
 
-local defaultFlySpeed = 50
-local selectedFlySpeed = defaultFlySpeed
-
-local walkspeedConnection
-local jumppowerConnection
-local flyConnection
-local noclipConnection
-local espConnection
-local originalGravity = workspace.Gravity
-
-local espHighlights = {}
-local espColor = Color3.new(1, 1, 1)
-
-local savedCollisionStates = {}
-
-local originalLighting = {
-    ClockTime = lightingService.ClockTime,
-    FogEnd = lightingService.FogEnd,
-    FogStart = lightingService.FogStart
+local origLight = {
+    ClockTime = light.ClockTime,
+    FogEnd = light.FogEnd,
+    FogStart = light.FogStart
 }
 
-local function getLocalCharacter()
-    local character = localPlayer.Character
-    if not character then
-        character = localPlayer.CharacterAdded:Wait()
-    end
-    return character
+local function getChar()
+    return lp.Character or lp.CharacterAdded:Wait()
 end
 
-local function getLocalHumanoid()
-    local character = getLocalCharacter()
-    return character:FindFirstChildOfClass("Humanoid")
+local function getHum()
+    return getChar():FindFirstChildOfClass("Humanoid")
 end
 
-local function getCameraRelativeMoveDirection()
-    local camera = workspace.CurrentCamera
-    if not camera then
-        return Vector3.zero
-    end
-
-    local camCF = camera.CFrame
-    local look = camCF.LookVector
-    local right = camCF.RightVector
-
-    local moveVector = Vector3.zero
-
-    if userInputService:IsKeyDown(Enum.KeyCode.W) then
-        moveVector = moveVector + look
-    end
-    if userInputService:IsKeyDown(Enum.KeyCode.S) then
-        moveVector = moveVector - look
-    end
-    if userInputService:IsKeyDown(Enum.KeyCode.A) then
-        moveVector = moveVector - right
-    end
-    if userInputService:IsKeyDown(Enum.KeyCode.D) then
-        moveVector = moveVector + right
-    end
-
-    if userInputService:IsKeyDown(Enum.KeyCode.Space) then
-        moveVector = moveVector + Vector3.new(0, 1, 0)
-    end
-    if userInputService:IsKeyDown(Enum.KeyCode.LeftControl) or userInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
-        moveVector = moveVector + Vector3.new(0, -1, 0)
-    end
-
-    if moveVector.Magnitude > 0 then
-        return moveVector.Unit
-    else
-        return Vector3.zero
-    end
+local function camMove()
+    local cam = workspace.CurrentCamera
+    if not cam then return Vector3.zero end
+    local cf = cam.CFrame
+    local look = cf.LookVector
+    local right = cf.RightVector
+    local vec = Vector3.zero
+    if uis:IsKeyDown(Enum.KeyCode.W) then vec = vec + look end
+    if uis:IsKeyDown(Enum.KeyCode.S) then vec = vec - look end
+    if uis:IsKeyDown(Enum.KeyCode.A) then vec = vec - right end
+    if uis:IsKeyDown(Enum.KeyCode.D) then vec = vec + right end
+    if uis:IsKeyDown(Enum.KeyCode.Space) then vec = vec + Vector3.new(0, 1, 0) end
+    if uis:IsKeyDown(Enum.KeyCode.LeftControl) or uis:IsKeyDown(Enum.KeyCode.LeftShift) then vec = vec + Vector3.new(0, -1, 0) end
+    return vec.Magnitude > 0 and vec.Unit or Vector3.zero
 end
 
-local function getCameraYawCFrame()
-    local camera = workspace.CurrentCamera
-    if not camera then
-        return CFrame.new()
-    end
-
-    local camCF = camera.CFrame
-    local _, yaw, _ = camCF:ToOrientation()
-
-    local character = getLocalCharacter()
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
-    local rootPos = rootPart and rootPart.Position or camCF.Position
-
-    return CFrame.new(rootPos) * CFrame.Angles(0, yaw, 0)
+local function camYaw()
+    local cam = workspace.CurrentCamera
+    if not cam then return CFrame.new() end
+    local _, yaw = cam.CFrame:ToOrientation()
+    local root = getChar():FindFirstChild("HumanoidRootPart")
+    return CFrame.new(root and root.Position or cam.CFrame.Position) * CFrame.Angles(0, yaw, 0)
 end
 
-modifiersGroup:AddToggle("EnableWalkspeed", {
+mods:AddToggle("EnableWalkspeed", {
     Text = "Enable Walkspeed",
     Default = false,
-    Callback = function(isEnabled)
-        if isEnabled then
-            if walkspeedConnection then
-                walkspeedConnection:Disconnect()
-                walkspeedConnection = nil
-            end
-            walkspeedConnection = runService.Heartbeat:Connect(function()
-                local humanoid = getLocalHumanoid()
-                if humanoid then
-                    humanoid.WalkSpeed = selectedWalkspeed
-                end
+    Callback = function(v)
+        if c_ws then c_ws:Disconnect() c_ws = nil end
+        if v then
+            c_ws = rs.Heartbeat:Connect(function()
+                local h = getHum()
+                if h then h.WalkSpeed = selWs end
             end)
         else
-            if walkspeedConnection then
-                walkspeedConnection:Disconnect()
-                walkspeedConnection = nil
-            end
-            local humanoid = getLocalHumanoid()
-            if humanoid then
-                humanoid.WalkSpeed = defaultWalkspeed
-            end
+            local h = getHum()
+            if h then h.WalkSpeed = defWs end
         end
     end
 })
 
-modifiersGroup:AddSlider("WalkspeedSlider", {
+mods:AddSlider("WalkspeedSlider", {
     Text = "Walkspeed",
-    Default = defaultWalkspeed,
-    Min = 16,
-    Max = 100,
-    Rounding = 0,
-    Compact = false,
-    Callback = function(value)
-        selectedWalkspeed = value
-    end
+    Default = defWs,
+    Min = 16, Max = 100, Rounding = 0,
+    Callback = function(v) selWs = v end
 })
 
-modifiersGroup:AddToggle("EnableJumppower", {
+mods:AddToggle("EnableJumppower", {
     Text = "Enable Jumppower",
     Default = false,
-    Callback = function(isEnabled)
-        if isEnabled then
-            if jumppowerConnection then
-                jumppowerConnection:Disconnect()
-                jumppowerConnection = nil
-            end
-            jumppowerConnection = runService.Heartbeat:Connect(function()
-                local humanoid = getLocalHumanoid()
-                if humanoid then
-                    humanoid.UseJumpPower = true
-                    humanoid.JumpPower = selectedJumppower
-                end
+    Callback = function(v)
+        if c_jp then c_jp:Disconnect() c_jp = nil end
+        if v then
+            c_jp = rs.Heartbeat:Connect(function()
+                local h = getHum()
+                if h then h.UseJumpPower = true h.JumpPower = selJp end
             end)
         else
-            if jumppowerConnection then
-                jumppowerConnection:Disconnect()
-                jumppowerConnection = nil
-            end
-            local humanoid = getLocalHumanoid()
-            if humanoid then
-                humanoid.JumpPower = defaultJumppower
-            end
+            local h = getHum()
+            if h then h.JumpPower = defJp end
         end
     end
 })
 
-modifiersGroup:AddSlider("JumppowerSlider", {
+mods:AddSlider("JumppowerSlider", {
     Text = "Jumppower",
-    Default = defaultJumppower,
-    Min = 50,
-    Max = 500,
-    Rounding = 0,
-    Compact = false,
-    Callback = function(value)
-        selectedJumppower = value
-    end
+    Default = defJp,
+    Min = 50, Max = 500, Rounding = 0,
+    Callback = function(v) selJp = v end
 })
 
-modifiersGroup:AddToggle("Fly", {
+mods:AddToggle("Fly", {
     Text = "Fly",
     Default = false,
-    Callback = function(isEnabled)
-        local character = getLocalCharacter()
-        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-
-        if isEnabled then
-            if flyConnection then
-                flyConnection:Disconnect()
-                flyConnection = nil
-            end
-
+    Callback = function(v)
+        local char = getChar()
+        local root = char:FindFirstChild("HumanoidRootPart")
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        
+        if c_fly then c_fly:Disconnect() c_fly = nil end
+        
+        if v then
             workspace.Gravity = 0
-
-            if humanoid then
-                humanoid.PlatformStand = true
-            end
-
-            flyConnection = runService.Heartbeat:Connect(function()
-                if not character.Parent then
-                    return
-                end
-
-                humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-                humanoid = character:FindFirstChildOfClass("Humanoid")
-
-                if humanoid and humanoidRootPart then
-                    humanoidRootPart.CFrame = getCameraYawCFrame()
-
-                    local moveDir = getCameraRelativeMoveDirection()
-                    if moveDir.Magnitude > 0 then
-                        humanoidRootPart.Velocity = moveDir * selectedFlySpeed
-                    else
-                        humanoidRootPart.Velocity = Vector3.new(0, 0, 0)
-                    end
+            if hum then hum.PlatformStand = true end
+            c_fly = rs.Heartbeat:Connect(function()
+                if not char.Parent then return end
+                root = char:FindFirstChild("HumanoidRootPart")
+                hum = char:FindFirstChildOfClass("Humanoid")
+                if hum and root then
+                    root.CFrame = camYaw()
+                    local dir = camMove()
+                    root.Velocity = dir.Magnitude > 0 and dir * selFly or Vector3.new(0,0,0)
                 end
             end)
         else
-            if flyConnection then
-                flyConnection:Disconnect()
-                flyConnection = nil
-            end
-
-            workspace.Gravity = originalGravity
-
-            if humanoid then
-                humanoid.PlatformStand = false
-            end
-            if humanoidRootPart then
-                humanoidRootPart.Velocity = Vector3.new(0, 0, 0)
-            end
+            workspace.Gravity = origGrav
+            if hum then hum.PlatformStand = false end
+            if root then root.Velocity = Vector3.new(0,0,0) end
         end
     end
 })
 
-modifiersGroup:AddSlider("FlySpeedSlider", {
+mods:AddSlider("FlySpeedSlider", {
     Text = "Fly Speed",
-    Default = defaultFlySpeed,
-    Min = 16,
-    Max = 100,
-    Rounding = 0,
-    Compact = false,
-    Callback = function(value)
-        selectedFlySpeed = value
-    end
+    Default = defFly,
+    Min = 16, Max = 100, Rounding = 0,
+    Callback = function(v) selFly = v end
 })
 
-modifiersGroup:AddToggle("Noclip", {
+mods:AddToggle("Noclip", {
     Text = "Noclip",
     Default = false,
-    Callback = function(isEnabled)
-        if isEnabled then
-            if noclipConnection then
-                noclipConnection:Disconnect()
-                noclipConnection = nil
-            end
-
-            savedCollisionStates = {}
-
-            local character = localPlayer.Character
-            if character then
-                for _, part in ipairs(character:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        savedCollisionStates[part] = part.CanCollide
-                        part.CanCollide = false
+    Callback = function(v)
+        if c_nc then c_nc:Disconnect() c_nc = nil end
+        saveCol = {}
+        if v then
+            local c = lp.Character
+            if c then
+                for _, p in ipairs(c:GetDescendants()) do
+                    if p:IsA("BasePart") then
+                        saveCol[p] = p.CanCollide
+                        p.CanCollide = false
                     end
                 end
             end
-
-            noclipConnection = runService.Heartbeat:Connect(function()
-                local char = localPlayer.Character
-                if not char then
-                    return
-                end
-                for part, state in pairs(savedCollisionStates) do
-                    if part and part.Parent == char and part:IsA("BasePart") then
-                        part.CanCollide = false
-                    end
+            c_nc = rs.Heartbeat:Connect(function()
+                local char = lp.Character
+                if not char then return end
+                for p, s in pairs(saveCol) do
+                    if p and p.Parent == char and p:IsA("BasePart") then p.CanCollide = false end
                 end
             end)
         else
-            if noclipConnection then
-                noclipConnection:Disconnect()
-                noclipConnection = nil
-            end
-            local character = localPlayer.Character
-            if character then
-                for part, state in pairs(savedCollisionStates) do
-                    if part and part.Parent == character and part:IsA("BasePart") then
-                        part.CanCollide = state
-                    end
+            local char = lp.Character
+            if char then
+                for p, s in pairs(saveCol) do
+                    if p and p.Parent == char and p:IsA("BasePart") then p.CanCollide = s end
                 end
             end
-            savedCollisionStates = {}
+            saveCol = {}
         end
     end
 })
 
 local function clearESP()
-    for _, hl in pairs(espHighlights) do
-        if hl and hl.Destroy then
-            hl:Destroy()
-        end
-    end
-    espHighlights = {}
+    for _, h in pairs(espItems) do h:Destroy() end
+    espItems = {}
 end
 
-local function createHighlightForPlayer(player)
-    if player == localPlayer then
-        return
-    end
-
-    local character = player.Character
-    if not character then
-        return
-    end
-
-    local highlight = Instance.new("Highlight")
-    highlight.Adornee = character
-    highlight.FillTransparency = 0.55
-    highlight.OutlineTransparency = 0
-    highlight.FillColor = espColor
-    highlight.OutlineColor = espColor
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.Parent = game:GetService("CoreGui")
-
-    espHighlights[player] = highlight
+local function newESP(p)
+    if p == lp then return end
+    local c = p.Character
+    if not c then return end
+    local h = Instance.new("Highlight")
+    h.Adornee = c
+    h.FillTransparency = 0.55
+    h.OutlineTransparency = 0
+    h.FillColor = espCol
+    h.OutlineColor = espCol
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    h.Parent = game:GetService("CoreGui")
+    espItems[p] = h
 end
 
-local function updateESPColor(newColor)
-    espColor = newColor
-    for _, hl in pairs(espHighlights) do
-        if hl then
-            hl.FillColor = espColor
-            hl.OutlineColor = espColor
-        end
-    end
-end
-
-local function setupPlayerESP(player)
-    createHighlightForPlayer(player)
-end
-
-local function startESP()
-    clearESP()
-
-    for _, player in ipairs(playersService:GetPlayers()) do
-        if player ~= localPlayer then
-            setupPlayerESP(player)
-        end
-    end
-
-    if espConnection then
-        espConnection:Disconnect()
-        espConnection = nil
-    end
-
-    espConnection = playersService.PlayerAdded:Connect(function(player)
-        if Toggles.ESP and Toggles.ESP.Value then
-            setupPlayerESP(player)
-        end
-    end)
-
-    playersService.PlayerRemoving:Connect(function(player)
-        local hl = espHighlights[player]
-        if hl and hl.Destroy then
-            hl:Destroy()
-        end
-        espHighlights[player] = nil
-    end)
-end
-
-local espToggle = visualsGroup:AddToggle("ESP", {
+vis:AddToggle("ESP", {
     Text = "ESP",
     Default = false,
-    Callback = function(isEnabled)
-        if isEnabled then
-            startESP()
-        else
-            if espConnection then
-                espConnection:Disconnect()
-                espConnection = nil
+    Callback = function(v)
+        if c_esp then c_esp:Disconnect() c_esp = nil end
+        if v then
+            clearESP()
+            for _, p in ipairs(plrs:GetPlayers()) do
+                if p ~= lp then newESP(p) end
             end
+            c_esp = plrs.PlayerAdded:Connect(function(p)
+                if lib.Toggles.ESP.Value then newESP(p) end
+            end)
+            plrs.PlayerRemoving:Connect(function(p)
+                if espItems[p] then espItems[p]:Destroy() espItems[p] = nil end
+            end)
+        else
             clearESP()
         end
     end
-})
-
-espToggle:AddColorPicker("ESPColor", {
+}):AddColorPicker("ESPColor", {
     Default = Color3.new(1, 1, 1),
-    Title = "ESP Color",
-    Callback = function(color)
-        updateESPColor(color)
+    Title = "Color",
+    Callback = function(v)
+        espCol = v
+        for _, h in pairs(espItems) do
+            h.FillColor = v
+            h.OutlineColor = v
+        end
     end
 })
 
-visualsGroup:AddToggle("Fullbright", {
+vis:AddToggle("Fullbright", {
     Text = "Fullbright",
     Default = false,
-    Callback = function(isEnabled)
-        if isEnabled then
-            originalLighting.ClockTime = lightingService.ClockTime
-            originalLighting.FogEnd = lightingService.FogEnd
-            originalLighting.FogStart = lightingService.FogStart
-
-            lightingService.ClockTime = 14
-            lightingService.FogEnd = 100000
-            lightingService.FogStart = 0
+    Callback = function(v)
+        if v then
+            origLight.ClockTime = light.ClockTime
+            origLight.FogEnd = light.FogEnd
+            origLight.FogStart = light.FogStart
+            light.ClockTime = 14
+            light.FogEnd = 100000
+            light.FogStart = 0
         else
-            lightingService.ClockTime = originalLighting.ClockTime
-            lightingService.FogEnd = originalLighting.FogEnd
-            lightingService.FogStart = originalLighting.FogStart
+            light.ClockTime = origLight.ClockTime
+            light.FogEnd = origLight.FogEnd
+            light.FogStart = origLight.FogStart
         end
     end
 })
 
-keybindsGroup:AddLabel("Walkspeed Toggle Keybind")
-    :AddKeyPicker("WalkspeedKeybind", {
-        Default = nil,
-        NoUI = false,
-        Text = "Toggle Walkspeed",
-        Callback = function()
-            if Toggles.EnableWalkspeed then
-                Toggles.EnableWalkspeed:SetValue(not Toggles.EnableWalkspeed.Value)
-            end
-        end
-    })
+binds:AddLabel("Walkspeed Toggle Keybind"):AddKeyPicker("WalkspeedKeybind", { Default = nil, Text = "Toggle Walkspeed", Callback = function()
+    if lib.Toggles.EnableWalkspeed then lib.Toggles.EnableWalkspeed:SetValue(not lib.Toggles.EnableWalkspeed.Value) end
+end })
 
-keybindsGroup:AddLabel("Jumppower Toggle Keybind")
-    :AddKeyPicker("JumppowerKeybind", {
-        Default = nil,
-        NoUI = false,
-        Text = "Toggle Jumppower",
-        Callback = function()
-            if Toggles.EnableJumppower then
-                Toggles.EnableJumppower:SetValue(not Toggles.EnableJumppower.Value)
-            end
-        end
-    })
+binds:AddLabel("Jumppower Toggle Keybind"):AddKeyPicker("JumppowerKeybind", { Default = nil, Text = "Toggle Jumppower", Callback = function()
+    if lib.Toggles.EnableJumppower then lib.Toggles.EnableJumppower:SetValue(not lib.Toggles.EnableJumppower.Value) end
+end })
 
-keybindsGroup:AddLabel("Fly Toggle Keybind")
-    :AddKeyPicker("FlyKeybind", {
-        Default = nil,
-        NoUI = false,
-        Text = "Toggle Fly",
-        Callback = function()
-            if Toggles.Fly then
-                Toggles.Fly:SetValue(not Toggles.Fly.Value)
-            end
-        end
-    })
+binds:AddLabel("Fly Toggle Keybind"):AddKeyPicker("FlyKeybind", { Default = nil, Text = "Toggle Fly", Callback = function()
+    if lib.Toggles.Fly then lib.Toggles.Fly:SetValue(not lib.Toggles.Fly.Value) end
+end })
 
-keybindsGroup:AddLabel("Noclip Toggle Keybind")
-    :AddKeyPicker("NoclipKeybind", {
-        Default = nil,
-        NoUI = false,
-        Text = "Toggle Noclip",
-        Callback = function()
-            if Toggles.Noclip then
-                Toggles.Noclip:SetValue(not Toggles.Noclip.Value)
-            end
-        end
-    })
+binds:AddLabel("Noclip Toggle Keybind"):AddKeyPicker("NoclipKeybind", { Default = nil, Text = "Toggle Noclip", Callback = function()
+    if lib.Toggles.Noclip then lib.Toggles.Noclip:SetValue(not lib.Toggles.Noclip.Value) end
+end })
 
-keybindsGroup:AddLabel("ESP Toggle Keybind")
-    :AddKeyPicker("ESPKeybind", {
-        Default = nil,
-        NoUI = false,
-        Text = "Toggle ESP",
-        Callback = function()
-            if Toggles.ESP then
-                Toggles.ESP:SetValue(not Toggles.ESP.Value)
-            end
-        end
-    })
+binds:AddLabel("ESP Toggle Keybind"):AddKeyPicker("ESPKeybind", { Default = nil, Text = "Toggle ESP", Callback = function()
+    if lib.Toggles.ESP then lib.Toggles.ESP:SetValue(not lib.Toggles.ESP.Value) end
+end })
 
-keybindsGroup:AddLabel("Fullbright Toggle Keybind")
-    :AddKeyPicker("FullbrightKeybind", {
-        Default = nil,
-        NoUI = false,
-        Text = "Toggle Fullbright",
-        Callback = function()
-            if Toggles.Fullbright then
-                Toggles.Fullbright:SetValue(not Toggles.Fullbright.Value)
-            end
-        end
-    })
+binds:AddLabel("Fullbright Toggle Keybind"):AddKeyPicker("FullbrightKeybind", { Default = nil, Text = "Toggle Fullbright", Callback = function()
+    if lib.Toggles.Fullbright then lib.Toggles.Fullbright:SetValue(not lib.Toggles.Fullbright.Value) end
+end })
 
-local settingsTab = window:AddTab("Settings", "settings")
-local configGroup = settingsTab:AddLeftGroupbox("Configuration")
+local sets = win:AddTab("Settings", "settings")
+local cfg = sets:AddLeftGroupbox("Configuration")
 
-configGroup:AddToggle("KeybindMenu", {
-    Default = Library.KeybindFrame.Visible,
-    Text = "Keybind Menu",
-    Callback = function(isVisible)
-        Library.KeybindFrame.Visible = isVisible
-    end
-})
+cfg:AddToggle("KeybindMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
+cfg:AddToggle("CustomCursor", { Text = "Custom Cursor", Default = true, Callback = function(v) lib.ShowCustomCursor = v end })
+cfg:AddDropdown("NotifySide", { Values = { "Left", "Right" }, Default = "Right", Text = "Notification Side", Callback = function(v) lib:SetNotifySide(v) end })
+cfg:AddDropdown("DPIScale", { Values = { "50%", "75%", "100%", "125%", "150%", "175%", "200%" }, Default = "100%", Text = "DPI Scale", Callback = function(v) local n = tonumber(v:gsub("%%", "")) if n then lib:SetDPIScale(n / 100) end end })
 
-configGroup:AddToggle("CustomCursor", {
-    Text = "Custom Cursor",
-    Default = true,
-    Callback = function(isEnabled)
-        Library.ShowCustomCursor = isEnabled
-    end
-})
+cfg:AddDivider()
+cfg:AddLabel("Keybind"):AddKeyPicker("MenuKeybind", { Default = "RightShift", NoUI = true, Text = "Menu keybind" })
+cfg:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
-configGroup:AddDropdown("NotifySide", {
-    Values = { "Left", "Right" },
-    Default = "Right",
-    Text = "Notification Side",
-    Callback = function(side)
-        Library:SetNotifySide(side)
-    end
-})
+lib.ToggleKeybind = lib.Options.MenuKeybind
+theme:SetLibrary(lib)
+save:SetLibrary(lib)
+save:IgnoreThemeSettings()
+save:SetIgnoreIndexes({ "MenuKeybind" })
+theme:SetFolder("PlowsScriptHub")
+save:SetFolder("PlowsScriptHub/General")
+save:SetSubFolder("Universal")
+save:BuildConfigSection(sets)
+theme:ApplyToTab(sets)
+save:LoadAutoloadConfig()
 
-configGroup:AddDropdown("DPIScale", {
-    Values = { "50%", "75%", "100%", "125%", "150%", "175%", "200%" },
-    Default = "100%",
-    Text = "DPI Scale",
-    Callback = function(scaleText)
-        scaleText = scaleText:gsub("%%", "")
-        local scaleNumber = tonumber(scaleText)
-        if scaleNumber then
-            Library:SetDPIScale(scaleNumber / 100)
+lib:OnUnload(function()
+    if lib.Toggles.EnableWalkspeed and lib.Toggles.EnableWalkspeed.Value then lib.Toggles.EnableWalkspeed:SetValue(false) end
+    if lib.Toggles.EnableJumppower and lib.Toggles.EnableJumppower.Value then lib.Toggles.EnableJumppower:SetValue(false) end
+    if lib.Toggles.Fly and lib.Toggles.Fly.Value then lib.Toggles.Fly:SetValue(false) end
+    if lib.Toggles.Noclip and lib.Toggles.Noclip.Value then lib.Toggles.Noclip:SetValue(false) end
+    if lib.Toggles.ESP and lib.Toggles.ESP.Value then lib.Toggles.ESP:SetValue(false) end
+    if lib.Toggles.Fullbright and lib.Toggles.Fullbright.Value then lib.Toggles.Fullbright:SetValue(false) end
+
+    if conn_fps then conn_fps:Disconnect() end
+    if c_ws then c_ws:Disconnect() end
+    if c_jp then c_jp:Disconnect() end
+    if c_fly then c_fly:Disconnect() end
+    if c_nc then c_nc:Disconnect() end
+    if c_esp then c_esp:Disconnect() end
+
+    workspace.Gravity = origGrav
+    light.ClockTime = origLight.ClockTime
+    light.FogEnd = origLight.FogEnd
+    light.FogStart = origLight.FogStart
+
+    local hum = getHum()
+    local root = getChar():FindFirstChild("HumanoidRootPart")
+    if hum then hum.WalkSpeed = defWs hum.JumpPower = defJp hum.PlatformStand = false end
+    if root then root.Velocity = Vector3.new(0,0,0) end
+    if lp.Character then
+        for p, s in pairs(saveCol) do
+            if p and p.Parent == lp.Character and p:IsA("BasePart") then p.CanCollide = s end
         end
     end
-})
-
-configGroup:AddDivider()
-configGroup:AddLabel("Keybind"):AddKeyPicker("MenuKeybind", {
-    Default = "RightShift",
-    NoUI = true,
-    Text = "Menu keybind"
-})
-
-configGroup:AddButton({
-    Text = "Unload",
-    Func = function()
-        Library:Unload()
-    end
-})
-
-Library.ToggleKeybind = Options.MenuKeybind
-
-ThemeManager:SetLibrary(Library)
-SaveManager:SetLibrary(Library)
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
-
-ThemeManager:SetFolder("PlowsScriptHub")
-SaveManager:SetFolder("PlowsScriptHub/General")
-SaveManager:SetSubFolder("Universal")
-
-SaveManager:BuildConfigSection(settingsTab)
-ThemeManager:ApplyToTab(settingsTab)
-
-SaveManager:LoadAutoloadConfig()
-
-Library:OnUnload(function()
-    if Toggles.EnableWalkspeed and Toggles.EnableWalkspeed.Value then
-        Toggles.EnableWalkspeed:SetValue(false)
-    end
-    if Toggles.EnableJumppower and Toggles.EnableJumppower.Value then
-        Toggles.EnableJumppower:SetValue(false)
-    end
-    if Toggles.Fly and Toggles.Fly.Value then
-        Toggles.Fly:SetValue(false)
-    end
-    if Toggles.Noclip and Toggles.Noclip.Value then
-        Toggles.Noclip:SetValue(false)
-    end
-    if Toggles.ESP and Toggles.ESP.Value then
-        Toggles.ESP:SetValue(false)
-    end
-    if Toggles.Fullbright and Toggles.Fullbright.Value then
-        Toggles.Fullbright:SetValue(false)
-    end
-
-    if fpsConnection then
-        fpsConnection:Disconnect()
-        fpsConnection = nil
-    end
-    if walkspeedConnection then
-        walkspeedConnection:Disconnect()
-        walkspeedConnection = nil
-    end
-    if jumppowerConnection then
-        jumppowerConnection:Disconnect()
-        jumppowerConnection = nil
-    end
-    if flyConnection then
-        flyConnection:Disconnect()
-        flyConnection = nil
-    end
-    if noclipConnection then
-        noclipConnection:Disconnect()
-        noclipConnection = nil
-    end
-    if espConnection then
-        espConnection:Disconnect()
-        espConnection = nil
-    end
-
-    workspace.Gravity = originalGravity
-
-    lightingService.ClockTime = originalLighting.ClockTime
-    lightingService.FogEnd = originalLighting.FogEnd
-    lightingService.FogStart = originalLighting.FogStart
-
-    local character = localPlayer.Character
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-
-    if humanoid then
-        humanoid.WalkSpeed = defaultWalkspeed
-        humanoid.JumpPower = defaultJumppower
-        humanoid.PlatformStand = false
-    end
-
-    if rootPart then
-        rootPart.Velocity = Vector3.new(0, 0, 0)
-    end
-
-    if character then
-        for part, state in pairs(savedCollisionStates) do
-            if part and part.Parent == character and part:IsA("BasePart") then
-                part.CanCollide = state
-            end
-        end
-    end
-
     clearESP()
 end)

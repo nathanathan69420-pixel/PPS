@@ -1,150 +1,104 @@
--- // INIT // ------------------------------------------------------------------
+local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/"
+local lib = loadstring(game:HttpGet(repo .. "Library.lua"))()
+local theme = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
-local repoUrl = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/"
-local Library = loadstring(game:HttpGet(repoUrl .. "Library.lua"))()
-local ThemeManager = loadstring(game:HttpGet(repoUrl .. "addons/ThemeManager.lua"))()
-local SaveManager = loadstring(game:HttpGet(repoUrl .. "addons/SaveManager.lua"))()
-
-local Options = Library.Options
-local Toggles = Library.Toggles
-
-local window = Library:CreateWindow({
-    Title = "Plow's\nPrivate Script",
+local win = lib:CreateWindow({
+    Title = "Plow's Private Script",
     Footer = "v1.2.2",
     NotifySide = "Right",
     ShowCustomCursor = true,
 })
 
--- // HOME TAB // --------------------------------------------------------------
+local tab = win:AddTab("Home", "house")
+local status = tab:AddLeftGroupbox("Status")
 
-local homeTab = window:AddTab("Home", "house")
-local homeStatusGroup = homeTab:AddLeftGroupbox("Status")
+local lp = game.Players.LocalPlayer
+local name = lp and lp.DisplayName or "Player"
+local time = os.date("%H:%M:%S")
 
-local localPlayer = game.Players.LocalPlayer
-local displayName = localPlayer and localPlayer.DisplayName or "Player"
-local currentTime = os.date("%H:%M:%S")
-local welcomeText = string.format(
-    "Welcome, %s\nCurrent time: %s\nYou are currently in a game that Plow's script doesn't support.",
-    displayName,
-    currentTime
-)
+status:AddLabel(string.format("Welcome, %s\nCurrent time: %s\nGame not supported.", name, time), true)
 
-homeStatusGroup:AddLabel(welcomeText, true)
-
-homeStatusGroup:AddButton({
+status:AddButton({
     Text = "Unload",
-    Func = function()
-        Library:Unload()
-    end
+    Func = function() lib:Unload() end
 })
 
-local statsGroup = homeTab:AddRightGroupbox("FPS & Ping display")
+local stats = tab:AddRightGroupbox("FPS & Ping")
+local fpsLbl = stats:AddLabel("FPS: ...", true)
+local pingLbl = stats:AddLabel("Ping: ...", true)
 
-local fpsLabel = statsGroup:AddLabel("FPS: calculating...", true)
-local pingLabel = statsGroup:AddLabel("Ping: calculating...", true)
+local rs = game:GetService("RunService")
+local statService = game:GetService("Stats")
 
-local runService = game:GetService("RunService")
-local statsService = game:GetService("Stats")
+local elap, frames = 0, 0
+local conn
 
-local elapsedTime = 0
-local frameCounter = 0
-local fpsConnection
+conn = rs.RenderStepped:Connect(function(dt)
+    frames = frames + 1
+    elap = elap + dt
 
-fpsConnection = runService.RenderStepped:Connect(function(deltaTime)
-    frameCounter = frameCounter + 1
-    elapsedTime = elapsedTime + deltaTime
-
-    if elapsedTime >= 1 then
-        local fps = math.floor(frameCounter / elapsedTime + 0.5)
-        fpsLabel:SetText("FPS: " .. tostring(fps))
-
-        local networkStats = statsService.Network.ServerStatsItem["Data Ping"]
-        local ping = networkStats and math.floor(networkStats:GetValue()) or 0
-        pingLabel:SetText("Ping: " .. tostring(ping) .. " ms")
-
-        frameCounter = 0
-        elapsedTime = 0
+    if elap >= 1 then
+        fpsLbl:SetText("FPS: " .. math.floor(frames / elap + 0.5))
+        local net = statService.Network.ServerStatsItem["Data Ping"]
+        pingLbl:SetText("Ping: " .. (net and math.floor(net:GetValue()) or 0) .. " ms")
+        frames, elap = 0, 0
     end
 end)
 
--- // SETTINGS TAB // ----------------------------------------------------------
+local sets = win:AddTab("Settings", "settings")
+local cfg = sets:AddLeftGroupbox("Configuration")
 
-local settingsTab = window:AddTab("Settings", "settings")
-local configGroup = settingsTab:AddLeftGroupbox("Configuration")
-
-configGroup:AddToggle("KeybindMenu", {
-    Default = Library.KeybindFrame.Visible,
+cfg:AddToggle("KeybindMenu", {
+    Default = lib.KeybindFrame.Visible,
     Text = "Keybind Menu",
-    Callback = function(isVisible)
-        Library.KeybindFrame.Visible = isVisible
-    end
+    Callback = function(v) lib.KeybindFrame.Visible = v end
 })
 
-configGroup:AddToggle("CustomCursor", {
+cfg:AddToggle("CustomCursor", {
     Text = "Custom Cursor",
     Default = true,
-    Callback = function(isEnabled)
-        Library.ShowCustomCursor = isEnabled
-    end
+    Callback = function(v) lib.ShowCustomCursor = v end
 })
 
-configGroup:AddDropdown("NotifySide", {
+cfg:AddDropdown("NotifySide", {
     Values = { "Left", "Right" },
     Default = "Right",
     Text = "Notification Side",
-    Callback = function(side)
-        Library:SetNotifySide(side)
-    end
+    Callback = function(v) lib:SetNotifySide(v) end
 })
 
-configGroup:AddDropdown("DPIScale", {
+cfg:AddDropdown("DPIScale", {
     Values = { "50%", "75%", "100%", "125%", "150%", "175%", "200%" },
     Default = "100%",
     Text = "DPI Scale",
-    Callback = function(scaleText)
-        scaleText = scaleText:gsub("%%", "")
-        local scaleNumber = tonumber(scaleText)
-        if scaleNumber then
-            Library:SetDPIScale(scaleNumber / 100)
-        end
+    Callback = function(v)
+        local n = tonumber(v:gsub("%%", ""))
+        if n then lib:SetDPIScale(n / 100) end
     end
 })
 
-configGroup:AddDivider()
-configGroup:AddLabel("Keybind"):AddKeyPicker("MenuKeybind", {
-    Default = "RightShift",
-    NoUI = true,
-    Text = "Menu keybind"
-})
+cfg:AddDivider()
+cfg:AddLabel("Keybind"):AddKeyPicker("MenuKeybind", { Default = "RightShift", NoUI = true, Text = "Menu keybind" })
 
-configGroup:AddButton({
-    Text = "Unload",
-    Func = function()
-        Library:Unload()
-    end
-})
+cfg:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
-Library.ToggleKeybind = Options.MenuKeybind
+lib.ToggleKeybind = lib.Options.MenuKeybind
 
-ThemeManager:SetLibrary(Library)
-SaveManager:SetLibrary(Library)
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
+theme:SetLibrary(lib)
+save:SetLibrary(lib)
+save:IgnoreThemeSettings()
+save:SetIgnoreIndexes({ "MenuKeybind" })
 
-ThemeManager:SetFolder("PlowsScriptHub")
-SaveManager:SetFolder("PlowsScriptHub/General")
-SaveManager:SetSubFolder("Universal")
+theme:SetFolder("PlowsScriptHub")
+save:SetFolder("PlowsScriptHub/General")
+save:SetSubFolder("Universal")
 
-SaveManager:BuildConfigSection(settingsTab)
-ThemeManager:ApplyToTab(settingsTab)
+save:BuildConfigSection(sets)
+theme:ApplyToTab(sets)
 
-SaveManager:LoadAutoloadConfig()
+save:LoadAutoloadConfig()
 
--- // CLEANUP // ---------------------------------------------------------------
-
-Library:OnUnload(function()
-    if fpsConnection then
-        fpsConnection:Disconnect()
-        fpsConnection = nil
-    end
+lib:OnUnload(function()
+    if conn then conn:Disconnect() end
 end)
