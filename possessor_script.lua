@@ -30,6 +30,12 @@ local stats = home:AddRightGroupbox("FPS & Ping")
 local vis = main:AddLeftGroupbox("Visuals", "eye")
 local cfgBox = config:AddLeftGroupbox("Config")
 
+vis:AddToggle("PossessorESP", {
+    Text = "Possessor ESP",
+    Default = false,
+    Callback = function(v) end
+})
+
 status:AddLabel(string.format("Welcome, %s\nGame: Possessor", lp.DisplayName), true)
 status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
