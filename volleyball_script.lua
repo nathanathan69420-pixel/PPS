@@ -18,6 +18,7 @@ local win = lib:CreateWindow({
     Footer = "v1.3.2",
     NotifySide = "Right",
     ShowCustomCursor = true,
+    ToggleKeybind = Enum.KeyCode.RightControl
 })
 
 local home = win:AddTab("Home", "house")
@@ -137,8 +138,13 @@ funcs:AddSlider("HitboxTransparency", { Text = "Hitbox Transparency", Default = 
 keybinds:AddLabel("Hitbox Expander"):AddKeyPicker("HitboxKeybind", { Default = "None", Mode = "Toggle", Text = "Toggle Hitbox", Callback = function(v) lib.Options.HitboxToggle:SetValue(v) end })
 
 cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
-cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind", Callback = function(k) lib.ToggleKeybind = k end })
-lib.ToggleKeybind = Enum.KeyCode.RightControl
+cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { 
+    Default = "RightControl", 
+    NoUI = true, 
+    Text = "Menu bind",
+    Callback = function(key) lib.ToggleKeybind = key end
+})
+
 cfgBox:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
 local elap, frames = 0, 0

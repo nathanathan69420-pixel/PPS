@@ -17,6 +17,7 @@ local win = lib:CreateWindow({
     Footer = "v1.3.2",
     NotifySide = "Right",
     ShowCustomCursor = true,
+    ToggleKeybind = Enum.KeyCode.RightControl
 })
 
 local home = win:AddTab("Home", "house")
@@ -123,7 +124,7 @@ cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", {
     Text = "Menu bind",
     Callback = function(key) lib.ToggleKeybind = key end
 })
-lib.ToggleKeybind = Enum.KeyCode.RightControl
+
 cfgBox:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
 local elap, frames = 0, 0
@@ -140,6 +141,7 @@ end)
 
 theme:SetLibrary(lib)
 save:SetLibrary(lib)
+save:IgnoreThemeSettings()
 theme:SetFolder("PlowsScriptHub")
 save:SetFolder("PlowsScriptHub/Possessor")
 save:BuildConfigSection(config)
