@@ -57,7 +57,7 @@ local function do_esp(p)
     if p == lp or items[p] then return end
     
     local h = Instance.new("Highlight")
-    h.Name = "AXIS_Highlight"
+    h.Name = "AXIS_HT"
     h.OutlineColor = Color3.fromRGB(255, 255, 255)
     h.FillTransparency = 0.5
     h.Enabled = false
@@ -73,32 +73,15 @@ local function do_esp(p)
         h.Parent = c
         h.FillColor = lib.Options.ESPColor.Value
         
-        local isPoss = false
-        
-        -- Try finding the RoleCards or Possessor object you found
-        if p:FindFirstChild("Possessor", true) or p:FindFirstChild("RoleCard", true) then
-            isPoss = true
-        end
-        
-        -- Extra checks for common game patterns
-        if p:GetAttribute("Role") == "Possessor" or p:GetAttribute("Possessor") == true then
-            isPoss = true
-        end
-        
-        -- Check RoleCards folder directly if it exists
-        local rc = p:FindFirstChild("RoleCards")
-        if rc and rc:FindFirstChild("Possessor") then
-            isPoss = true
-        end
-        
+        local isPoss = p:GetAttribute("IsPossessor") == true
         h.Enabled = _G.esp_on and isPoss
     end
 
-    items[p] = {h, p.CharacterAdded:Connect(update)}
+    items[p] = {h, p.CharacterAdded:Connect(update), p:GetAttributeChangedSignal("IsPossessor"):Connect(update)}
     task.spawn(function()
         while items[p] do
             update()
-            task.wait(0.5)
+            task.wait(1)
         end
     end)
     update()
@@ -109,6 +92,7 @@ game.Players.PlayerRemoving:Connect(function(p)
     if items[p] then
         items[p][1]:Destroy()
         items[p][2]:Disconnect()
+        items[p][3]:Disconnect()
         items[p] = nil
     end
 end)
@@ -145,6 +129,7 @@ lib:OnUnload(function()
     for p, d in pairs(items) do
         d[1]:Destroy()
         d[2]:Disconnect()
+        d[3]:Disconnect()
     end
     table.clear(items)
 end)
