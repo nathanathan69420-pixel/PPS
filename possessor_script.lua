@@ -52,52 +52,29 @@ status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 local fpsLbl = stats:AddLabel("FPS: ...", true)
 local pingLbl = stats:AddLabel("Ping: ...", true)
 
-local items = {}
-local function do_esp(p)
-    if p == lp or items[p] then return end
-    
-    local h = Instance.new("Highlight")
-    h.Name = "AXIS_HT"
-    h.OutlineColor = Color3.fromRGB(255, 255, 255)
-    h.FillTransparency = 0.5
-    h.Enabled = false
-    
-    local function update()
-        local c = p.Character
-        if not c then 
-            h.Enabled = false
-            return 
+task.spawn(function()
+    while task.wait(0.5) do
+        if not _G.esp_on then
+            for _, p in pairs(game.Players:GetPlayers()) do
+                if p.Character then
+                    local h = p.Character:FindFirstChild("AXIS_ESP")
+                    if h then h.Enabled = false end
+                end
+            end
+            continue
         end
-        
-        h.Adornee = c
-        h.Parent = c
-        h.FillColor = lib.Options.ESPColor.Value
-        
-        local isPoss = p:GetAttribute("IsPossessor") == true
-        h.Enabled = _G.esp_on and isPoss
-    end
-
-    items[p] = {h, p.CharacterAdded:Connect(update), p:GetAttributeChangedSignal("IsPossessor"):Connect(update)}
-    task.spawn(function()
-        while items[p] do
-            update()
-            task.wait(1)
+        for _, p in pairs(game.Players:GetPlayers()) do
+            if p ~= lp and p.Character then
+                local h = p.Character:FindFirstChild("AXIS_ESP") or Instance.new("Highlight", p.Character)
+                h.Name = "AXIS_ESP"
+                h.FillColor = lib.Options.ESPColor.Value
+                h.OutlineColor = Color3.fromRGB(255, 255, 255)
+                h.FillTransparency = 0.5
+                h.Enabled = p:GetAttribute("IsPossessor")
+            end
         end
-    end)
-    update()
-end
-
-game.Players.PlayerAdded:Connect(do_esp)
-game.Players.PlayerRemoving:Connect(function(p)
-    if items[p] then
-        items[p][1]:Destroy()
-        items[p][2]:Disconnect()
-        items[p][3]:Disconnect()
-        items[p] = nil
     end
 end)
-
-for _, p in ipairs(game.Players:GetPlayers()) do do_esp(p) end
 
 lib.ToggleKeybind = lib.Options.MenuKeybind
 
@@ -126,10 +103,10 @@ save:LoadAutoloadConfig()
 lib:OnUnload(function()
     _G.esp_on = false
     if conn then conn:Disconnect() end
-    for p, d in pairs(items) do
-        d[1]:Destroy()
-        d[2]:Disconnect()
-        d[3]:Disconnect()
+    for _, p in pairs(game.Players:GetPlayers()) do
+        if p.Character then
+            local h = p.Character:FindFirstChild("AXIS_ESP")
+            if h then h:Destroy() end
+        end
     end
-    table.clear(items)
 end)
