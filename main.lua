@@ -4,6 +4,7 @@ local base = "https://raw.githubusercontent.com/nathanathan69420-pixel/PPS/main/
 local scripts = {
     ["73956553001240"] = "volleyball_script.lua",
     ["74691681039273"] = "volleyball_script.lua",
+    ["14841485778"] = "possessor_script.lua",
 }
 
 local function notify(title, msg, dur)
