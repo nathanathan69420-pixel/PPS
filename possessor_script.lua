@@ -17,7 +17,6 @@ local win = lib:CreateWindow({
     Footer = "v1.3.2",
     NotifySide = "Right",
     ShowCustomCursor = true,
-    ToggleKeybind = Enum.KeyCode.RightControl
 })
 
 local home = win:AddTab("Home", "house")
@@ -29,39 +28,33 @@ local stats = home:AddRightGroupbox("FPS & Ping")
 local vis = main:AddLeftGroupbox("Visuals", "eye")
 local cfgBox = config:AddLeftGroupbox("Config")
 
-local espFolder = Instance.new("Folder", game:GetService("CoreGui"))
-espFolder.Name = "AXIS_ESP"
+local folder = Instance.new("Folder", game:GetService("CoreGui"))
+folder.Name = "AXIS_ESP"
 local items = {}
 local on = false
 
-local function highlight(p)
+local function esp(p)
     if p == lp or items[p] then return end
-    
-    local h = Instance.new("Highlight")
+    local h = Instance.new("Highlight", folder)
     h.Name = p.Name
     h.FillColor = lib.Options.ESPColor.Value
     h.OutlineColor = Color3.fromRGB(255, 255, 255)
     h.FillTransparency = 0.5
-    h.OutlineTransparency = 0
-    h.Parent = espFolder
     h.Enabled = false
     
     local function update()
-        local c = p.Character
-        h.Adornee = c
+        h.Adornee = p.Character
         h.FillColor = lib.Options.ESPColor.Value
-        
-        local role = "Innocent"
-        local gui = p:FindFirstChild("PlayerGui")
-        local m = gui and gui:FindFirstChild("MainUI")
+        local r = "Innocent"
+        local g = p:FindFirstChild("PlayerGui")
+        local m = g and g:FindFirstChild("MainUI")
         if m then
             local f = m:FindFirstChild("MainFrame")
-            local r = f and f:FindFirstChild("RoleFrame")
-            local n = r and r:FindFirstChild("RoleName")
-            if n then role = n.Text end
+            local rf = f and f:FindFirstChild("RoleFrame")
+            local n = rf and rf:FindFirstChild("RoleName")
+            if n then r = n.Text end
         end
-        
-        h.Enabled = on and role:find("Possessor")
+        h.Enabled = on and r:find("Possessor")
     end
 
     items[p] = {h, p.CharacterAdded:Connect(update)}
@@ -79,23 +72,17 @@ vis:AddToggle("ESP", {
     Callback = function(v)
         on = v
         if not v then
-            for _, data in pairs(items) do
-                data[1].Enabled = false
-            end
+            for _, d in pairs(items) do d[1].Enabled = false end
         else
-            for _, p in ipairs(game.Players:GetPlayers()) do highlight(p) end
+            for _, p in ipairs(game.Players:GetPlayers()) do esp(p) end
         end
     end
 }):AddColorPicker("ESPColor", {
     Default = Color3.fromRGB(175, 25, 255),
-    Title = "ESP Color",
-    Callback = function() end
+    Title = "ESP Color"
 })
 
-game.Players.PlayerAdded:Connect(function(p)
-    if on then highlight(p) end
-end)
-
+game.Players.PlayerAdded:Connect(function(p) if on then esp(p) end end)
 game.Players.PlayerRemoving:Connect(function(p)
     if items[p] then
         items[p][1]:Destroy()
@@ -104,10 +91,7 @@ game.Players.PlayerRemoving:Connect(function(p)
     end
 end)
 
-local name = lp and lp.DisplayName or "Player"
-local time = os.date("%H:%M:%S")
-
-status:AddLabel(string.format("Welcome, %s\nCurrent time: %s\nGame: Possessor", name, time), true)
+status:AddLabel(string.format("Welcome, %s\nGame: Possessor", lp.DisplayName), true)
 status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
 local fpsLbl = stats:AddLabel("FPS: ...", true)
@@ -118,17 +102,11 @@ cfgBox:AddToggle("KeyMenu", {
     Text = "Keybind Menu", 
     Callback = function(v) lib.KeybindFrame.Visible = v end 
 })
-cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { 
-    Default = "RightControl", 
-    NoUI = true, 
-    Text = "Menu bind",
-    Callback = function(key) lib.ToggleKeybind = key end
-})
-
-cfgBox:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
+cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
+lib.ToggleKeybind = lib.Options.MenuKeybind
 
 local elap, frames = 0, 0
-local conn_fps = rs.RenderStepped:Connect(function(dt)
+local conn = rs.RenderStepped:Connect(function(dt)
     frames = frames + 1
     elap = elap + dt
     if elap >= 1 then
@@ -142,6 +120,7 @@ end)
 theme:SetLibrary(lib)
 save:SetLibrary(lib)
 save:IgnoreThemeSettings()
+save:SetIgnoreIndexes({ "MenuKeybind" })
 theme:SetFolder("PlowsScriptHub")
 save:SetFolder("PlowsScriptHub/Possessor")
 save:BuildConfigSection(config)
@@ -149,10 +128,10 @@ theme:ApplyToTab(config)
 save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
-    if conn_fps then conn_fps:Disconnect() end
-    for _, data in pairs(items) do
-        data[1]:Destroy()
-        data[2]:Disconnect()
+    if conn then conn:Disconnect() end
+    for _, d in pairs(items) do
+        d[1]:Destroy()
+        d[2]:Disconnect()
     end
-    if espFolder then espFolder:Destroy() end
+    if folder then folder:Destroy() end
 end)

@@ -17,7 +17,6 @@ local win = lib:CreateWindow({
     Footer = "v1.3.2",
     NotifySide = "Right",
     ShowCustomCursor = true,
-    ToggleKeybind = Enum.KeyCode.RightControl
 })
 
 local home = win:AddTab("Home", "house")
@@ -27,27 +26,18 @@ local status = home:AddLeftGroupbox("Status")
 local stats = home:AddRightGroupbox("FPS & Ping")
 local cfgBox = config:AddLeftGroupbox("Config")
 
-local name = lp and lp.DisplayName or "Player"
-local time = os.date("%H:%M:%S")
-
-status:AddLabel(string.format("Welcome, %s\nCurrent time: %s\nGame not supported.", name, time), true)
+status:AddLabel(string.format("Welcome, %s\nGame not supported.", lp.DisplayName), true)
 status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
 local fpsLbl = stats:AddLabel("FPS: ...", true)
 local pingLbl = stats:AddLabel("Ping: ...", true)
 
 cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
-cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { 
-    Default = "RightControl", 
-    NoUI = true, 
-    Text = "Menu bind",
-    Callback = function(key) lib.ToggleKeybind = key end
-})
-
-cfgBox:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
+cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
+lib.ToggleKeybind = lib.Options.MenuKeybind
 
 local elap, frames = 0, 0
-local conn_fps = rs.RenderStepped:Connect(function(dt)
+local conn = rs.RenderStepped:Connect(function(dt)
     frames = frames + 1
     elap = elap + dt
     if elap >= 1 then
@@ -61,6 +51,7 @@ end)
 theme:SetLibrary(lib)
 save:SetLibrary(lib)
 save:IgnoreThemeSettings()
+save:SetIgnoreIndexes({ "MenuKeybind" })
 theme:SetFolder("PlowsScriptHub")
 save:SetFolder("PlowsScriptHub/General")
 save:SetSubFolder("Universal")
@@ -69,5 +60,5 @@ theme:ApplyToTab(config)
 save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
-    if conn_fps then conn_fps:Disconnect() end
+    if conn then conn:Disconnect() end
 end)

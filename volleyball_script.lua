@@ -18,7 +18,6 @@ local win = lib:CreateWindow({
     Footer = "v1.3.2",
     NotifySide = "Right",
     ShowCustomCursor = true,
-    ToggleKeybind = Enum.KeyCode.RightControl
 })
 
 local home = win:AddTab("Home", "house")
@@ -31,10 +30,7 @@ local funcs = hitbox:AddLeftGroupbox("Functions")
 local keybinds = hitbox:AddRightGroupbox("Keybinds")
 local cfgBox = config:AddLeftGroupbox("Config")
 
-local name = lp and lp.DisplayName or "Player"
-local time = os.date("%H:%M:%S")
-
-status:AddLabel(string.format("Welcome, %s\nCurrent time: %s\nGame: Volleyball", name, time), true)
+status:AddLabel(string.format("Welcome, %s\nGame: Volleyball", lp.DisplayName), true)
 status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
 local fpsLbl = stats:AddLabel("FPS: ...", true)
@@ -127,28 +123,22 @@ local function stop()
     for b, _ in pairs(balls) do cleanup(b) end
 end
 
-funcs:AddToggle("HitboxToggle", { Text = "Enable Hitbox Expander", Callback = function(v) 
+funcs:AddToggle("Hitbox", { Text = "Enable Hitbox Expander", Callback = function(v) 
     enabled = v 
     if v then start() else stop() end 
 end })
 
-funcs:AddSlider("HitboxSize", { Text = "Hitbox Size", Default = 10, Min = 5, Max = 20, Callback = function(v) size = v end })
-funcs:AddSlider("HitboxTransparency", { Text = "Hitbox Transparency", Default = 0.5, Min = 0, Max = 1, Callback = function(v) trans = v end })
+funcs:AddSlider("Size", { Text = "Hitbox Size", Default = 10, Min = 5, Max = 20, Callback = function(v) size = v end })
+funcs:AddSlider("Transparency", { Text = "Hitbox Transparency", Default = 0.5, Min = 0, Max = 1, Callback = function(v) trans = v end })
 
-keybinds:AddLabel("Hitbox Expander"):AddKeyPicker("HitboxKeybind", { Default = "None", Mode = "Toggle", Text = "Toggle Hitbox", Callback = function(v) lib.Options.HitboxToggle:SetValue(v) end })
+keybinds:AddLabel("Hitbox Expander"):AddKeyPicker("HitboxKey", { Default = "None", Mode = "Toggle", Text = "Toggle Hitbox", Callback = function(v) lib.Options.Hitbox:SetValue(v) end })
 
 cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
-cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { 
-    Default = "RightControl", 
-    NoUI = true, 
-    Text = "Menu bind",
-    Callback = function(key) lib.ToggleKeybind = key end
-})
-
-cfgBox:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
+cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
+lib.ToggleKeybind = lib.Options.MenuKeybind
 
 local elap, frames = 0, 0
-local conn_fps = rs.RenderStepped:Connect(function(dt)
+local conn = rs.RenderStepped:Connect(function(dt)
     frames = frames + 1
     elap = elap + dt
     if elap >= 1 then
@@ -162,6 +152,7 @@ end)
 theme:SetLibrary(lib)
 save:SetLibrary(lib)
 save:IgnoreThemeSettings()
+save:SetIgnoreIndexes({ "MenuKeybind" })
 theme:SetFolder("PlowsScriptHub")
 save:SetFolder("PlowsScriptHub/Volleyball")
 save:BuildConfigSection(config)
@@ -169,6 +160,6 @@ theme:ApplyToTab(config)
 save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
-    if conn_fps then conn_fps:Disconnect() end
+    if conn then conn:Disconnect() end
     stop()
 end)
