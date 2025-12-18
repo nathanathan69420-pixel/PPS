@@ -39,32 +39,34 @@ vis:AddToggle("PossessorESP", {
     Title = "ESP Color"
 })
 
+local folder = Instance.new("Folder", game:GetService("CoreGui"))
+folder.Name = "AXIS_ESP"
+
 local function update()
     local on = lib.Toggles.PossessorESP.Value
     local color = lib.Options.ESPColor.Value
 
     for _, p in ipairs(game.Players:GetPlayers()) do
         if p ~= lp then
-            local char = p.Character
             local isPoss = p:GetAttribute("IsPossessor")
-            
-            if char then
-                local h = char:FindFirstChild("AXIS_ESP")
-                if on and isPoss then
-                    if not h then
-                        h = Instance.new("Highlight")
-                        h.Name = "AXIS_ESP"
-                        h.Parent = char
-                    end
-                    h.Adornee = char
-                    h.FillColor = color
-                    h.OutlineColor = Color3.fromRGB(255, 255, 255)
-                    h.FillTransparency = 0.55
-                    h.OutlineTransparency = 0
-                    h.Enabled = true
-                elseif h then
-                    h.Enabled = false
+            local char = p.Character
+            local h = folder:FindFirstChild(p.Name)
+
+            if on and isPoss and char then
+                if not h then
+                    h = Instance.new("Highlight")
+                    h.Name = p.Name
+                    h.Parent = folder
                 end
+                h.Adornee = char
+                h.FillColor = color
+                h.OutlineColor = Color3.fromRGB(255, 255, 255)
+                h.FillTransparency = 0.55
+                h.OutlineTransparency = 0
+                h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                h.Enabled = true
+            elseif h then
+                h.Enabled = false
             end
         end
     end
@@ -112,4 +114,5 @@ save:LoadAutoloadConfig()
 lib:OnUnload(function()
     if loop then loop:Disconnect() end
     if conn then conn:Disconnect() end
+    if folder then folder:Destroy() end
 end)
