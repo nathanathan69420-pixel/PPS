@@ -30,16 +30,34 @@ local stats = home:AddRightGroupbox("FPS & Ping")
 local vis = main:AddLeftGroupbox("Visuals", "eye")
 local cfgBox = config:AddLeftGroupbox("Config")
 
-local folder = Instance.new("Folder", game:GetService("CoreGui"))
-folder.Name = "AXIS_ESP"
-local items = {}
-local on = false
+vis:AddToggle("ESP", {
+    Text = "Possessor ESP",
+    Default = false,
+    Callback = function(v) _G.esp_on = v end
+}):AddColorPicker("ESPColor", {
+    Default = Color3.fromRGB(175, 25, 255),
+    Title = "ESP Color"
+})
 
-local function esp(p)
+cfgBox:AddToggle("KeyMenu", { 
+    Default = lib.KeybindFrame.Visible, 
+    Text = "Keybind Menu", 
+    Callback = function(v) lib.KeybindFrame.Visible = v end 
+})
+cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
+
+status:AddLabel(string.format("Welcome, %s\nGame: Possessor", lp.DisplayName), true)
+status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
+
+local fpsLbl = stats:AddLabel("FPS: ...", true)
+local pingLbl = stats:AddLabel("Ping: ...", true)
+
+local items = {}
+local function do_esp(p)
     if p == lp or items[p] then return end
-    local h = Instance.new("Highlight", folder)
-    h.Name = p.Name
-    h.FillColor = lib.Options.ESPColor.Value
+    
+    local h = Instance.new("Highlight")
+    h.Name = "AXIS_Highlight"
     h.OutlineColor = Color3.fromRGB(255, 255, 255)
     h.FillTransparency = 0.5
     h.Enabled = false
@@ -52,19 +70,28 @@ local function esp(p)
         end
         
         h.Adornee = c
+        h.Parent = c
         h.FillColor = lib.Options.ESPColor.Value
         
-        local r = ""
-        local g = p:FindFirstChild("PlayerGui")
-        if g then
-            local m = g:FindFirstChild("MainUI") or g:FindFirstChild("Main")
-            if m then
-                local n = m:FindFirstChild("RoleName", true)
-                if n then r = n.Text end
-            end
+        local isPoss = false
+        
+        -- Try finding the RoleCards or Possessor object you found
+        if p:FindFirstChild("Possessor", true) or p:FindFirstChild("RoleCard", true) then
+            isPoss = true
         end
         
-        h.Enabled = on and r:find("Possessor") ~= nil
+        -- Extra checks for common game patterns
+        if p:GetAttribute("Role") == "Possessor" or p:GetAttribute("Possessor") == true then
+            isPoss = true
+        end
+        
+        -- Check RoleCards folder directly if it exists
+        local rc = p:FindFirstChild("RoleCards")
+        if rc and rc:FindFirstChild("Possessor") then
+            isPoss = true
+        end
+        
+        h.Enabled = _G.esp_on and isPoss
     end
 
     items[p] = {h, p.CharacterAdded:Connect(update)}
@@ -74,25 +101,10 @@ local function esp(p)
             task.wait(0.5)
         end
     end)
+    update()
 end
 
-vis:AddToggle("ESP", {
-    Text = "Possessor ESP",
-    Default = false,
-    Callback = function(v)
-        on = v
-        if not v then
-            for _, d in pairs(items) do d[1].Enabled = false end
-        else
-            for _, p in ipairs(game.Players:GetPlayers()) do esp(p) end
-        end
-    end
-}):AddColorPicker("ESPColor", {
-    Default = Color3.fromRGB(175, 25, 255),
-    Title = "ESP Color"
-})
-
-game.Players.PlayerAdded:Connect(function(p) if on then esp(p) end end)
+game.Players.PlayerAdded:Connect(do_esp)
 game.Players.PlayerRemoving:Connect(function(p)
     if items[p] then
         items[p][1]:Destroy()
@@ -101,18 +113,7 @@ game.Players.PlayerRemoving:Connect(function(p)
     end
 end)
 
-status:AddLabel(string.format("Welcome, %s\nGame: Possessor", lp.DisplayName), true)
-status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
-
-local fpsLbl = stats:AddLabel("FPS: ...", true)
-local pingLbl = stats:AddLabel("Ping: ...", true)
-
-cfgBox:AddToggle("KeyMenu", { 
-    Default = lib.KeybindFrame.Visible, 
-    Text = "Keybind Menu", 
-    Callback = function(v) lib.KeybindFrame.Visible = v end 
-})
-cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
+for _, p in ipairs(game.Players:GetPlayers()) do do_esp(p) end
 
 lib.ToggleKeybind = lib.Options.MenuKeybind
 
@@ -139,10 +140,11 @@ theme:ApplyToTab(config)
 save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
+    _G.esp_on = false
     if conn then conn:Disconnect() end
-    for _, d in pairs(items) do
+    for p, d in pairs(items) do
         d[1]:Destroy()
         d[2]:Disconnect()
     end
-    if folder then folder:Destroy() end
+    table.clear(items)
 end)
