@@ -34,7 +34,43 @@ vis:AddToggle("PossessorESP", {
     Text = "Possessor ESP",
     Default = false,
     Callback = function(v) end
+}):AddColorPicker("ESPColor", {
+    Default = Color3.fromRGB(255, 255, 255),
+    Title = "ESP Color"
 })
+
+local function update()
+    local on = lib.Toggles.PossessorESP.Value
+    local color = lib.Options.ESPColor.Value
+
+    for _, p in ipairs(game.Players:GetPlayers()) do
+        if p ~= lp then
+            local char = p.Character
+            local isPoss = p:GetAttribute("IsPossessor")
+            
+            if char then
+                local h = char:FindFirstChild("AXIS_ESP")
+                if on and isPoss then
+                    if not h then
+                        h = Instance.new("Highlight")
+                        h.Name = "AXIS_ESP"
+                        h.Parent = char
+                    end
+                    h.Adornee = char
+                    h.FillColor = color
+                    h.OutlineColor = Color3.fromRGB(255, 255, 255)
+                    h.FillTransparency = 0.55
+                    h.OutlineTransparency = 0
+                    h.Enabled = true
+                elseif h then
+                    h.Enabled = false
+                end
+            end
+        end
+    end
+end
+
+local loop = rs.Heartbeat:Connect(update)
 
 status:AddLabel(string.format("Welcome, %s\nGame: Possessor", lp.DisplayName), true)
 status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
@@ -74,5 +110,6 @@ theme:ApplyToTab(config)
 save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
+    if loop then loop:Disconnect() end
     if conn then conn:Disconnect() end
 end)
