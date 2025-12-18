@@ -6,11 +6,13 @@ local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 local rs = game:GetService("RunService")
 local lp = game.Players.LocalPlayer
 
-lib.Scheme.BackgroundColor = Color3.fromRGB(22, 41, 58)
-lib.Scheme.MainColor = Color3.fromRGB(38, 68, 95)
-lib.Scheme.AccentColor = Color3.fromRGB(89, 131, 160)
-lib.Scheme.OutlineColor = Color3.fromRGB(50, 85, 115)
-lib.Scheme.FontColor = Color3.fromRGB(210, 218, 225)
+theme.BuiltInThemes["Default"][2] = {
+    BackgroundColor = "16293a",
+    MainColor = "26445f",
+    AccentColor = "5983a0",
+    OutlineColor = "325573",
+    FontColor = "d2dae1"
+}
 
 local win = lib:CreateWindow({
     Title = "AXIS HUB",
@@ -103,6 +105,7 @@ cfgBox:AddToggle("KeyMenu", {
     Callback = function(v) lib.KeybindFrame.Visible = v end 
 })
 cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
+
 lib.ToggleKeybind = lib.Options.MenuKeybind
 
 local elap, frames = 0, 0
