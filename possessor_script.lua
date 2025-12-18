@@ -117,6 +117,13 @@ cfgBox:AddToggle("KeyMenu", {
     Text = "Keybind Menu", 
     Callback = function(v) lib.KeybindFrame.Visible = v end 
 })
+cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { 
+    Default = "RightControl", 
+    NoUI = true, 
+    Text = "Menu bind",
+    Callback = function(key) lib.ToggleKeybind = key end
+})
+lib.ToggleKeybind = Enum.KeyCode.RightControl
 cfgBox:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
 local elap, frames = 0, 0
