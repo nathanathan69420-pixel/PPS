@@ -6,18 +6,18 @@ local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 local rs = game:GetService("RunService")
 local lp = game.Players.LocalPlayer
 
+lib.Scheme.BackgroundColor = Color3.fromRGB(22, 41, 58)
+lib.Scheme.MainColor = Color3.fromRGB(38, 68, 95)
+lib.Scheme.AccentColor = Color3.fromRGB(89, 131, 160)
+lib.Scheme.OutlineColor = Color3.fromRGB(50, 85, 115)
+lib.Scheme.FontColor = Color3.fromRGB(210, 218, 225)
+
 local win = lib:CreateWindow({
     Title = "AXIS HUB",
     Footer = "v1.3.2",
     NotifySide = "Right",
     ShowCustomCursor = true,
 })
-
-lib.Scheme.BackgroundColor = Color3.fromRGB(22, 41, 58)
-lib.Scheme.MainColor = Color3.fromRGB(38, 68, 95)
-lib.Scheme.AccentColor = Color3.fromRGB(89, 131, 160)
-lib.Scheme.OutlineColor = Color3.fromRGB(50, 85, 115)
-lib.Scheme.FontColor = Color3.fromRGB(210, 218, 225)
 
 local home = win:AddTab("Home", "house")
 local main = win:AddTab("Main", "ghost")
@@ -38,7 +38,7 @@ local function highlight(p)
     
     local h = Instance.new("Highlight")
     h.Name = p.Name
-    h.FillColor = Color3.fromRGB(175, 25, 255)
+    h.FillColor = lib.Options.ESPColor.Value
     h.OutlineColor = Color3.fromRGB(255, 255, 255)
     h.FillTransparency = 0.5
     h.OutlineTransparency = 0
@@ -48,12 +48,13 @@ local function highlight(p)
     local function update()
         local c = p.Character
         h.Adornee = c
+        h.FillColor = lib.Options.ESPColor.Value
         
         local role = "Innocent"
         local gui = p:FindFirstChild("PlayerGui")
-        local main = gui and gui:FindFirstChild("MainUI")
-        if main then
-            local f = main:FindFirstChild("MainFrame")
+        local m = gui and gui:FindFirstChild("MainUI")
+        if m then
+            local f = m:FindFirstChild("MainFrame")
             local r = f and f:FindFirstChild("RoleFrame")
             local n = r and r:FindFirstChild("RoleName")
             if n then role = n.Text end
@@ -84,6 +85,10 @@ vis:AddToggle("ESP", {
             for _, p in ipairs(game.Players:GetPlayers()) do highlight(p) end
         end
     end
+}):AddColorPicker("ESPColor", {
+    Default = Color3.fromRGB(175, 25, 255),
+    Title = "ESP Color",
+    Callback = function() end
 })
 
 game.Players.PlayerAdded:Connect(function(p)
@@ -128,7 +133,6 @@ end)
 
 theme:SetLibrary(lib)
 save:SetLibrary(lib)
-save:IgnoreThemeSettings()
 theme:SetFolder("PlowsScriptHub")
 save:SetFolder("PlowsScriptHub/Possessor")
 save:BuildConfigSection(config)
