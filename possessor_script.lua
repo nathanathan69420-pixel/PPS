@@ -45,25 +45,33 @@ local function esp(p)
     h.Enabled = false
     
     local function update()
-        h.Adornee = p.Character
-        h.FillColor = lib.Options.ESPColor.Value
-        local r = "Innocent"
-        local g = p:FindFirstChild("PlayerGui")
-        local m = g and g:FindFirstChild("MainUI")
-        if m then
-            local f = m:FindFirstChild("MainFrame")
-            local rf = f and f:FindFirstChild("RoleFrame")
-            local n = rf and rf:FindFirstChild("RoleName")
-            if n then r = n.Text end
+        local c = p.Character
+        if not c then 
+            h.Enabled = false
+            return 
         end
-        h.Enabled = on and r:find("Possessor")
+        
+        h.Adornee = c
+        h.FillColor = lib.Options.ESPColor.Value
+        
+        local r = ""
+        local g = p:FindFirstChild("PlayerGui")
+        if g then
+            local m = g:FindFirstChild("MainUI") or g:FindFirstChild("Main")
+            if m then
+                local n = m:FindFirstChild("RoleName", true)
+                if n then r = n.Text end
+            end
+        end
+        
+        h.Enabled = on and r:find("Possessor") ~= nil
     end
 
     items[p] = {h, p.CharacterAdded:Connect(update)}
     task.spawn(function()
         while items[p] do
             update()
-            task.wait(1)
+            task.wait(0.5)
         end
     end)
 end
