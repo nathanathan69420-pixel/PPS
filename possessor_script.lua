@@ -36,64 +36,71 @@ vis:AddToggle("PossessorESP", {
     Default = false,
     Callback = function() end
 }):AddColorPicker("ESPColor", {
-    Default = Color3.new(1, 1, 1),
+    Default = Color3.fromRGB(175, 25, 255),
     Title = "ESP Color"
 })
 
-local folder = Instance.new("Folder", game:GetService("CoreGui"))
-folder.Name = "AXIS_DATA"
+local Storage = Instance.new("Folder")
+Storage.Name = "AXIS_Storage"
+Storage.Parent = game:GetService("CoreGui")
 
-task.spawn(function()
-    while task.wait(0.2) do
-        local on = lib.Options.PossessorESP and lib.Options.PossessorESP.Value
-        local color = lib.Options.ESPColor and lib.Options.ESPColor.Value or Color3.new(1, 1, 1)
+local conns = {}
 
-        for _, p in ipairs(plrs:GetPlayers()) do
-            local char = p.Character
-            local h = folder:FindFirstChild(p.Name)
-            
-            local isPoss = false
-            local isAlive = false
-            
-            local attr_p = p:GetAttribute("IsPossessor")
-            local attr_a = p:GetAttribute("Alive")
-            
-            if attr_p == true or tostring(attr_p):lower() == "true" then isPoss = true end
-            if attr_a == true or tostring(attr_a):lower() == "true" then isAlive = true end
-            
-            if not isPoss and p:FindFirstChild("Possessor", true) then isPoss = true end
-
-            if on and isPoss and isAlive and char and char:FindFirstChild("HumanoidRootPart") then
-                if not h then
-                    h = Instance.new("Highlight", folder)
-                    h.Name = p.Name
-                end
-                
-                h.Adornee = char
-                h.Enabled = true
-                h.FillColor = color
-                h.OutlineColor = Color3.new(1, 1, 1)
-                h.FillTransparency = 0.55
-                h.OutlineTransparency = 0
-                h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-
-                for _, obj in ipairs(char:GetChildren()) do
-                    if obj:IsA("Highlight") and obj ~= h then
-                        obj.Enabled = false
-                    end
-                end
-            elseif h then
-                h.Enabled = false
-            end
-        end
-
-        for _, h in ipairs(folder:GetChildren()) do
-            if not plrs:FindFirstChild(h.Name) then
-                h:Destroy()
-            end
+local function Highlight(p)
+    if p == lp then return end
+    
+    local h = Instance.new("Highlight")
+    h.Name = p.Name
+    h.FillColor = lib.Options.ESPColor.Value
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    h.FillTransparency = 0.55
+    h.OutlineColor = Color3.fromRGB(255, 255, 255)
+    h.OutlineTransparency = 0
+    h.Parent = Storage
+    
+    local function update()
+        local char = p.Character
+        local isPoss = p:GetAttribute("IsPossessor") == true
+        local isAlive = p:GetAttribute("Alive") == true
+        local on = lib.Toggles.PossessorESP and lib.Toggles.PossessorESP.Value
+        
+        if char then
+            h.Adornee = char
         end
         
-        if lib.Unloaded then break end
+        h.FillColor = lib.Options.ESPColor.Value
+        h.Enabled = on and isPoss and isAlive
+    end
+
+    conns[p] = {
+        p.CharacterAdded:Connect(function(char)
+            h.Adornee = char
+            update()
+        end),
+        p:GetAttributeChangedSignal("IsPossessor"):Connect(update),
+        p:GetAttributeChangedSignal("Alive"):Connect(update)
+    }
+
+    task.spawn(function()
+        while conns[p] do
+            update()
+            task.wait(0.5)
+        end
+    end)
+end
+
+plrs.PlayerAdded:Connect(Highlight)
+for _, v in ipairs(plrs:GetPlayers()) do
+    Highlight(v)
+end
+
+plrs.PlayerRemoving:Connect(function(p)
+    if Storage:FindFirstChild(p.Name) then
+        Storage[p.Name]:Destroy()
+    end
+    if conns[p] then
+        for _, c in ipairs(conns[p]) do c:Disconnect() end
+        conns[p] = nil
     end
 end)
 
@@ -108,7 +115,7 @@ cfgBox:AddToggle("KeyMenu", {
     Text = "Keybind Menu", 
     Callback = function(v) lib.KeybindFrame.Visible = v end 
 })
-cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu keybind" })
+cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
 
 lib.ToggleKeybind = lib.Options.MenuKeybind
 
@@ -136,5 +143,8 @@ save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
     if conn then conn:Disconnect() end
-    if folder then folder:Destroy() end
+    for p, c_list in pairs(conns) do
+        for _, c in ipairs(c_list) do c:Disconnect() end
+    end
+    if Storage then Storage:Destroy() end
 end)
