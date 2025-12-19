@@ -44,37 +44,27 @@ local function step()
     local color = lib.Options.ESPColor.Value
 
     for _, p in pairs(game.Players:GetPlayers()) do
-        if p ~= lp then
-            local char = p.Character
-            if char then
-                local h = char:FindFirstChild("AXIS_HL")
-                local val = p:GetAttribute("IsPossessor")
-                local isPoss = (val == true or tostring(val):lower() == "true")
-                local isAlive = (p:GetAttribute("Alive") == true)
+        local char = p.Character
+        if char then
+            local h = char:FindFirstChild("AXIS_HL")
+            local isPoss = p:GetAttribute("IsPossessor") == true
+            local isAlive = p:GetAttribute("Alive") == true
 
-                if (not isPoss) and p:FindFirstChild("Possessor", true) then isPoss = true end
-
-                if on and isPoss and isAlive then
-                    for _, obj in pairs(char:GetChildren()) do
-                        if obj:IsA("Highlight") and obj.Name ~= "AXIS_HL" then
-                            obj.Enabled = false
-                        end
-                    end
-
-                    if not h then
-                        h = Instance.new("Highlight", char)
-                        h.Name = "AXIS_HL"
-                    end
-                    
-                    h.Enabled = true
-                    h.FillColor = color
-                    h.OutlineColor = Color3.new(1, 1, 1)
-                    h.FillTransparency = 0.55
-                    h.OutlineTransparency = 0
-                    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                elseif h then
-                    h.Enabled = false
+            if on and isPoss and isAlive then
+                if not h then
+                    h = Instance.new("Highlight", char)
+                    h.Name = "AXIS_HL"
                 end
+                
+                h.Enabled = true
+                h.Adornee = char
+                h.FillColor = color
+                h.OutlineColor = Color3.new(1, 1, 1)
+                h.FillTransparency = 0.55
+                h.OutlineTransparency = 0
+                h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            elseif h then
+                h.Enabled = false
             end
         end
     end
@@ -93,7 +83,7 @@ cfgBox:AddToggle("KeyMenu", {
     Text = "Keybind Menu", 
     Callback = function(v) lib.KeybindFrame.Visible = v end 
 })
-cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
+cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu keybind" })
 
 lib.ToggleKeybind = lib.Options.MenuKeybind
 
