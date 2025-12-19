@@ -31,10 +31,11 @@ local stats = home:AddRightGroupbox("FPS & Ping")
 local vis = main:AddLeftGroupbox("Visuals", "eye")
 local cfgBox = config:AddLeftGroupbox("Config")
 
+local espOn = false
 vis:AddToggle("PossessorESP", {
     Text = "Possessor ESP",
     Default = false,
-    Callback = function() end
+    Callback = function(v) espOn = v end
 }):AddColorPicker("ESPColor", {
     Default = Color3.fromRGB(175, 25, 255),
     Title = "ESP Color"
@@ -44,41 +45,52 @@ local Storage = Instance.new("Folder")
 Storage.Name = "AXIS_Storage"
 Storage.Parent = game:GetService("CoreGui")
 
-local espLoop = rs.Heartbeat:Connect(function()
-    local on = lib.Toggles.PossessorESP.Value
-    local color = lib.Options.ESPColor.Value
+local conns = {}
 
-    for _, p in ipairs(plrs:GetPlayers()) do
-        if p ~= lp then
-            local char = p.Character
-            local h = Storage:FindFirstChild(p.Name)
-            local val = p:GetAttribute("IsPossessor")
-            local isP = (val == true or tostring(val):lower() == "true")
-            local isA = p:GetAttribute("Alive") == true
-
-            if on and isP and isA and char then
-                if not h then
-                    h = Instance.new("Highlight")
-                    h.Name = p.Name
-                    h.Parent = Storage
-                end
-                h.Adornee = char
-                h.FillColor = color
-                h.OutlineColor = Color3.new(1, 1, 1)
-                h.FillTransparency = 0.55
-                h.OutlineTransparency = 0
-                h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                h.Enabled = true
-            elseif h then
-                h.Enabled = false
-            end
-        end
+local function High(p)
+    if p == lp then return end
+    
+    local h = Instance.new("Highlight")
+    h.Name = p.Name
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    h.OutlineColor = Color3.new(1, 1, 1)
+    h.FillTransparency = 0.55
+    h.Parent = Storage
+    
+    local function up()
+        local c = p.Character
+        local val = p:GetAttribute("IsPossessor")
+        local isP = (val == true or tostring(val):lower() == "true")
+        local isA = p:GetAttribute("Alive") == true
+        
+        h.Adornee = c
+        h.FillColor = lib.Options.ESPColor.Value
+        h.Enabled = espOn and isP and isA
     end
 
-    for _, h in ipairs(Storage:GetChildren()) do
-        if not plrs:FindFirstChild(h.Name) then
-            h:Destroy()
+    conns[p] = {
+        p.CharacterAdded:Connect(up),
+        p:GetAttributeChangedSignal("IsPossessor"):Connect(up),
+        p:GetAttributeChangedSignal("Alive"):Connect(up)
+    }
+
+    task.spawn(function()
+        while conns[p] do
+            up()
+            task.wait(0.1)
         end
+    end)
+    up()
+end
+
+plrs.PlayerAdded:Connect(High)
+for _, v in ipairs(plrs:GetPlayers()) do High(v) end
+
+plrs.PlayerRemoving:Connect(function(p)
+    if Storage:FindFirstChild(p.Name) then Storage[p.Name]:Destroy() end
+    if conns[p] then
+        for _, c in ipairs(conns[p]) do c:Disconnect() end
+        conns[p] = nil
     end
 end)
 
@@ -115,7 +127,9 @@ theme:ApplyToTab(config)
 save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
-    if espLoop then espLoop:Disconnect() end
     if conn then conn:Disconnect() end
+    for p, c_list in pairs(conns) do
+        for _, c in ipairs(c_list) do c:Disconnect() end
+    end
     if Storage then Storage:Destroy() end
 end)
