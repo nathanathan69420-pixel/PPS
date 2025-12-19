@@ -35,78 +35,52 @@ vis:AddToggle("PossessorESP", {
     Default = false,
     Callback = function(v) end
 }):AddColorPicker("ESPColor", {
-    Default = Color3.fromRGB(255, 255, 255),
+    Default = Color3.new(1, 1, 1),
     Title = "ESP Color"
 })
 
-local folder = Instance.new("Folder", game:GetService("CoreGui"))
-folder.Name = "AXIS_ESP"
+local function step()
+    local on = lib.Toggles.PossessorESP.Value
+    local color = lib.Options.ESPColor.Value
 
-local items = {}
+    for _, p in pairs(game.Players:GetPlayers()) do
+        if p ~= lp then
+            local char = p.Character
+            if char then
+                local h = char:FindFirstChild("AXIS_HL")
+                local val = p:GetAttribute("IsPossessor")
+                local isPoss = (val == true or tostring(val):lower() == "true")
+                local isAlive = (p:GetAttribute("Alive") == true)
 
-local function handle(p)
-    if p == lp or items[p] then return end
-    
-    local h = Instance.new("Highlight")
-    h.Name = p.Name
-    h.Parent = folder
-    h.Enabled = false
-    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    
-    local function update()
-        local char = p.Character
-        if not char or not char:IsDescendantOf(workspace) then 
-            h.Enabled = false
-            return 
-        end
-        
-        local val = p:GetAttribute("IsPossessor")
-        local isPoss = (val == true or tostring(val):lower() == "true")
-        local isAlive = (p:GetAttribute("Alive") == true)
-        
-        if not isPoss and p:FindFirstChild("Possessor", true) then
-            isPoss = true
-        end
+                if (not isPoss) and p:FindFirstChild("Possessor", true) then isPoss = true end
 
-        local on = lib.Toggles.PossessorESP.Value
-        h.Enabled = on and isPoss and isAlive
-        
-        if h.Enabled then
-            h.Adornee = char
-            h.FillColor = lib.Options.ESPColor.Value
-            h.OutlineColor = Color3.fromRGB(255, 255, 255)
-            h.FillTransparency = 0.55
-            h.OutlineTransparency = 0
+                if on and isPoss and isAlive then
+                    for _, obj in pairs(char:GetChildren()) do
+                        if obj:IsA("Highlight") and obj.Name ~= "AXIS_HL" then
+                            obj.Enabled = false
+                        end
+                    end
+
+                    if not h then
+                        h = Instance.new("Highlight", char)
+                        h.Name = "AXIS_HL"
+                    end
+                    
+                    h.Enabled = true
+                    h.FillColor = color
+                    h.OutlineColor = Color3.new(1, 1, 1)
+                    h.FillTransparency = 0.55
+                    h.OutlineTransparency = 0
+                    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                elseif h then
+                    h.Enabled = false
+                end
+            end
         end
     end
-
-    items[p] = {
-        h, 
-        p.CharacterAdded:Connect(update), 
-        p:GetAttributeChangedSignal("IsPossessor"):Connect(update),
-        p:GetAttributeChangedSignal("Alive"):Connect(update)
-    }
-    
-    task.spawn(function()
-        while items[p] do
-            update()
-            task.wait(0.5)
-        end
-    end)
 end
 
-game.Players.PlayerAdded:Connect(handle)
-game.Players.PlayerRemoving:Connect(function(p)
-    if items[p] then
-        items[p][1]:Destroy()
-        items[p][2]:Disconnect()
-        items[p][3]:Disconnect()
-        items[p][4]:Disconnect()
-        items[p] = nil
-    end
-end)
-
-for _, p in ipairs(game.Players:GetPlayers()) do handle(p) end
+local loop = rs.Heartbeat:Connect(step)
 
 status:AddLabel(string.format("Welcome, %s\nGame: Possessor", lp.DisplayName), true)
 status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
@@ -146,13 +120,11 @@ theme:ApplyToTab(config)
 save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
+    if loop then loop:Disconnect() end
     if conn then conn:Disconnect() end
-    for _, d in pairs(items) do
-        d[1]:Destroy()
-        d[2]:Disconnect()
-        d[3]:Disconnect()
-        d[4]:Disconnect()
+    for _, p in pairs(game.Players:GetPlayers()) do
+        local c = p.Character
+        local h = c and c:FindFirstChild("AXIS_HL")
+        if h then h:Destroy() end
     end
-    if folder then folder:Destroy() end
-    table.clear(items)
 end)
