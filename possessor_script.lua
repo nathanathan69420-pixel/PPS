@@ -31,11 +31,10 @@ local stats = home:AddRightGroupbox("FPS & Ping")
 local vis = main:AddLeftGroupbox("Visuals", "eye")
 local cfgBox = config:AddLeftGroupbox("Config")
 
-local espOn = false
 vis:AddToggle("PossessorESP", {
     Text = "Possessor ESP",
     Default = false,
-    Callback = function(v) espOn = v end
+    Callback = function() end
 }):AddColorPicker("ESPColor", {
     Default = Color3.fromRGB(175, 25, 255),
     Title = "ESP Color"
@@ -52,9 +51,11 @@ local function High(p)
     
     local h = Instance.new("Highlight")
     h.Name = p.Name
+    h.FillColor = lib.Options.ESPColor.Value
     h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    h.OutlineColor = Color3.new(1, 1, 1)
     h.FillTransparency = 0.55
+    h.OutlineColor = Color3.fromRGB(255, 255, 255)
+    h.OutlineTransparency = 0
     h.Parent = Storage
     
     local function up()
@@ -62,14 +63,21 @@ local function High(p)
         local val = p:GetAttribute("IsPossessor")
         local isP = (val == true or tostring(val):lower() == "true")
         local isA = p:GetAttribute("Alive") == true
+        local on = lib.Toggles.PossessorESP and lib.Toggles.PossessorESP.Value
         
-        h.Adornee = c
+        if c then
+            h.Adornee = c
+        end
+        
         h.FillColor = lib.Options.ESPColor.Value
-        h.Enabled = espOn and isP and isA
+        h.Enabled = on and isP and isA
     end
 
     conns[p] = {
-        p.CharacterAdded:Connect(up),
+        p.CharacterAdded:Connect(function(char)
+            h.Adornee = char
+            up()
+        end),
         p:GetAttributeChangedSignal("IsPossessor"):Connect(up),
         p:GetAttributeChangedSignal("Alive"):Connect(up)
     }
@@ -80,7 +88,6 @@ local function High(p)
             task.wait(0.1)
         end
     end)
-    up()
 end
 
 plrs.PlayerAdded:Connect(High)
