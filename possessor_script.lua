@@ -60,9 +60,14 @@ local function Highlight(p)
     
     local function update()
         local char = p.Character
-        local isPoss = p:GetAttribute("IsPossessor") == true
+        local val = p:GetAttribute("IsPossessor")
         local isAlive = p:GetAttribute("Alive") == true
         local on = lib.Toggles.PossessorESP and lib.Toggles.PossessorESP.Value
+        
+        local isPoss = true
+        if val == false or tostring(val):lower() == "false" then
+            isPoss = false
+        end
         
         if char then
             h.Adornee = char
@@ -115,7 +120,7 @@ cfgBox:AddToggle("KeyMenu", {
     Text = "Keybind Menu", 
     Callback = function(v) lib.KeybindFrame.Visible = v end 
 })
-cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
+cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu keybind" })
 
 lib.ToggleKeybind = lib.Options.MenuKeybind
 
