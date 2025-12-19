@@ -46,63 +46,48 @@ Storage.Parent = game:GetService("CoreGui")
 
 local conns = {}
 
-local function Highlight(p)
+local function High(p)
     if p == lp then return end
     
     local h = Instance.new("Highlight")
     h.Name = p.Name
-    h.FillColor = lib.Options.ESPColor.Value
     h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    h.OutlineColor = Color3.new(1, 1, 1)
     h.FillTransparency = 0.55
-    h.OutlineColor = Color3.fromRGB(255, 255, 255)
-    h.OutlineTransparency = 0
     h.Parent = Storage
     
-    local function update()
-        local char = p.Character
+    local function up()
+        local c = p.Character
         local val = p:GetAttribute("IsPossessor")
-        local isAlive = p:GetAttribute("Alive") == true
-        local on = lib.Toggles.PossessorESP and lib.Toggles.PossessorESP.Value
+        local isP = (val == true or tostring(val):lower() == "true")
+        local isA = p:GetAttribute("Alive") == true
+        local on = lib.Toggles.PossessorESP.Value
         
-        local isPoss = true
-        if val == false or tostring(val):lower() == "false" then
-            isPoss = false
-        end
-        
-        if char then
-            h.Adornee = char
-        end
-        
+        h.Adornee = c
         h.FillColor = lib.Options.ESPColor.Value
-        h.Enabled = on and isPoss and isAlive
+        h.Enabled = on and isP and isA
     end
 
     conns[p] = {
-        p.CharacterAdded:Connect(function(char)
-            h.Adornee = char
-            update()
-        end),
-        p:GetAttributeChangedSignal("IsPossessor"):Connect(update),
-        p:GetAttributeChangedSignal("Alive"):Connect(update)
+        p.CharacterAdded:Connect(up),
+        p:GetAttributeChangedSignal("IsPossessor"):Connect(up),
+        p:GetAttributeChangedSignal("Alive"):Connect(up)
     }
 
     task.spawn(function()
         while conns[p] do
-            update()
+            up()
             task.wait(0.5)
         end
     end)
+    up()
 end
 
-plrs.PlayerAdded:Connect(Highlight)
-for _, v in ipairs(plrs:GetPlayers()) do
-    Highlight(v)
-end
+plrs.PlayerAdded:Connect(High)
+for _, v in ipairs(plrs:GetPlayers()) do High(v) end
 
 plrs.PlayerRemoving:Connect(function(p)
-    if Storage:FindFirstChild(p.Name) then
-        Storage[p.Name]:Destroy()
-    end
+    if Storage:FindFirstChild(p.Name) then Storage[p.Name]:Destroy() end
     if conns[p] then
         for _, c in ipairs(conns[p]) do c:Disconnect() end
         conns[p] = nil
@@ -115,13 +100,8 @@ status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 local fpsLbl = stats:AddLabel("FPS: ...", true)
 local pingLbl = stats:AddLabel("Ping: ...", true)
 
-cfgBox:AddToggle("KeyMenu", { 
-    Default = lib.KeybindFrame.Visible, 
-    Text = "Keybind Menu", 
-    Callback = function(v) lib.KeybindFrame.Visible = v end 
-})
+cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
 cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu keybind" })
-
 lib.ToggleKeybind = lib.Options.MenuKeybind
 
 local elap, frames = 0, 0
