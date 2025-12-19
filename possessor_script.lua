@@ -62,14 +62,14 @@ local function handle(p)
         
         local val = p:GetAttribute("IsPossessor")
         local isPoss = (val == true or tostring(val):lower() == "true")
+        local isAlive = (p:GetAttribute("Alive") == true)
         
-        -- Fallback check for the RoleCards/Possessor object found earlier
         if not isPoss and p:FindFirstChild("Possessor", true) then
             isPoss = true
         end
 
         local on = lib.Toggles.PossessorESP.Value
-        h.Enabled = on and isPoss
+        h.Enabled = on and isPoss and isAlive
         
         if h.Enabled then
             h.Adornee = char
@@ -83,7 +83,8 @@ local function handle(p)
     items[p] = {
         h, 
         p.CharacterAdded:Connect(update), 
-        p:GetAttributeChangedSignal("IsPossessor"):Connect(update)
+        p:GetAttributeChangedSignal("IsPossessor"):Connect(update),
+        p:GetAttributeChangedSignal("Alive"):Connect(update)
     }
     
     task.spawn(function()
@@ -100,6 +101,7 @@ game.Players.PlayerRemoving:Connect(function(p)
         items[p][1]:Destroy()
         items[p][2]:Disconnect()
         items[p][3]:Disconnect()
+        items[p][4]:Disconnect()
         items[p] = nil
     end
 end)
@@ -149,6 +151,7 @@ lib:OnUnload(function()
         d[1]:Destroy()
         d[2]:Disconnect()
         d[3]:Disconnect()
+        d[4]:Disconnect()
     end
     if folder then folder:Destroy() end
     table.clear(items)
