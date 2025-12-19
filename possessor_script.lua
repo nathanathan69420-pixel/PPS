@@ -4,7 +4,8 @@ local theme = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
 local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
 local rs = game:GetService("RunService")
-local lp = game.Players.LocalPlayer
+local plrs = game:GetService("Players")
+local lp = plrs.LocalPlayer
 
 theme.BuiltInThemes["Default"][2] = {
     BackgroundColor = "16293a",
@@ -33,44 +34,68 @@ local cfgBox = config:AddLeftGroupbox("Config")
 vis:AddToggle("PossessorESP", {
     Text = "Possessor ESP",
     Default = false,
-    Callback = function(v) end
+    Callback = function() end
 }):AddColorPicker("ESPColor", {
     Default = Color3.new(1, 1, 1),
     Title = "ESP Color"
 })
 
-local function step()
-    local on = lib.Toggles.PossessorESP.Value
-    local color = lib.Options.ESPColor.Value
+local folder = Instance.new("Folder", game:GetService("CoreGui"))
+folder.Name = "AXIS_DATA"
 
-    for _, p in pairs(game.Players:GetPlayers()) do
-        local char = p.Character
-        if char then
-            local h = char:FindFirstChild("AXIS_HL")
-            local isPoss = p:GetAttribute("IsPossessor") == true
-            local isAlive = p:GetAttribute("Alive") == true
+task.spawn(function()
+    while task.wait(0.2) do
+        local on = lib.Options.PossessorESP and lib.Options.PossessorESP.Value
+        local color = lib.Options.ESPColor and lib.Options.ESPColor.Value or Color3.new(1, 1, 1)
 
-            if on and isPoss and isAlive then
+        for _, p in ipairs(plrs:GetPlayers()) do
+            local char = p.Character
+            local h = folder:FindFirstChild(p.Name)
+            
+            local isPoss = false
+            local isAlive = false
+            
+            local attr_p = p:GetAttribute("IsPossessor")
+            local attr_a = p:GetAttribute("Alive")
+            
+            if attr_p == true or tostring(attr_p):lower() == "true" then isPoss = true end
+            if attr_a == true or tostring(attr_a):lower() == "true" then isAlive = true end
+            
+            if not isPoss and p:FindFirstChild("Possessor", true) then isPoss = true end
+
+            if on and isPoss and isAlive and char and char:FindFirstChild("HumanoidRootPart") then
                 if not h then
-                    h = Instance.new("Highlight", char)
-                    h.Name = "AXIS_HL"
+                    h = Instance.new("Highlight", folder)
+                    h.Name = p.Name
                 end
                 
-                h.Enabled = true
                 h.Adornee = char
+                h.Enabled = true
                 h.FillColor = color
                 h.OutlineColor = Color3.new(1, 1, 1)
                 h.FillTransparency = 0.55
                 h.OutlineTransparency = 0
                 h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+
+                for _, obj in ipairs(char:GetChildren()) do
+                    if obj:IsA("Highlight") and obj ~= h then
+                        obj.Enabled = false
+                    end
+                end
             elseif h then
                 h.Enabled = false
             end
         end
-    end
-end
 
-local loop = rs.Heartbeat:Connect(step)
+        for _, h in ipairs(folder:GetChildren()) do
+            if not plrs:FindFirstChild(h.Name) then
+                h:Destroy()
+            end
+        end
+        
+        if lib.Unloaded then break end
+    end
+end)
 
 status:AddLabel(string.format("Welcome, %s\nGame: Possessor", lp.DisplayName), true)
 status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
@@ -110,11 +135,6 @@ theme:ApplyToTab(config)
 save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
-    if loop then loop:Disconnect() end
     if conn then conn:Disconnect() end
-    for _, p in pairs(game.Players:GetPlayers()) do
-        local c = p.Character
-        local h = c and c:FindFirstChild("AXIS_HL")
-        if h then h:Destroy() end
-    end
+    if folder then folder:Destroy() end
 end)
