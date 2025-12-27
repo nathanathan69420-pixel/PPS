@@ -17,7 +17,7 @@ theme.BuiltInThemes["Default"][2] = {
 
 local win = lib:CreateWindow({
     Title = "AXIS HUB",
-    Footer = "v1.3.2",
+    Footer = "v1.5.2",
     NotifySide = "Right",
     ShowCustomCursor = true,
 })
@@ -40,65 +40,73 @@ vis:AddToggle("PossessorESP", {
     Title = "ESP Color"
 })
 
+local ot = {}
+vis:AddToggle("XRay", {
+    Text = "X-Ray",
+    Default = false,
+    Callback = function(v)
+        if v then
+            for _, o in ipairs(workspace:GetDescendants()) do
+                if o:IsA("BasePart") and o.Transparency < 0.7 and not o:IsDescendantOf(lp.Character or {}) then
+                    local n = o.Name:lower()
+                    if n:find("wall") or n:find("door") or n:find("floor") or n:find("ceil") or n:find("roof") or o.Size.X > 10 or o.Size.Z > 10 then
+                        ot[o] = o.Transparency
+                        o.Transparency = 0.7
+                    end
+                end
+            end
+        else
+            for o, t in pairs(ot) do
+                if o and o.Parent then o.Transparency = t end
+            end
+            table.clear(ot)
+        end
+    end
+})
+
+
 local Storage = Instance.new("Folder")
 Storage.Name = "AXIS_Storage"
 Storage.Parent = game:GetService("CoreGui")
 
-local conns = {}
+local espLoop = rs.Heartbeat:Connect(function()
+    local on = lib.Toggles.PossessorESP and lib.Toggles.PossessorESP.Value
+    local color = lib.Options.ESPColor and lib.Options.ESPColor.Value or Color3.new(1, 1, 1)
 
-local function High(p)
-    if p == lp then return end
-    
-    local h = Instance.new("Highlight")
-    h.Name = p.Name
-    h.FillColor = lib.Options.ESPColor.Value
-    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    h.FillTransparency = 0.55
-    h.OutlineColor = Color3.fromRGB(255, 255, 255)
-    h.OutlineTransparency = 0
-    h.Parent = Storage
-    
-    local function up()
-        local c = p.Character
-        local val = p:GetAttribute("IsPossessor")
-        local isP = (val == true or tostring(val):lower() == "true")
-        local isA = p:GetAttribute("Alive") == true
-        local on = lib.Toggles.PossessorESP and lib.Toggles.PossessorESP.Value
-        
-        if c then
-            h.Adornee = c
+    for _, p in ipairs(plrs:GetPlayers()) do
+        if p ~= lp then
+            local char = p.Character
+            local h = Storage:FindFirstChild(p.Name)
+            
+            local val = p:GetAttribute("IsPossessor")
+            local isP = (val == true or tostring(val):lower() == "true")
+            local isA = (p:GetAttribute("Alive") == true)
+
+            if on and isP and isA and char then
+                if not h then
+                    h = Instance.new("Highlight")
+                    h.Name = p.Name
+                    h.Parent = Storage
+                    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    h.OutlineColor = Color3.new(1, 1, 1)
+                    h.FillTransparency = 0.55
+                    h.OutlineTransparency = 0
+                end
+                h.Adornee = char
+                h.FillColor = color
+                h.Enabled = true
+            else
+                if h then
+                    h.Enabled = false
+                end
+            end
         end
-        
-        h.FillColor = lib.Options.ESPColor.Value
-        h.Enabled = on and isP and isA
     end
-
-    conns[p] = {
-        p.CharacterAdded:Connect(function(char)
-            h.Adornee = char
-            up()
-        end),
-        p:GetAttributeChangedSignal("IsPossessor"):Connect(up),
-        p:GetAttributeChangedSignal("Alive"):Connect(up)
-    }
-
-    task.spawn(function()
-        while conns[p] do
-            up()
-            task.wait(0.1)
-        end
-    end)
-end
-
-plrs.PlayerAdded:Connect(High)
-for _, v in ipairs(plrs:GetPlayers()) do High(v) end
+end)
 
 plrs.PlayerRemoving:Connect(function(p)
-    if Storage:FindFirstChild(p.Name) then Storage[p.Name]:Destroy() end
-    if conns[p] then
-        for _, c in ipairs(conns[p]) do c:Disconnect() end
-        conns[p] = nil
-    end
+    local h = Storage:FindFirstChild(p.Name)
+    if h then h:Destroy() end
 end)
 
 status:AddLabel(string.format("Welcome, %s\nGame: Possessor", lp.DisplayName), true)
@@ -134,9 +142,7 @@ theme:ApplyToTab(config)
 save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
+    if espLoop then espLoop:Disconnect() end
     if conn then conn:Disconnect() end
-    for p, c_list in pairs(conns) do
-        for _, c in ipairs(c_list) do c:Disconnect() end
-    end
     if Storage then Storage:Destroy() end
 end)
