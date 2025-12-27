@@ -40,15 +40,25 @@ local function bypass()
         return old_idx(self, k)
     end)
     
-    local old_ni
     old_ni = hookmetamethod(cam, "__newindex", newcclosure(function(self, k, v)
         if not checkcaller() and lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value and lib.Options.NoRecoilMethod.Value == "Metatable" then
-            if k == "CFrame" or k == "CoordinateFrame" or k == "Rotation" then
-                -- Ignore the set if it's from a game script while No Recoil is on
+            local p = tostring(k)
+            if p == "CFrame" or p == "CoordinateFrame" or p == "Rotation" or p == "Focus" then
                 return
             end
         end
         return old_ni(self, k, v)
+    end))
+    
+    local old_cam_nc
+    old_cam_nc = hookmetamethod(cam, "__namecall", newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        if not checkcaller() and lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value and lib.Options.NoRecoilMethod.Value == "Metatable" then
+            if method == "SetPrimaryPartCFrame" or method == "PivotTo" then
+                return
+            end
+        end
+        return old_cam_nc(self, ...)
     end))
     
     -- Cloak the bypass itself
@@ -614,29 +624,33 @@ local mainLoop = rs.RenderStepped:Connect(function()
     if lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value then
         local method = lib.Options.NoRecoilMethod.Value
         if method == "Lock" then
-            local cf = cam.CFrame
-            task.spawn(function()
-                task.wait()
-                if lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value then cam.CFrame = cf end
-            end)
+            -- Handled in Heartbeat/aggressive loop below
         elseif method == "Internal" then
-            for _, v in pairs(getgc(true)) do
-                if type(v) == "table" then
-                    if rawget(v, "Recoil") or rawget(v, "recoil") or rawget(v, "Shake") or rawget(v, "Kick") then
-                        pcall(function()
-                            v.Recoil = (v.Recoil or 0) * 0
-                            v.recoil = (v.recoil or 0) * 0
-                            v.Shake = (v.Shake or 0) * 0
-                            v.Kick = (v.Kick or 0) * 0
-                        end)
-                    end
-                    if (rawget(v, "Velocity") or rawget(v, "velocity")) and (rawget(v, "Damper") or rawget(v, "damper")) then
-                        pcall(function()
-                            if v.Velocity then v.Velocity *= 0 end
-                            if v.velocity then v.velocity *= 0 end
-                            if v.Position then v.Position *= 0 end
-                            if v.position then v.position *= 0 end
-                        end)
+            -- Scan periodically to avoid FPS drops
+            local now = tick()
+            if not lastGCScan or now - lastGCScan > 1.5 then
+                lastGCScan = now
+                for _, v in pairs(getgc(true)) do
+                    if type(v) == "table" then
+                        if rawget(v, "Recoil") or rawget(v, "recoil") or rawget(v, "Shake") or rawget(v, "Kick") or rawget(v, "Sway") then
+                            pcall(function()
+                                v.Recoil = (v.Recoil or 0) * 0
+                                v.recoil = (v.recoil or 0) * 0
+                                v.Shake = (v.Shake or 0) * 0
+                                v.Kick = (v.Kick or 0) * 0
+                                v.Sway = (v.Sway or 0) * 0
+                                if v.Intensity then v.Intensity = 0 end
+                                if v.Magnitude then v.Magnitude = 0 end
+                            end)
+                        end
+                        if (rawget(v, "Velocity") or rawget(v, "velocity")) and (rawget(v, "Damper") or rawget(v, "damper")) then
+                            pcall(function()
+                                if v.Velocity then v.Velocity *= 0 end
+                                if v.velocity then v.velocity *= 0 end
+                                if v.Position then v.Position *= 0 end
+                                if v.position then v.position *= 0 end
+                            end)
+                        end
                     end
                 end
             end
@@ -660,6 +674,14 @@ local mainLoop = rs.RenderStepped:Connect(function()
     for drone, _ in pairs(espdroneoutlines) do if not drone or not drone:IsDescendantOf(workspace) then removedrone(drone) end end
 end)
 
+
+local lastCF = cam.CFrame
+rs.Heartbeat:Connect(function()
+    if lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value and lib.Options.NoRecoilMethod.Value == "Lock" then
+        cam.CFrame = lastCF
+    end
+    lastCF = cam.CFrame
+end)
 
 cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
 cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
