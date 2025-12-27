@@ -110,22 +110,25 @@ local bodyParts = {
     "LeftFoot", "RightFoot"
 }
 
-aiming:AddToggle("Triggerbot", { Text = "Triggerbot", Default = false }):AddKeyPicker("TriggerbotKey", { Default = "None", Mode = "Toggle", Text = "Triggerbot" })
+aiming:AddToggle("Triggerbot", { Text = "Triggerbot", Default = false }):AddKeyPicker("TriggerbotKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Triggerbot" })
 aiming:AddSlider("TriggerDelay", { Text = "Triggerbot Delay", Default = 0.32, Min = 0.01, Max = 1, Rounding = 2, Callback = function(v) triggerDelay = v end })
 aiming:AddDivider()
-aiming:AddToggle("Aimbot", { Text = "Aimbot", Default = false }):AddKeyPicker("AimbotKey", { Default = "None", Mode = "Toggle", Text = "Aimbot" })
+aiming:AddToggle("Aimbot", { Text = "Aimbot", Default = false }):AddKeyPicker("AimbotKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Aimbot" })
 aiming:AddDropdown("AimPart", { Values = bodyParts, Default = "Head", Text = "Aim Part", Callback = function(v) aimPart = v end })
 
-visuals:AddToggle("ESPEnabled", { Text = "General ESP Toggle", Default = false }):AddKeyPicker("ESPKey", { Default = "None", Mode = "Toggle", Text = "ESP" })
-visuals:AddToggle("BoxESP", { Text = "Box", Default = false }):AddKeyPicker("BoxKey", { Default = "None", Mode = "Toggle", Text = "Box" })
+visuals:AddToggle("ESPEnabled", { Text = "General ESP Toggle", Default = false }):AddKeyPicker("ESPKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "ESP" })
+visuals:AddToggle("BoxESP", { Text = "Box", Default = false }):AddKeyPicker("BoxKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Box" })
 visuals:AddDropdown("BoxStyle", { Values = { "2D", "3D" }, Default = "2D", Text = "Box Style", Callback = function(v) boxStyle = v end })
-visuals:AddToggle("Chams", { Text = "Chams", Default = false }):AddKeyPicker("ChamsKey", { Default = "None", Mode = "Toggle", Text = "Chams" }):AddColorPicker("ChamsColor", { Default = Color3.fromRGB(255, 50, 50), Title = "Chams Color" })
-visuals:AddToggle("Skeleton", { Text = "Skeleton", Default = false }):AddKeyPicker("SkeletonKey", { Default = "None", Mode = "Toggle", Text = "Skeleton" })
+visuals:AddToggle("Chams", { Text = "Chams", Default = false }):AddKeyPicker("ChamsKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Chams" }):AddColorPicker("ChamsColor", { Default = Color3.fromRGB(255, 50, 50), Title = "Chams Color" })
+visuals:AddToggle("Skeleton", { Text = "Skeleton", Default = false }):AddKeyPicker("SkeletonKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Skeleton" })
 
 checks:AddToggle("WallCheck", { Text = "Wall Check", Default = true })
 checks:AddToggle("TeamCheck", { Text = "Team Check", Default = true })
 checks:AddToggle("ForceFieldCheck", { Text = "ForceField Check", Default = true })
 checks:AddToggle("AliveCheck", { Text = "Alive Check", Default = true })
+
+local Toggles = lib.Toggles
+local Options = lib.Options
 
 local function genName()
     local s = ""
@@ -279,13 +282,13 @@ end
 
 local lastTrigger = 0
 local mainLoop = rs.RenderStepped:Connect(function()
-    local espOn = lib.Toggles.ESPEnabled and lib.Toggles.ESPEnabled.Value
-    local boxOn = lib.Toggles.BoxESP and lib.Toggles.BoxESP.Value
-    local chamsOn = lib.Toggles.Chams and lib.Toggles.Chams.Value
-    local skelOn = lib.Toggles.Skeleton and lib.Toggles.Skeleton.Value
-    local triggerOn = lib.Toggles.Triggerbot and lib.Toggles.Triggerbot.Value
-    local aimbotOn = lib.Toggles.Aimbot and lib.Toggles.Aimbot.Value
-    local chamsColor = lib.Options.ChamsColor and lib.Options.ChamsColor.Value or Color3.new(1, 0.2, 0.2)
+    local espOn = Toggles.ESPEnabled and Toggles.ESPEnabled.Value
+    local boxOn = Toggles.BoxESP and Toggles.BoxESP.Value
+    local chamsOn = Toggles.Chams and Toggles.Chams.Value
+    local skelOn = Toggles.Skeleton and Toggles.Skeleton.Value
+    local triggerOn = Toggles.Triggerbot and Toggles.Triggerbot.Value
+    local aimbotOn = Toggles.Aimbot and Toggles.Aimbot.Value
+    local chamsColor = Options.ChamsColor and Options.ChamsColor.Value or Color3.new(1, 1, 1)
 
     if aimbotOn then
         local target = getAimTarget()

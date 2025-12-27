@@ -118,9 +118,6 @@ local checks = main:AddLeftGroupbox("Checks")
 local visuals = main:AddRightGroupbox("Visuals")
 local cfgBox = config:AddLeftGroupbox("Config")
 
-local Toggles = lib.Toggles
-local Options = lib.Options
-
 status:AddLabel(string.format("Welcome, %s\nGame: Operation One", lp.DisplayName), true)
 status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
@@ -167,6 +164,9 @@ checks:AddToggle("WallCheck", { Text = "Wall Check", Default = true })
 checks:AddToggle("TeamCheck", { Text = "Team Check", Default = true })
 checks:AddToggle("ForceFieldCheck", { Text = "ForceField Check", Default = true })
 checks:AddToggle("AliveCheck", { Text = "Alive Check", Default = true })
+
+local Toggles = lib.Toggles
+local Options = lib.Options
 
 local espboxes = {}
 local espboxoutlines = {}
@@ -555,10 +555,10 @@ plrs.PlayerRemoving:Connect(function(plr) removeplr(plr.Name) end)
 plrs.PlayerAdded:Connect(function(plr) plr.CharacterAdded:Connect(function() charhook(plr) end) end)
 for _, plr in ipairs(plrs:GetPlayers()) do if plr.Character then charhook(plr) end end
 
-local lastTrigger = 0
 local mainLoop = rs.RenderStepped:Connect(function()
-    local aimbotOn = lib.Toggles.Aimbot and lib.Toggles.Aimbot.Value
-    local triggerOn = lib.Toggles.Triggerbot and lib.Toggles.Triggerbot.Value
+    local aimbotOn = Toggles.Aimbot and Toggles.Aimbot.Value
+    local triggerOn = Toggles.Triggerbot and Toggles.Triggerbot.Value
+    local espOn = Toggles.ESPEnabled and Toggles.ESPEnabled.Value
 
     if aimbotOn then
         local target = getAimTarget()
@@ -613,20 +613,17 @@ local mainLoop = rs.RenderStepped:Connect(function()
 
     local enemies, drones = getenemies()
     local alive = {}
-    for _, e in pairs(enemies) do alive[e.Name] = true mainESP(e) end
-    for _, d in pairs(drones) do drone_esp(d) end
+    
+    if espOn then
+        for _, e in pairs(enemies) do alive[e.Name] = true mainESP(e) end
+        for _, d in pairs(drones) do drone_esp(d) end
+    end
 
     for name, _ in pairs(espboxes) do if not alive[name] then removeplr(name) end end
-    for name, _ in pairs(espboxoutlines) do if not alive[name] then removeplr(name) end end
-    for name, _ in pairs(esptracers) do if not alive[name] then removeplr(name) end end
-    for name, _ in pairs(esptraceroutlines) do if not alive[name] then removeplr(name) end end
-    for name, _ in pairs(esphealthbars) do if not alive[name] then removeplr(name) end end
-    for name, _ in pairs(esphealthbaroutlines) do if not alive[name] then removeplr(name) end end
-    for name, _ in pairs(espnames) do if not alive[name] then removeplr(name) end end
-
-    for drone, _ in pairs(espdrones) do if not drone or not drone:IsDescendantOf(workspace) then removedrone(drone) end end
-    for drone, _ in pairs(espdroneoutlines) do if not drone or not drone:IsDescendantOf(workspace) then removedrone(drone) end end
+    for drone, _ in pairs(espdrones) do if not drone or not drone:IsDescendantOf(workspace) or not (espOn and Toggles.DroneESP.Value) then removedrone(drone) end end
 end)
+
+local lastTrigger = 0
 
 
 -- Aggressive No Recoil Lock
