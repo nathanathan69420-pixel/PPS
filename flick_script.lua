@@ -181,13 +181,19 @@ local function getRandomPart(char)
     return #parts > 0 and parts[math.random(1, #parts)] or nil
 end
 
-local function isVisible(part)
+local function isVisible(part, char)
     if not part then return false end
     local origin = cam.CFrame.Position
-    local direction = (part.Position - origin)
+    local direction = part.Position - origin
     local ray = Ray.new(origin, direction)
-    local hit = workspace:FindPartOnRayWithIgnoreList(ray, {lp.Character, part.Parent})
-    return not hit or (part.Position - origin).Magnitude <= (hit.Position - origin).Magnitude + 5
+    local hit, pos = workspace:FindPartOnRayWithIgnoreList(ray, {lp.Character})
+    
+    if hit and hit:IsDescendantOf(char) then
+        return true
+    end
+    -- If we hit nothing (unlikely with ray length), or hit something very close to target
+    if not hit then return true end
+    return (pos - part.Position).Magnitude < 1
 end
 
 local function hasForceField(char)
@@ -205,7 +211,7 @@ local function passesChecks(player, char)
     if ffCheck and hasForceField(char) then return false end
     if wallCheck then
         local head = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
-        if head and not isVisible(head) then return false end
+        if head and not isVisible(head, char) then return false end
     end
     return true
 end
@@ -294,6 +300,18 @@ local mainLoop = rs.RenderStepped:Connect(function()
                     local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
                     if tool then
                         tool:Activate()
+                        
+                        -- Fallback for custom shooting systems
+                        local remotes = {"Shoot", "Fire", "Activate", "FireServer", "Attack"}
+                        for _, name in pairs(remotes) do
+                            local r = tool:FindFirstChild(name)
+                            if r and (r:IsA("RemoteEvent") or r:IsA("RemoteFunction")) then
+                                pcall(function() 
+                                    if r:IsA("RemoteEvent") then r:FireServer()
+                                    else r:InvokeServer() end 
+                                end)
+                            end
+                        end
                         lastTrigger = now
                     end
                 end
