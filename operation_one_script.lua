@@ -629,12 +629,13 @@ local mainLoop = rs.RenderStepped:Connect(function()
 end)
 
 
+-- Aggressive No Recoil Lock
 local lastCheckCF = cam.CFrame
-rs.Heartbeat:Connect(function()
+rs:BindToRenderStep("NoRecoilLock", Enum.RenderPriority.Camera.Value + 1, function()
     if Toggles.NoRecoil and Toggles.NoRecoil.Value then
         if uis:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
             local delta = uis:GetMouseDelta()
-            if delta.Magnitude < 2 then
+            if delta.Magnitude < 1 then
                 cam.CFrame = lastCheckCF
             end
         end
