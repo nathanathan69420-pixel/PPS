@@ -32,7 +32,7 @@ local function bypass()
     setreadonly(gm, true)
 end
 
-pcall(bypass)
+
 
 local function get(name)
     local s = game:GetService(name)
@@ -49,6 +49,7 @@ local plrs = get("Players")
 local lp = plrs.LocalPlayer
 local cam = workspace.CurrentCamera
 local mouse = lp:GetMouse()
+local vim = get("VirtualInputManager")
 local statsService = get("Stats")
 
 theme.BuiltInThemes["Default"][2] = {
@@ -65,6 +66,8 @@ local win = lib:CreateWindow({
     NotifySide = "Right",
     ShowCustomCursor = true,
 })
+
+pcall(bypass)
 
 local home = win:AddTab("Home", "house")
 local main = win:AddTab("Main", "target")
@@ -536,23 +539,15 @@ local mainLoop = rs.RenderStepped:Connect(function()
                     end
                 end
                 if isEnemy and isEnemy ~= lp then
-                    local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
-                    if tool then
-                        tool:Activate()
-                        
-                        -- Fallback for custom shooting systems
-                        local remotes = {"Shoot", "Fire", "Activate", "FireServer", "Attack"}
-                        for _, name in pairs(remotes) do
-                            local r = tool:FindFirstChild(name)
-                            if r and (r:IsA("RemoteEvent") or r:IsA("RemoteFunction")) then
-                                pcall(function() 
-                                    if r:IsA("RemoteEvent") then r:FireServer()
-                                    else r:InvokeServer() end 
-                                end)
-                            end
-                        end
-                        lastTrigger = now
+                    if vim then
+                        vim:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+                        task.wait(0.01)
+                        vim:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+                    else
+                        local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
+                        if tool then tool:Activate() end
                     end
+                    lastTrigger = now
                 end
             end
         end
