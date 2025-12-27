@@ -130,6 +130,9 @@ local checks = main:AddLeftGroupbox("Checks")
 local visuals = main:AddRightGroupbox("Visuals")
 local cfgBox = config:AddLeftGroupbox("Config")
 
+local Toggles = lib.Toggles
+local Options = lib.Options
+
 status:AddLabel(string.format("Welcome, %s\nGame: Operation One", lp.DisplayName), true)
 status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
@@ -149,29 +152,29 @@ local bodyParts = {
     "LeftLowerLeg", "RightLowerLeg", "LeftFoot", "RightFoot"
 }
 
-aiming:AddToggle("Triggerbot", { Text = "Triggerbot", Default = false }):AddKeyPicker("TriggerbotKey", { Default = "None", Mode = "Toggle", Text = "Triggerbot" })
+aiming:AddToggle("Triggerbot", { Text = "Triggerbot", Default = false }):AddKeyPicker("TriggerbotKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Triggerbot" })
 aiming:AddSlider("TriggerDelay", { Text = "Triggerbot Delay", Default = 0.32, Min = 0.01, Max = 1, Rounding = 2, Callback = function(v) triggerDelay = v end })
 aiming:AddDivider()
-aiming:AddToggle("Aimbot", { Text = "Aimbot", Default = false }):AddKeyPicker("AimbotKey", { Default = "None", Mode = "Toggle", Text = "Aimbot" })
+aiming:AddToggle("Aimbot", { Text = "Aimbot", Default = false }):AddKeyPicker("AimbotKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Aimbot" })
 aiming:AddDropdown("AimPart", { Values = bodyParts, Default = "Head", Text = "Aim Part", Callback = function(v) aimPart = v end })
 aiming:AddDivider()
-aiming:AddToggle("NoRecoil", { Text = "No Recoil", Default = false })
+aiming:AddToggle("NoRecoil", { Text = "No Recoil", Default = false }):AddKeyPicker("NoRecoilKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "No Recoil" })
 aiming:AddDropdown("NoRecoilMethod", { Values = { "Metatable", "Internal", "Lock" }, Default = "Metatable", Text = "No Recoil Method" })
 
-visuals:AddToggle("ESPEnabled", { Text = "General ESP Toggle", Default = false }):AddKeyPicker("ESPKey", { Default = "None", Mode = "Toggle", Text = "ESP" })
-visuals:AddToggle("BoxESP", { Text = "Box", Default = true }):AddKeyPicker("BoxKey", { Default = "None", Mode = "Toggle", Text = "Box" })
+visuals:AddToggle("ESPEnabled", { Text = "General ESP Toggle", Default = false }):AddKeyPicker("ESPKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "ESP" })
+visuals:AddToggle("BoxESP", { Text = "Box", Default = true }):AddKeyPicker("BoxKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Box" })
 visuals:AddToggle("BoxOutline", { Text = "Box Outline", Default = true })
-visuals:AddToggle("TracerESP", { Text = "Tracer", Default = true }):AddKeyPicker("TracerKey", { Default = "None", Mode = "Toggle", Text = "Tracer" })
+visuals:AddToggle("TracerESP", { Text = "Tracer", Default = true }):AddKeyPicker("TracerKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Tracer" })
 visuals:AddToggle("TracerOutline", { Text = "Tracer Outline", Default = true })
 visuals:AddDropdown("TracerPos", { Values = { "Bottom", "Center", "Top" }, Default = "Bottom", Text = "Tracer Position", Callback = function(v) 
     if v == "Bottom" then tracerType = 1 elseif v == "Center" then tracerType = 2 else tracerType = 3 end
 end })
-visuals:AddToggle("HealthBar", { Text = "Health Bar", Default = true }):AddKeyPicker("HealthKey", { Default = "None", Mode = "Toggle", Text = "Health Bar" })
+visuals:AddToggle("HealthBar", { Text = "Health Bar", Default = true }):AddKeyPicker("HealthKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Health Bar" })
 visuals:AddToggle("HealthOutline", { Text = "Health Bar Outline", Default = true })
-visuals:AddToggle("NameESP", { Text = "Name", Default = true }):AddKeyPicker("NameKey", { Default = "None", Mode = "Toggle", Text = "Name" })
-visuals:AddToggle("DroneESP", { Text = "Drone ESP", Default = true }):AddKeyPicker("DroneKey", { Default = "None", Mode = "Toggle", Text = "Drone" })
+visuals:AddToggle("NameESP", { Text = "Name", Default = true }):AddKeyPicker("NameKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Name" })
+visuals:AddToggle("DroneESP", { Text = "Drone ESP", Default = true }):AddKeyPicker("DroneKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Drone" })
 visuals:AddToggle("DroneOutline", { Text = "Drone Outline", Default = true })
-visuals:AddToggle("Chams", { Text = "Chams", Default = false }):AddKeyPicker("ChamsKey", { Default = "None", Mode = "Toggle", Text = "Chams" }):AddColorPicker("ChamsColor", { Default = Color3.fromRGB(255, 50, 50), Title = "Chams Color" })
+visuals:AddToggle("Chams", { Text = "Chams", Default = false }):AddKeyPicker("ChamsKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Chams" }):AddColorPicker("ChamsColor", { Default = Color3.fromRGB(255, 50, 50), Title = "Chams Color" })
 
 checks:AddToggle("WallCheck", { Text = "Wall Check", Default = true })
 checks:AddToggle("TeamCheck", { Text = "Team Check", Default = true })
