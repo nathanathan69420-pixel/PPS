@@ -32,7 +32,6 @@ local function bypass()
     setreadonly(gm, true)
 end
 
-pcall(bypass)
 
 local function get(name)
     local s = game:GetService(name)
@@ -44,10 +43,10 @@ local function get(name)
     return s
 end
 
-
 local rs = get("RunService")
 local plrs = get("Players")
 local uis = get("UserInputService")
+local vim = get("VirtualInputManager")
 local statsService = get("Stats")
 local cam = workspace.CurrentCamera
 local lp = plrs.LocalPlayer
@@ -67,6 +66,8 @@ local win = lib:CreateWindow({
     NotifySide = "Right",
     ShowCustomCursor = true,
 })
+
+pcall(bypass)
 
 local home = win:AddTab("Home", "house")
 local main = win:AddTab("Main", "crosshair")
@@ -297,23 +298,16 @@ local mainLoop = rs.RenderStepped:Connect(function()
             if hit then
                 local model = hit:FindFirstAncestorOfClass("Model")
                 if model and plrs:GetPlayerFromCharacter(model) and plrs:GetPlayerFromCharacter(model) ~= lp then
-                    local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
-                    if tool then
-                        tool:Activate()
-                        
-                        -- Fallback for custom shooting systems
-                        local remotes = {"Shoot", "Fire", "Activate", "FireServer", "Attack"}
-                        for _, name in pairs(remotes) do
-                            local r = tool:FindFirstChild(name)
-                            if r and (r:IsA("RemoteEvent") or r:IsA("RemoteFunction")) then
-                                pcall(function() 
-                                    if r:IsA("RemoteEvent") then r:FireServer()
-                                    else r:InvokeServer() end 
-                                end)
-                            end
-                        end
-                        lastTrigger = now
+                    if vim then
+                        vim:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+                        task.wait(0.01)
+                        vim:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+                    else
+                        -- Fallback if VIM fails
+                        local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
+                        if tool then tool:Activate() end
                     end
+                    lastTrigger = now
                 end
             end
         end
