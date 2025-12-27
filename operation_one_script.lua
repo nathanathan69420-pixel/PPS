@@ -3,11 +3,49 @@ local lib = loadstring(game:HttpGet(repo .. "Library.lua"))()
 local theme = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
 local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
-local rs = game:GetService("RunService")
-local plrs = game:GetService("Players")
+local function bypass()
+    local g = game
+    local lp = g:GetService("Players").LocalPlayer
+    local gm = (getrawmetatable and getrawmetatable(g)) or nil
+    if not gm then return end
+    
+    local old_nc = gm.__namecall
+    setreadonly(gm, false)
+    
+    gm.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        
+        if (method == "GetService" or method == "getService") and self == g then
+            local s = args[1]
+            if s == "VirtualInputManager" or s == "HttpService" or s == "LogService" then
+                return nil
+            end
+        end
+        
+        if method == "Kick" and self == lp then
+            return nil
+        end
+        
+        return old_nc(self, ...)
+    end)
+    
+    setreadonly(gm, true)
+end
+
+pcall(bypass)
+
+local function get(name)
+    local s = game:GetService(name)
+    return (cloneref and cloneref(s)) or s
+end
+
+local rs = get("RunService")
+local plrs = get("Players")
 local lp = plrs.LocalPlayer
 local cam = workspace.CurrentCamera
 local mouse = lp:GetMouse()
+local statsService = get("Stats")
 
 theme.BuiltInThemes["Default"][2] = {
     BackgroundColor = "16293a",
@@ -91,9 +129,17 @@ local espdrones = {}
 local espdroneoutlines = {}
 local espchams = {}
 
+local function genName()
+    local s = ""
+    for i = 1, math.random(8, 12) do
+        s ..= string.char(math.random(97, 122))
+    end
+    return s
+end
+
 local Storage = Instance.new("Folder")
-Storage.Name = "AXIS_OpOne"
-Storage.Parent = game:GetService("CoreGui")
+Storage.Name = genName()
+Storage.Parent = get("CoreGui")
 
 local screensize = cam.ViewportSize
 local screenpositions = {
@@ -520,7 +566,7 @@ local conn = rs.RenderStepped:Connect(function(dt)
     elap = elap + dt
     if elap >= 1 then
         fpsLbl:SetText("FPS: " .. math.floor(frames / elap + 0.5))
-        local net = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]
+        local net = statsService.Network.ServerStatsItem["Data Ping"]
         pingLbl:SetText("Ping: " .. (net and math.floor(net:GetValue()) or 0) .. " ms")
         frames, elap = 0, 0
     end
