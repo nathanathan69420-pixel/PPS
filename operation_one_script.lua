@@ -6,12 +6,12 @@ local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 local function bypass()
     local g = game
     local lp = g:GetService("Players").LocalPlayer
-    local gm = (getrawmetatable and getrawmetatable(g)) or nil
-    if not gm then return end
+    if not getrawmetatable or not setreadonly or not newcclosure or not getnamecallmethod then return end
     
+    local gm = getrawmetatable(g)
     local old_nc = gm.__namecall
-    setreadonly(gm, false)
     
+    setreadonly(gm, false)
     gm.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         local args = {...}
@@ -29,7 +29,6 @@ local function bypass()
         
         return old_nc(self, ...)
     end)
-    
     setreadonly(gm, true)
 end
 
@@ -37,7 +36,12 @@ pcall(bypass)
 
 local function get(name)
     local s = game:GetService(name)
-    return (cloneref and cloneref(s)) or s
+    if not s then return nil end
+    if cloneref then
+        local success, res = pcall(cloneref, s)
+        return success and res or s
+    end
+    return s
 end
 
 local rs = get("RunService")
@@ -566,8 +570,10 @@ local conn = rs.RenderStepped:Connect(function(dt)
     elap = elap + dt
     if elap >= 1 then
         fpsLbl:SetText("FPS: " .. math.floor(frames / elap + 0.5))
-        local net = statsService.Network.ServerStatsItem["Data Ping"]
-        pingLbl:SetText("Ping: " .. (net and math.floor(net:GetValue()) or 0) .. " ms")
+        pcall(function()
+            local net = statsService and statsService.Network.ServerStatsItem["Data Ping"]
+            pingLbl:SetText("Ping: " .. (net and math.floor(net:GetValue()) or 0) .. " ms")
+        end)
         frames, elap = 0, 0
     end
 end)
