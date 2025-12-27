@@ -43,7 +43,7 @@ local function bypass()
     old_ni = hookmetamethod(cam, "__newindex", newcclosure(function(self, k, v)
         if not checkcaller() and lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value and lib.Options.NoRecoilMethod.Value == "Metatable" then
             local p = tostring(k)
-            if p == "CFrame" or p == "CoordinateFrame" or p == "Rotation" or p == "Focus" then
+            if p == "CFrame" or p == "CoordinateFrame" or p == "Rotation" or p == "Focus" or p == "Angle" then
                 return
             end
         end
@@ -648,12 +648,15 @@ local mainLoop = rs.RenderStepped:Connect(function()
 end)
 
 
-local lastCF = cam.CFrame
+local lastCheckCF = cam.CFrame
 rs.Heartbeat:Connect(function()
     if lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value and lib.Options.NoRecoilMethod.Value == "Lock" then
-        cam.CFrame = lastCF
+        local delta = uis:GetMouseDelta()
+        if delta.Magnitude == 0 then
+            cam.CFrame = lastCheckCF
+        end
     end
-    lastCF = cam.CFrame
+    lastCheckCF = cam.CFrame
 end)
 
 task.spawn(function()
