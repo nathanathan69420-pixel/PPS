@@ -5,6 +5,8 @@ local scripts = {
     ["73956553001240"] = "volleyball_script.lua",
     ["74691681039273"] = "volleyball_script.lua",
     ["14841485778"] = "possessor_script.lua",
+    ["136801880565837"] = "flick_script.lua",
+    ["72920620366355"] = "operation_one_script.lua",
 }
 
 local function notify(title, msg, dur)
