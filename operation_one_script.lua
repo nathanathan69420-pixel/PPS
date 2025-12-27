@@ -14,7 +14,7 @@ local function bypass()
     
     setreadonly(gm, false)
     
-    -- Hidden Storage Name
+    
     local hiddenName = ""
     for i = 1, 10 do hiddenName ..= string.char(math.random(97, 122)) end
     
@@ -24,8 +24,8 @@ local function bypass()
             if (method == "GetService" or method == "getService") and self == g then
                 local s = ({...})[1]
                 if s == "VirtualInputManager" or s == "HttpService" or s == "LogService" then
-                    -- Return a dummy or let it error naturally like a vanilla client
-                    return old_nc(self, "HttpService") -- Redirect to something safe
+                    
+                    return old_nc(self, "HttpService") 
                 end
             end
             if method == "Kick" and self == lp then return nil end
@@ -49,12 +49,12 @@ local function bypass()
         return old_cam_nc(self, ...)
     end))
     
-    -- Cloak the bypass itself
+    
     local old_grm
     old_grm = hookfunction(getrawmetatable, newcclosure(function(target)
         local mt = old_grm(target)
         if not checkcaller() and target == g then
-            -- This is complex, but we return a proxy if they scan the game metatable
+            
             return mt 
         end
         return mt
@@ -113,9 +113,7 @@ local config = win:AddTab("Settings", "settings")
 
 local status = home:AddLeftGroupbox("Status")
 local stats = home:AddRightGroupbox("FPS & Ping")
-local aiming = main:AddLeftGroupbox("Aiming")
-local checks = main:AddLeftGroupbox("Checks")
-local visuals = main:AddRightGroupbox("Visuals")
+local visuals = main:AddLeftGroupbox("Visuals")
 local cfgBox = config:AddLeftGroupbox("Config")
 
 status:AddLabel(string.format("Welcome, %s\nGame: Operation One", lp.DisplayName), true)
@@ -124,24 +122,7 @@ status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 local fpsLbl = stats:AddLabel("FPS: ...", true)
 local pingLbl = stats:AddLabel("Ping: ...", true)
 
-local triggerDelay = 0.32
-local aimPart = "Head"
-local tracerType = 1
 
-local bodyParts = {
-    "Random", "Closest", "Center",
-    "Head", "Torso", "HumanoidRootPart",
-    "UpperTorso", "LowerTorso",
-    "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm",
-    "LeftHand", "RightHand", "LeftUpperLeg", "RightUpperLeg",
-    "LeftLowerLeg", "RightLowerLeg", "LeftFoot", "RightFoot"
-}
-
-aiming:AddToggle("Triggerbot", { Text = "Triggerbot", Default = false }):AddKeyPicker("TriggerbotKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Triggerbot" })
-aiming:AddSlider("TriggerDelay", { Text = "Triggerbot Delay", Default = 0.32, Min = 0.01, Max = 1, Rounding = 2, Callback = function(v) triggerDelay = v end })
-aiming:AddDivider()
-aiming:AddToggle("Aimbot", { Text = "Aimbot", Default = false }):AddKeyPicker("AimbotKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Aimbot" })
-aiming:AddDropdown("AimPart", { Values = bodyParts, Default = "Head", Text = "Aim Part", Callback = function(v) aimPart = v end })
 
 visuals:AddToggle("ESPEnabled", { Text = "General ESP Toggle", Default = false }):AddKeyPicker("ESPKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "ESP" })
 visuals:AddToggle("BoxESP", { Text = "Box", Default = true }):AddKeyPicker("BoxKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Box" })
@@ -158,11 +139,7 @@ visuals:AddToggle("DroneESP", { Text = "Drone ESP", Default = true }):AddKeyPick
 visuals:AddToggle("DroneOutline", { Text = "Drone Outline", Default = true })
 visuals:AddToggle("Chams", { Text = "Chams", Default = false }):AddKeyPicker("ChamsKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Chams" }):AddColorPicker("ChamsColor", { Default = Color3.fromRGB(255, 50, 50), Title = "Chams Color" })
 
-checks:AddToggle("WallCheck", { Text = "Wall Check", Default = true })
-checks:AddToggle("TeamCheck", { Text = "Team Check", Default = true })
-checks:AddToggle("ForceFieldCheck", { Text = "ForceField Check", Default = true })
-checks:AddToggle("AliveCheck", { Text = "Alive Check", Default = true })
-
+local tracerType = 1
 local Toggles = lib.Toggles
 local Options = lib.Options
 
@@ -276,14 +253,14 @@ end
 local function mainESP(target)
     if not target or not target:IsA("Model") then return end
 
-    local espOn = lib.Toggles.ESPEnabled and lib.Toggles.ESPEnabled.Value
-    local boxOn = lib.Toggles.BoxESP and lib.Toggles.BoxESP.Value
-    local boxOutOn = lib.Toggles.BoxOutline and lib.Toggles.BoxOutline.Value
-    local tracerOn = lib.Toggles.TracerESP and lib.Toggles.TracerESP.Value
-    local tracerOutOn = lib.Toggles.TracerOutline and lib.Toggles.TracerOutline.Value
-    local healthOn = lib.Toggles.HealthBar and lib.Toggles.HealthBar.Value
-    local healthOutOn = lib.Toggles.HealthOutline and lib.Toggles.HealthOutline.Value
-    local nameOn = lib.Toggles.NameESP and lib.Toggles.NameESP.Value
+    local espOn = Toggles.ESPEnabled and Toggles.ESPEnabled.Value
+    local boxOn = Toggles.BoxESP and Toggles.BoxESP.Value
+    local boxOutOn = Toggles.BoxOutline and Toggles.BoxOutline.Value
+    local tracerOn = Toggles.TracerESP and Toggles.TracerESP.Value
+    local tracerOutOn = Toggles.TracerOutline and Toggles.TracerOutline.Value
+    local healthOn = Toggles.HealthBar and Toggles.HealthBar.Value
+    local healthOutOn = Toggles.HealthOutline and Toggles.HealthOutline.Value
+    local nameOn = Toggles.NameESP and Toggles.NameESP.Value
 
     local maxX, maxY, minX, minY = getCharMinMax(target)
     local name = target.Name
@@ -367,8 +344,8 @@ local function mainESP(target)
     espnames[name].Position = Vector2.new(minX + (maxX - minX) / 2, minY - espnames[name].TextBounds.Y - 3)
     espnames[name].Visible = espOn and nameOn
 
-    local chamsOn = lib.Toggles.Chams and lib.Toggles.Chams.Value
-    local chamsColor = lib.Options.ChamsColor and lib.Options.ChamsColor.Value or Color3.new(1, 0.2, 0.2)
+    local chamsOn = Toggles.Chams and Toggles.Chams.Value
+    local chamsColor = Options.ChamsColor and Options.ChamsColor.Value or Color3.new(1, 0.2, 0.2)
 
     if not espchams[name] then
         local h = Instance.new("Highlight")
@@ -391,9 +368,9 @@ local function drone_esp(target)
         return
     end
 
-    local espOn = lib.Toggles.ESPEnabled and lib.Toggles.ESPEnabled.Value
-    local droneOn = lib.Toggles.DroneESP and lib.Toggles.DroneESP.Value
-    local droneOutOn = lib.Toggles.DroneOutline and lib.Toggles.DroneOutline.Value
+    local espOn = Toggles.ESPEnabled and Toggles.ESPEnabled.Value
+    local droneOn = Toggles.DroneESP and Toggles.DroneESP.Value
+    local droneOutOn = Toggles.DroneOutline and Toggles.DroneOutline.Value
 
     local maxX, maxY, minX, minY = getCharMinMax(target)
 
@@ -420,128 +397,6 @@ local function drone_esp(target)
     espdroneoutlines[target].Visible = espOn and droneOn and droneOutOn
 end
 
-local function worldToScreen(pos)
-    local vec, onScreen = cam:WorldToViewportPoint(pos)
-    return Vector2.new(vec.X, vec.Y), onScreen, vec.Z
-end
-
-local function getClosestPart(char)
-    local closest, dist = nil, math.huge
-    for _, p in pairs(char:GetDescendants()) do
-        if p:IsA("BasePart") then
-            local screenPos, onScreen = worldToScreen(p.Position)
-            if onScreen then
-                local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-                local d = (screenPos - center).Magnitude
-                if d < dist then dist = d closest = p end
-            end
-        end
-    end
-    return closest
-end
-
-local function getRandomPart(char)
-    local parts = {}
-    for _, p in pairs(char:GetDescendants()) do
-        if p:IsA("BasePart") then table.insert(parts, p) end
-    end
-    return #parts > 0 and parts[math.random(1, #parts)] or nil
-end
-
-local function getCenterPart(char)
-    local cf, size = char:GetBoundingBox()
-    local closest, dist = nil, math.huge
-    for _, p in pairs(char:GetDescendants()) do
-        if p:IsA("BasePart") then
-            local d = (p.Position - cf.Position).Magnitude
-            if d < dist then dist = d closest = p end
-        end
-    end
-    return closest
-end
-
-local function findPartInModel(char, name)
-    local part = char:FindFirstChild(name, true)
-    if part and part:IsA("BasePart") then return part end
-    for _, p in pairs(char:GetDescendants()) do
-        if p:IsA("BasePart") and p.Name:lower():find(name:lower()) then return p end
-    end
-    return nil
-end
-
-local function isVisible(part, char)
-    if not part then return false end
-    local origin = cam.CFrame.Position
-    local direction = part.Position - origin
-    
-    local params = RaycastParams.new()
-    params.FilterDescendantsInstances = {lp.Character}
-    params.FilterType = Enum.RaycastFilterType.Blacklist
-    
-    local result = workspace:Raycast(origin, direction, params)
-    
-    if result then
-        local hit = result.Instance
-        if hit and (hit:IsDescendantOf(char) or hit == part) then return true end
-        return false
-    end
-    return true
-end
-
-local function hasForceField(char)
-    return char:FindFirstChildOfClass("ForceField") ~= nil
-end
-
-local function passesChecks(player, char)
-    local wallCheck = lib.Toggles.WallCheck and lib.Toggles.WallCheck.Value
-    local teamCheck = lib.Toggles.TeamCheck and lib.Toggles.TeamCheck.Value
-    local ffCheck = lib.Toggles.ForceFieldCheck and lib.Toggles.ForceFieldCheck.Value
-    local aliveCheck = lib.Toggles.AliveCheck and lib.Toggles.AliveCheck.Value
-    
-    if aliveCheck then
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if hum and hum.Health <= 0 then return false end
-    end
-    if teamCheck and player.Team == lp.Team then return false end
-    if ffCheck and hasForceField(char) then return false end
-    if wallCheck then
-        local cf, size = char:GetBoundingBox()
-        local testPart = {Position = cf.Position}
-        if not isVisible(testPart, char) then return false end
-    end
-    return true
-end
-
-local function getAimTarget()
-    local closest, dist = nil, math.huge
-    for _, p in pairs(plrs:GetPlayers()) do
-        if p ~= lp then
-            local char = p.Character
-            if char and passesChecks(p, char) then
-                local cf, size = char:GetBoundingBox()
-                local screenPos, onScreen = worldToScreen(cf.Position)
-                if onScreen then
-                    local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-                    local d = (screenPos - center).Magnitude
-                    if d < dist then dist = d closest = char end
-                end
-            end
-        end
-    end
-    return closest
-end
-
-local function getTargetPart(char)
-    if aimPart == "Random" then return getRandomPart(char)
-    elseif aimPart == "Closest" then return getClosestPart(char)
-    elseif aimPart == "Center" then return getCenterPart(char)
-    else
-        local part = findPartInModel(char, aimPart)
-        if part then return part end
-        return getCenterPart(char)
-    end
-end
-
 local function charhook(plr)
     local char = plr.Character
     if not char then return end
@@ -554,60 +409,7 @@ plrs.PlayerAdded:Connect(function(plr) plr.CharacterAdded:Connect(function() cha
 for _, plr in ipairs(plrs:GetPlayers()) do if plr.Character then charhook(plr) end end
 
 local mainLoop = rs.RenderStepped:Connect(function()
-    local aimbotOn = Toggles.Aimbot and Toggles.Aimbot.Value
-    local triggerOn = Toggles.Triggerbot and Toggles.Triggerbot.Value
     local espOn = Toggles.ESPEnabled and Toggles.ESPEnabled.Value
-
-    if aimbotOn then
-        local target = getAimTarget()
-        if target then
-            local part = getTargetPart(target)
-            if part then
-                local targetPos = part.Position
-                local camPos = cam.CFrame.Position
-                local direction = (targetPos - camPos).Unit
-                local targetCFrame = CFrame.lookAt(camPos, camPos + direction)
-                cam.CFrame = cam.CFrame:Lerp(targetCFrame, 0.5)
-            end
-        end
-    end
-
-    if triggerOn then
-        local now = tick()
-        if now - lastTrigger >= triggerDelay then
-            local origin = cam.CFrame.Position
-            local direction = cam.CFrame.LookVector * 1000
-            
-            local params = RaycastParams.new()
-            params.FilterDescendantsInstances = {lp.Character}
-            params.FilterType = Enum.RaycastFilterType.Blacklist
-            
-            local result = workspace:Raycast(origin, direction, params)
-            
-            if result then
-                local hit = result.Instance
-                local model = hit:FindFirstAncestorOfClass("Model")
-                local isEnemy = model and plrs:GetPlayerFromCharacter(model)
-                if not isEnemy and model then
-                    local parent = model.Parent
-                    if parent and parent:IsA("Model") then
-                        isEnemy = plrs:GetPlayerFromCharacter(parent)
-                    end
-                end
-                if isEnemy and isEnemy ~= lp then
-                    if vim then
-                        vim:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-                        task.wait(0.01)
-                        vim:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-                    else
-                        local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
-                        if tool then tool:Activate() end
-                    end
-                    lastTrigger = now
-                end
-            end
-        end
-    end
 
     local enemies, drones = getenemies()
     local alive = {}
@@ -621,7 +423,6 @@ local mainLoop = rs.RenderStepped:Connect(function()
     for drone, _ in pairs(espdrones) do if not drone or not drone:IsDescendantOf(workspace) or not (espOn and Toggles.DroneESP.Value) then removedrone(drone) end end
 end)
 
-local lastTrigger = 0
 
 
 

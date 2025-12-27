@@ -206,7 +206,7 @@ local function isVisible(part, char)
     if hit and hit:IsDescendantOf(char) then
         return true
     end
-    -- If we hit nothing (unlikely with ray length), or hit something very close to target
+    
     if not hit then return true end
     return (pos - part.Position).Magnitude < 1
 end
@@ -317,7 +317,7 @@ local mainLoop = rs.RenderStepped:Connect(function()
                         task.wait(0.01)
                         vim:SendMouseButtonEvent(0, 0, 0, false, game, 1)
                     else
-                        -- Fallback if VIM fails
+                        
                         local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
                         if tool then tool:Activate() end
                     end
