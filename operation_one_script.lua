@@ -41,23 +41,11 @@ local function bypass()
     end)
     
     old_ni = hookmetamethod(cam, "__newindex", newcclosure(function(self, k, v)
-        if not checkcaller() and lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value and lib.Options.NoRecoilMethod.Value == "Metatable" then
-            local p = tostring(k)
-            if p == "CFrame" or p == "CoordinateFrame" or p == "Rotation" or p == "Focus" or p == "Angle" then
-                return
-            end
-        end
         return old_ni(self, k, v)
     end))
     
     local old_cam_nc
     old_cam_nc = hookmetamethod(cam, "__namecall", newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if not checkcaller() and lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value and lib.Options.NoRecoilMethod.Value == "Metatable" then
-            if method == "SetPrimaryPartCFrame" or method == "PivotTo" then
-                return
-            end
-        end
         return old_cam_nc(self, ...)
     end))
     
@@ -159,7 +147,6 @@ aiming:AddToggle("Aimbot", { Text = "Aimbot", Default = false }):AddKeyPicker("A
 aiming:AddDropdown("AimPart", { Values = bodyParts, Default = "Head", Text = "Aim Part", Callback = function(v) aimPart = v end })
 aiming:AddDivider()
 aiming:AddToggle("NoRecoil", { Text = "No Recoil", Default = false }):AddKeyPicker("NoRecoilKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "No Recoil" })
-aiming:AddDropdown("NoRecoilMethod", { Values = { "Metatable", "Internal", "Lock" }, Default = "Metatable", Text = "No Recoil Method" })
 
 visuals:AddToggle("ESPEnabled", { Text = "General ESP Toggle", Default = false }):AddKeyPicker("ESPKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "ESP" })
 visuals:AddToggle("BoxESP", { Text = "Box", Default = true }):AddKeyPicker("BoxKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Box" })
@@ -624,15 +611,6 @@ local mainLoop = rs.RenderStepped:Connect(function()
         end
     end
 
-    if lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value then
-        local method = lib.Options.NoRecoilMethod.Value
-        if method == "Lock" then
-            -- Handled in Heartbeat/aggressive loop below
-        elseif method == "Internal" then
-            -- Handled in separate thread to prevent blocking ESP
-        end
-    end
-
     local enemies, drones = getenemies()
     local alive = {}
     for _, e in pairs(enemies) do alive[e.Name] = true mainESP(e) end
@@ -653,7 +631,7 @@ end)
 
 local lastCheckCF = cam.CFrame
 rs.Heartbeat:Connect(function()
-    if lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value and lib.Options.NoRecoilMethod.Value == "Lock" then
+    if Toggles.NoRecoil and Toggles.NoRecoil.Value then
         if uis:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
             local delta = uis:GetMouseDelta()
             if delta.Magnitude < 2 then
@@ -664,38 +642,7 @@ rs.Heartbeat:Connect(function()
     lastCheckCF = cam.CFrame
 end)
 
-task.spawn(function()
-    while task.wait(1.5) do
-        if lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value and lib.Options.NoRecoilMethod.Value == "Internal" then
-            for _, v in pairs(getgc(true)) do
-                if type(v) == "table" then
-                    if v == espboxes or v == espdrones or v == lib then continue end
-                    if rawget(v, "Recoil") or rawget(v, "recoil") or rawget(v, "Shake") or rawget(v, "Kick") or rawget(v, "Sway") or rawget(v, "camRecoil") or rawget(v, "recoilValue") then
-                        pcall(function()
-                            if v.Recoil then v.Recoil = v.Recoil * 0 end
-                            if v.recoil then v.recoil = v.recoil * 0 end
-                            if v.Shake then v.Shake = v.Shake * 0 end
-                            if v.Kick then v.Kick = v.Kick * 0 end
-                            if v.Sway then v.Sway = v.Sway * 0 end
-                            if v.camRecoil then v.camRecoil = v.camRecoil * 0 end
-                            if v.recoilValue then v.recoilValue = v.recoilValue * 0 end
-                            if v.Intensity then v.Intensity = 0 end
-                            if v.Magnitude then v.Magnitude = 0 end
-                        end)
-                    end
-                    if (rawget(v, "Velocity") or rawget(v, "velocity")) and (rawget(v, "Damper") or rawget(v, "damper")) then
-                        pcall(function()
-                            if v.Velocity then v.Velocity *= 0 end
-                            if v.velocity then v.velocity *= 0 end
-                            if v.Position then v.Position *= 0 end
-                            if v.position then v.position *= 0 end
-                        end)
-                    end
-                end
-            end
-        end
-    end
-end)
+
 
 
 cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
