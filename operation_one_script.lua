@@ -142,8 +142,6 @@ aiming:AddSlider("TriggerDelay", { Text = "Triggerbot Delay", Default = 0.32, Mi
 aiming:AddDivider()
 aiming:AddToggle("Aimbot", { Text = "Aimbot", Default = false }):AddKeyPicker("AimbotKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Aimbot" })
 aiming:AddDropdown("AimPart", { Values = bodyParts, Default = "Head", Text = "Aim Part", Callback = function(v) aimPart = v end })
-aiming:AddDivider()
-aiming:AddToggle("NoRecoil", { Text = "No Recoil", Default = false }):AddKeyPicker("NoRecoilKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "No Recoil" })
 
 visuals:AddToggle("ESPEnabled", { Text = "General ESP Toggle", Default = false }):AddKeyPicker("ESPKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "ESP" })
 visuals:AddToggle("BoxESP", { Text = "Box", Default = true }):AddKeyPicker("BoxKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Box" })
@@ -626,19 +624,6 @@ end)
 local lastTrigger = 0
 
 
--- Aggressive No Recoil Lock
-local lastCheckCF = cam.CFrame
-rs:BindToRenderStep("NoRecoilLock", Enum.RenderPriority.Camera.Value + 1, function()
-    if Toggles.NoRecoil and Toggles.NoRecoil.Value then
-        if uis:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-            local delta = uis:GetMouseDelta()
-            if delta.Magnitude < 1 then
-                cam.CFrame = lastCheckCF
-            end
-        end
-    end
-    lastCheckCF = cam.CFrame
-end)
 
 
 
