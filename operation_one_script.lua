@@ -40,6 +40,17 @@ local function bypass()
         return old_idx(self, k)
     end)
     
+    local old_ni
+    old_ni = hookmetamethod(cam, "__newindex", newcclosure(function(self, k, v)
+        if not checkcaller() and lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value and lib.Options.NoRecoilMethod.Value == "Metatable" then
+            if k == "CFrame" or k == "CoordinateFrame" or k == "Rotation" then
+                -- Ignore the set if it's from a game script while No Recoil is on
+                return
+            end
+        end
+        return old_ni(self, k, v)
+    end))
+    
     -- Cloak the bypass itself
     local old_grm
     old_grm = hookfunction(getrawmetatable, newcclosure(function(target)
@@ -134,6 +145,9 @@ aiming:AddSlider("TriggerDelay", { Text = "Triggerbot Delay", Default = 0.32, Mi
 aiming:AddDivider()
 aiming:AddToggle("Aimbot", { Text = "Aimbot", Default = false }):AddKeyPicker("AimbotKey", { Default = "None", Mode = "Toggle", Text = "Aimbot" })
 aiming:AddDropdown("AimPart", { Values = bodyParts, Default = "Head", Text = "Aim Part", Callback = function(v) aimPart = v end })
+aiming:AddDivider()
+aiming:AddToggle("NoRecoil", { Text = "No Recoil", Default = false })
+aiming:AddDropdown("NoRecoilMethod", { Values = { "Metatable", "Rotation", "CFrame" }, Default = "Metatable", Text = "No Recoil Method" })
 
 visuals:AddToggle("ESPEnabled", { Text = "General ESP Toggle", Default = false }):AddKeyPicker("ESPKey", { Default = "None", Mode = "Toggle", Text = "ESP" })
 visuals:AddToggle("BoxESP", { Text = "Box", Default = true }):AddKeyPicker("BoxKey", { Default = "None", Mode = "Toggle", Text = "Box" })
@@ -613,6 +627,21 @@ local mainLoop = rs.RenderStepped:Connect(function()
 
     for drone, _ in pairs(espdrones) do if not drone or not drone:IsDescendantOf(workspace) then removedrone(drone) end end
     for drone, _ in pairs(espdroneoutlines) do if not drone or not drone:IsDescendantOf(workspace) then removedrone(drone) end end
+end)
+
+rs.RenderStepped:Connect(function()
+    if lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value then
+        local method = lib.Options.NoRecoilMethod.Value
+        if method == "Rotation" then
+            cam.CFrame = CFrame.new(cam.CFrame.Position) * cam.CFrame.Rotation
+        elseif method == "CFrame" then
+            -- Fallback or secondary check
+            local cf = cam.CFrame
+            if cf ~= cf then -- check for nan or invalid
+                cam.CFrame = CFrame.new(0, 5, 0)
+            end
+        end
+    end
 end)
 
 cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
