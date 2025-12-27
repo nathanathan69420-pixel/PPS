@@ -16,15 +16,15 @@ local function bypass()
         local method = getnamecallmethod()
         local args = {...}
         
-        if (method == "GetService" or method == "getService") and self == g then
-            local s = args[1]
-            if s == "VirtualInputManager" or s == "HttpService" or s == "LogService" or s == "Drawing" then
-                return nil
+        if not checkcaller() then
+            if (method == "GetService" or method == "getService") and self == g then
+                local s = args[1]
+                if s == "VirtualInputManager" or s == "HttpService" or s == "LogService" or s == "Drawing" then
+                    return nil
+                end
             end
-        end
-        
-        if method == "Kick" and self == lp then
-            return nil
+            
+            if method == "Kick" and self == lp then return nil end
         end
         
         return old_nc(self, ...)
@@ -32,10 +32,21 @@ local function bypass()
     
     local old_idx
     old_idx = hookmetamethod(g, "__index", newcclosure(function(self, k)
-        if not checkcaller() and (k == "Drawing" or k == "getrawmetatable" or k == "setreadonly" or k == "newcclosure") then
-            return nil
+        if not checkcaller() then
+            if k == "Drawing" or k == "getrawmetatable" or k == "setreadonly" or k == "newcclosure" or k == "hookmetamethod" then
+                return nil
+            end
         end
         return old_idx(self, k)
+    end))
+
+    -- Spoof Camera CFrame to game scripts
+    local old_cam_idx
+    old_cam_idx = hookmetamethod(cam, "__index", newcclosure(function(self, k)
+        if not checkcaller() and k == "CFrame" then
+            return old_cam_idx(self, "CFrame") -- We return the "true" CFrame or we could spoof a value
+        end
+        return old_cam_idx(self, k)
     end))
 
     local old_fenv
@@ -44,6 +55,7 @@ local function bypass()
         if not checkcaller() then
             if rawget(res, "Drawing") then rawset(res, "Drawing", nil) end
             if rawget(res, "cloneref") then rawset(res, "cloneref", nil) end
+            if rawget(res, "getrawmetatable") then rawset(res, "getrawmetatable", nil) end
         end
         return res
     end))
@@ -451,12 +463,19 @@ local function isVisible(part, char)
     if not part then return false end
     local origin = cam.CFrame.Position
     local direction = part.Position - origin
-    local ray = Ray.new(origin, direction)
-    local hit, pos = workspace:FindPartOnRayWithIgnoreList(ray, {lp.Character})
     
-    if hit and hit:IsDescendantOf(char) then return true end
-    if not hit then return true end
-    return (pos - part.Position).Magnitude < 1
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = {lp.Character}
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    
+    local result = workspace:Raycast(origin, direction, params)
+    
+    if result then
+        local hit = result.Instance
+        if hit and (hit:IsDescendantOf(char) or hit == part) then return true end
+        return false
+    end
+    return true
 end
 
 local function hasForceField(char)
@@ -546,9 +565,17 @@ local mainLoop = rs.RenderStepped:Connect(function()
     if triggerOn then
         local now = tick()
         if now - lastTrigger >= triggerDelay then
-            local ray = Ray.new(cam.CFrame.Position, cam.CFrame.LookVector * 1000)
-            local hit = workspace:FindPartOnRayWithIgnoreList(ray, {lp.Character})
-            if hit then
+            local origin = cam.CFrame.Position
+            local direction = cam.CFrame.LookVector * 1000
+            
+            local params = RaycastParams.new()
+            params.FilterDescendantsInstances = {lp.Character}
+            params.FilterType = Enum.RaycastFilterType.Blacklist
+            
+            local result = workspace:Raycast(origin, direction, params)
+            
+            if result then
+                local hit = result.Instance
                 local model = hit:FindFirstAncestorOfClass("Model")
                 local isEnemy = model and plrs:GetPlayerFromCharacter(model)
                 if not isEnemy and model then
