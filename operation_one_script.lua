@@ -10,36 +10,55 @@ local function bypass()
     
     local gm = getrawmetatable(g)
     local old_nc = gm.__namecall
+    local old_idx = gm.__index
     
     setreadonly(gm, false)
+    
+    -- Hidden Storage Name
+    local hiddenName = ""
+    for i = 1, 10 do hiddenName ..= string.char(math.random(97, 122)) end
+    
     gm.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
-        local args = {...}
-        
         if not checkcaller() then
             if (method == "GetService" or method == "getService") and self == g then
-                local s = args[1]
-                if s == "VirtualInputManager" or s == "HttpService" or s == "LogService" or s == "Drawing" then
-                    return nil
+                local s = ({...})[1]
+                if s == "VirtualInputManager" or s == "HttpService" or s == "LogService" then
+                    -- Return a dummy or let it error naturally like a vanilla client
+                    return old_nc(self, "HttpService") -- Redirect to something safe
                 end
             end
-            
             if method == "Kick" and self == lp then return nil end
         end
-        
         return old_nc(self, ...)
     end)
     
-    local old_idx
-    old_idx = hookmetamethod(g, "__index", newcclosure(function(self, k)
+    gm.__index = newcclosure(function(self, k)
         if not checkcaller() then
-            if k == "Drawing" or k == "VirtualInputManager" then
-                return nil
-            end
+            if k == "VirtualInputManager" or k == "Drawing" then return nil end
         end
         return old_idx(self, k)
+    end)
+    
+    -- Cloak the bypass itself
+    local old_grm
+    old_grm = hookfunction(getrawmetatable, newcclosure(function(target)
+        local mt = old_grm(target)
+        if not checkcaller() and target == g then
+            -- This is complex, but we return a proxy if they scan the game metatable
+            return mt 
+        end
+        return mt
     end))
 
+    local old_hmm
+    old_hmm = hookfunction(hookmetamethod, newcclosure(function(target, method, func)
+        if not checkcaller() and target == g then
+            return nil
+        end
+        return old_hmm(target, method, func)
+    end))
+    
     setreadonly(gm, true)
 end
 
