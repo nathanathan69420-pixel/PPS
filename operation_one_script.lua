@@ -108,7 +108,6 @@ local win = lib:CreateWindow({
     ShowCustomCursor = true,
 })
 
-pcall(bypass)
 
 local home = win:AddTab("Home", "house")
 local main = win:AddTab("Main", "target")
@@ -612,6 +611,38 @@ local mainLoop = rs.RenderStepped:Connect(function()
         end
     end
 
+    if lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value then
+        local method = lib.Options.NoRecoilMethod.Value
+        if method == "Lock" then
+            local cf = cam.CFrame
+            task.spawn(function()
+                task.wait()
+                if lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value then cam.CFrame = cf end
+            end)
+        elseif method == "Internal" then
+            for _, v in pairs(getgc(true)) do
+                if type(v) == "table" then
+                    if rawget(v, "Recoil") or rawget(v, "recoil") or rawget(v, "Shake") or rawget(v, "Kick") then
+                        pcall(function()
+                            v.Recoil = (v.Recoil or 0) * 0
+                            v.recoil = (v.recoil or 0) * 0
+                            v.Shake = (v.Shake or 0) * 0
+                            v.Kick = (v.Kick or 0) * 0
+                        end)
+                    end
+                    if (rawget(v, "Velocity") or rawget(v, "velocity")) and (rawget(v, "Damper") or rawget(v, "damper")) then
+                        pcall(function()
+                            if v.Velocity then v.Velocity *= 0 end
+                            if v.velocity then v.velocity *= 0 end
+                            if v.Position then v.Position *= 0 end
+                            if v.position then v.position *= 0 end
+                        end)
+                    end
+                end
+            end
+        end
+    end
+
     local enemies, drones = getenemies()
     local alive = {}
     for _, e in pairs(enemies) do alive[e.Name] = true mainESP(e) end
@@ -629,40 +660,6 @@ local mainLoop = rs.RenderStepped:Connect(function()
     for drone, _ in pairs(espdroneoutlines) do if not drone or not drone:IsDescendantOf(workspace) then removedrone(drone) end end
 end)
 
-rs.RenderStepped:Connect(function()
-    if lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value then
-        local method = lib.Options.NoRecoilMethod.Value
-        if method == "Lock" then
-            -- Force look vector to stay consistent
-            local cf = cam.CFrame
-            task.spawn(function()
-                task.wait()
-                if lib.Toggles.NoRecoil.Value then
-                    cam.CFrame = cf
-                end
-            end)
-        elseif method == "Internal" then
-            -- Advanced: Scan for Spring/Recoil objects in memory
-            for _, v in pairs(getgc(true)) do
-                if type(v) == "table" then
-                    if rawget(v, "Recoil") or rawget(v, "recoil") or rawget(v, "Shake") then
-                        pcall(function()
-                            v.Recoil = v.Recoil * 0
-                            v.Shake = v.Shake * 0
-                        end)
-                    end
-                    if rawget(v, "Velocity") and rawget(v, "Damper") and rawget(v, "Speed") then
-                        -- Likely a Spring object
-                        pcall(function()
-                            v.Velocity = v.Velocity * 0
-                            v.Position = v.Position * 0
-                        end)
-                    end
-                end
-            end
-        end
-    end
-end)
 
 cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
 cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
@@ -699,3 +696,5 @@ lib:OnUnload(function()
     for drone, _ in pairs(espdrones) do removedrone(drone) end
     if Storage then Storage:Destroy() end
 end)
+
+pcall(bypass)
