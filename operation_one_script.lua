@@ -5,9 +5,9 @@ local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
 local rs = game:GetService("RunService")
 local plrs = game:GetService("Players")
-local vim = game:GetService("VirtualInputManager")
 local lp = plrs.LocalPlayer
 local cam = workspace.CurrentCamera
+local mouse = lp:GetMouse()
 
 theme.BuiltInThemes["Default"][2] = {
     BackgroundColor = "16293a",
@@ -483,10 +483,11 @@ local mainLoop = rs.RenderStepped:Connect(function()
                     end
                 end
                 if isEnemy and isEnemy ~= lp then
-                    vim:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-                    task.wait(0.01)
-                    vim:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-                    lastTrigger = now
+                    local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
+                    if tool then
+                        tool:Activate()
+                        lastTrigger = now
+                    end
                 end
             end
         end
