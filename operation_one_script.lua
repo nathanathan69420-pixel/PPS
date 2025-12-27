@@ -147,7 +147,7 @@ aiming:AddToggle("Aimbot", { Text = "Aimbot", Default = false }):AddKeyPicker("A
 aiming:AddDropdown("AimPart", { Values = bodyParts, Default = "Head", Text = "Aim Part", Callback = function(v) aimPart = v end })
 aiming:AddDivider()
 aiming:AddToggle("NoRecoil", { Text = "No Recoil", Default = false })
-aiming:AddDropdown("NoRecoilMethod", { Values = { "Metatable", "Rotation", "CFrame" }, Default = "Metatable", Text = "No Recoil Method" })
+aiming:AddDropdown("NoRecoilMethod", { Values = { "Metatable", "Internal", "Lock" }, Default = "Metatable", Text = "No Recoil Method" })
 
 visuals:AddToggle("ESPEnabled", { Text = "General ESP Toggle", Default = false }):AddKeyPicker("ESPKey", { Default = "None", Mode = "Toggle", Text = "ESP" })
 visuals:AddToggle("BoxESP", { Text = "Box", Default = true }):AddKeyPicker("BoxKey", { Default = "None", Mode = "Toggle", Text = "Box" })
@@ -632,13 +632,33 @@ end)
 rs.RenderStepped:Connect(function()
     if lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value then
         local method = lib.Options.NoRecoilMethod.Value
-        if method == "Rotation" then
-            cam.CFrame = CFrame.new(cam.CFrame.Position) * cam.CFrame.Rotation
-        elseif method == "CFrame" then
-            -- Fallback or secondary check
+        if method == "Lock" then
+            -- Force look vector to stay consistent
             local cf = cam.CFrame
-            if cf ~= cf then -- check for nan or invalid
-                cam.CFrame = CFrame.new(0, 5, 0)
+            task.spawn(function()
+                task.wait()
+                if lib.Toggles.NoRecoil.Value then
+                    cam.CFrame = cf
+                end
+            end)
+        elseif method == "Internal" then
+            -- Advanced: Scan for Spring/Recoil objects in memory
+            for _, v in pairs(getgc(true)) do
+                if type(v) == "table" then
+                    if rawget(v, "Recoil") or rawget(v, "recoil") or rawget(v, "Shake") then
+                        pcall(function()
+                            v.Recoil = v.Recoil * 0
+                            v.Shake = v.Shake * 0
+                        end)
+                    end
+                    if rawget(v, "Velocity") and rawget(v, "Damper") and rawget(v, "Speed") then
+                        -- Likely a Spring object
+                        pcall(function()
+                            v.Velocity = v.Velocity * 0
+                            v.Position = v.Position * 0
+                        end)
+                    end
+                end
             end
         end
     end
