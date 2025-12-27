@@ -4,8 +4,8 @@ local theme = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
 local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
 local win = lib:CreateWindow({
-    Title = "Plow's Private Script",
-    Footer = "v1.2.2",
+    Title = "AXIS HUB",
+    Footer = "v1.3.2",
     NotifySide = "Right",
     ShowCustomCursor = true,
 })
