@@ -651,9 +651,11 @@ end)
 local lastCheckCF = cam.CFrame
 rs.Heartbeat:Connect(function()
     if lib.Toggles.NoRecoil and lib.Toggles.NoRecoil.Value and lib.Options.NoRecoilMethod.Value == "Lock" then
-        local delta = uis:GetMouseDelta()
-        if delta.Magnitude == 0 then
-            cam.CFrame = lastCheckCF
+        if uis:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+            local delta = uis:GetMouseDelta()
+            if delta.Magnitude < 2 then
+                cam.CFrame = lastCheckCF
+            end
         end
     end
     lastCheckCF = cam.CFrame
@@ -665,13 +667,15 @@ task.spawn(function()
             for _, v in pairs(getgc(true)) do
                 if type(v) == "table" then
                     if v == espboxes or v == espdrones or v == lib then continue end
-                    if rawget(v, "Recoil") or rawget(v, "recoil") or rawget(v, "Shake") or rawget(v, "Kick") or rawget(v, "Sway") then
+                    if rawget(v, "Recoil") or rawget(v, "recoil") or rawget(v, "Shake") or rawget(v, "Kick") or rawget(v, "Sway") or rawget(v, "camRecoil") or rawget(v, "recoilValue") then
                         pcall(function()
                             if v.Recoil then v.Recoil = v.Recoil * 0 end
                             if v.recoil then v.recoil = v.recoil * 0 end
                             if v.Shake then v.Shake = v.Shake * 0 end
                             if v.Kick then v.Kick = v.Kick * 0 end
                             if v.Sway then v.Sway = v.Sway * 0 end
+                            if v.camRecoil then v.camRecoil = v.camRecoil * 0 end
+                            if v.recoilValue then v.recoilValue = v.recoilValue * 0 end
                             if v.Intensity then v.Intensity = 0 end
                             if v.Magnitude then v.Magnitude = 0 end
                         end)
