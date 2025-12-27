@@ -5,6 +5,7 @@ local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
 local rs = game:GetService("RunService")
 local plrs = game:GetService("Players")
+local vim = game:GetService("VirtualInputManager")
 local lp = plrs.LocalPlayer
 local cam = workspace.CurrentCamera
 
@@ -30,6 +31,7 @@ local config = win:AddTab("Settings", "settings")
 local status = home:AddLeftGroupbox("Status")
 local stats = home:AddRightGroupbox("FPS & Ping")
 local aiming = main:AddLeftGroupbox("Aiming")
+local checks = main:AddLeftGroupbox("Checks")
 local visuals = main:AddRightGroupbox("Visuals")
 local cfgBox = config:AddLeftGroupbox("Config")
 
@@ -72,6 +74,11 @@ visuals:AddToggle("NameESP", { Text = "Name", Default = true }):AddKeyPicker("Na
 visuals:AddToggle("DroneESP", { Text = "Drone ESP", Default = true }):AddKeyPicker("DroneKey", { Default = "None", Mode = "Toggle", Text = "Drone" })
 visuals:AddToggle("DroneOutline", { Text = "Drone Outline", Default = true })
 visuals:AddToggle("Chams", { Text = "Chams", Default = false }):AddKeyPicker("ChamsKey", { Default = "None", Mode = "Toggle", Text = "Chams" }):AddColorPicker("ChamsColor", { Default = Color3.fromRGB(255, 50, 50), Title = "Chams Color" })
+
+checks:AddToggle("WallCheck", { Text = "Wall Check", Default = true })
+checks:AddToggle("TeamCheck", { Text = "Team Check", Default = true })
+checks:AddToggle("ForceFieldCheck", { Text = "ForceField Check", Default = true })
+checks:AddToggle("AliveCheck", { Text = "Alive Check", Default = true })
 
 local espboxes = {}
 local espboxoutlines = {}
@@ -368,22 +375,51 @@ local function findPartInModel(char, name)
     return nil
 end
 
+local function isVisible(part)
+    if not part then return false end
+    local origin = cam.CFrame.Position
+    local direction = (part.Position - origin)
+    local ray = Ray.new(origin, direction)
+    local hit = workspace:FindPartOnRayWithIgnoreList(ray, {lp.Character, part.Parent})
+    return not hit or (part.Position - origin).Magnitude <= (hit.Position - origin).Magnitude + 5
+end
+
+local function hasForceField(char)
+    return char:FindFirstChildOfClass("ForceField") ~= nil
+end
+
+local function passesChecks(player, char)
+    local wallCheck = lib.Toggles.WallCheck and lib.Toggles.WallCheck.Value
+    local teamCheck = lib.Toggles.TeamCheck and lib.Toggles.TeamCheck.Value
+    local ffCheck = lib.Toggles.ForceFieldCheck and lib.Toggles.ForceFieldCheck.Value
+    local aliveCheck = lib.Toggles.AliveCheck and lib.Toggles.AliveCheck.Value
+    
+    if aliveCheck then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum and hum.Health <= 0 then return false end
+    end
+    if teamCheck and player.Team == lp.Team then return false end
+    if ffCheck and hasForceField(char) then return false end
+    if wallCheck then
+        local cf, size = char:GetBoundingBox()
+        local testPart = {Position = cf.Position}
+        if not isVisible(testPart) then return false end
+    end
+    return true
+end
+
 local function getAimTarget()
     local closest, dist = nil, math.huge
     for _, p in pairs(plrs:GetPlayers()) do
-        if p ~= lp and p.Team ~= lp.Team then
+        if p ~= lp then
             local char = p.Character
-            if char then
-                local hum = char:FindFirstChildOfClass("Humanoid")
-                local alive = not hum or hum.Health > 0
-                if alive then
-                    local cf, size = char:GetBoundingBox()
-                    local screenPos, onScreen = worldToScreen(cf.Position)
-                    if onScreen then
-                        local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-                        local d = (screenPos - center).Magnitude
-                        if d < dist then dist = d closest = char end
-                    end
+            if char and passesChecks(p, char) then
+                local cf, size = char:GetBoundingBox()
+                local screenPos, onScreen = worldToScreen(cf.Position)
+                if onScreen then
+                    local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+                    local d = (screenPos - center).Magnitude
+                    if d < dist then dist = d closest = char end
                 end
             end
         end
@@ -422,7 +458,13 @@ local mainLoop = rs.RenderStepped:Connect(function()
         local target = getAimTarget()
         if target then
             local part = getTargetPart(target)
-            if part then cam.CFrame = CFrame.new(cam.CFrame.Position, part.Position) end
+            if part then
+                local targetPos = part.Position
+                local camPos = cam.CFrame.Position
+                local direction = (targetPos - camPos).Unit
+                local targetCFrame = CFrame.lookAt(camPos, camPos + direction)
+                cam.CFrame = cam.CFrame:Lerp(targetCFrame, 0.5)
+            end
         end
     end
 
@@ -440,13 +482,11 @@ local mainLoop = rs.RenderStepped:Connect(function()
                         isEnemy = plrs:GetPlayerFromCharacter(parent)
                     end
                 end
-                if isEnemy then
-                    local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
-                    if tool then
-                        local shoot = tool:FindFirstChild("Shoot") or tool:FindFirstChild("Fire") or tool:FindFirstChild("Activate")
-                        if shoot and shoot:IsA("RemoteEvent") then shoot:FireServer() lastTrigger = now
-                        elseif shoot and shoot:IsA("RemoteFunction") then pcall(function() shoot:InvokeServer() end) lastTrigger = now end
-                    end
+                if isEnemy and isEnemy ~= lp then
+                    vim:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+                    task.wait(0.01)
+                    vim:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+                    lastTrigger = now
                 end
             end
         end
