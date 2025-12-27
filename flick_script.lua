@@ -1,0 +1,397 @@
+local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/"
+local lib = loadstring(game:HttpGet(repo .. "Library.lua"))()
+local theme = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
+
+local rs = game:GetService("RunService")
+local plrs = game:GetService("Players")
+local uis = game:GetService("UserInputService")
+local cam = workspace.CurrentCamera
+local lp = plrs.LocalPlayer
+
+theme.BuiltInThemes["Default"][2] = {
+    BackgroundColor = "16293a",
+    MainColor = "26445f",
+    AccentColor = "5983a0",
+    OutlineColor = "325573",
+    FontColor = "d2dae1"
+}
+
+local win = lib:CreateWindow({
+    Title = "AXIS HUB",
+    Footer = "v1.5.2",
+    NotifySide = "Right",
+    ShowCustomCursor = true,
+})
+
+local home = win:AddTab("Home", "house")
+local main = win:AddTab("Main", "crosshair")
+local config = win:AddTab("Settings", "settings")
+
+local status = home:AddLeftGroupbox("Status")
+local stats = home:AddRightGroupbox("FPS & Ping")
+local aiming = main:AddLeftGroupbox("Aiming")
+local visuals = main:AddRightGroupbox("Visuals")
+local cfgBox = config:AddLeftGroupbox("Config")
+
+status:AddLabel(string.format("Welcome, %s\nGame: Flick", lp.DisplayName), true)
+status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
+
+local fpsLbl = stats:AddLabel("FPS: ...", true)
+local pingLbl = stats:AddLabel("Ping: ...", true)
+
+local triggerDelay = 0.32
+local aimPart = "Head"
+local boxStyle = "2D"
+
+local bodyParts = {
+    "Random", "Closest", "Head", "HumanoidRootPart", "Torso",
+    "UpperTorso", "LowerTorso", "LeftArm", "RightArm",
+    "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm",
+    "LeftHand", "RightHand", "LeftLeg", "RightLeg",
+    "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg",
+    "LeftFoot", "RightFoot"
+}
+
+aiming:AddToggle("Triggerbot", { Text = "Triggerbot", Default = false }):AddKeyPicker("TriggerbotKey", { Default = "None", Mode = "Toggle", Text = "Triggerbot" })
+aiming:AddSlider("TriggerDelay", { Text = "Triggerbot Delay", Default = 0.32, Min = 0.01, Max = 1, Rounding = 2, Callback = function(v) triggerDelay = v end })
+aiming:AddDivider()
+aiming:AddToggle("Aimbot", { Text = "Aimbot", Default = false }):AddKeyPicker("AimbotKey", { Default = "None", Mode = "Toggle", Text = "Aimbot" })
+aiming:AddDropdown("AimPart", { Values = bodyParts, Default = "Head", Text = "Aim Part", Callback = function(v) aimPart = v end })
+
+visuals:AddToggle("ESPEnabled", { Text = "General ESP Toggle", Default = false }):AddKeyPicker("ESPKey", { Default = "None", Mode = "Toggle", Text = "ESP" })
+visuals:AddToggle("BoxESP", { Text = "Box", Default = false }):AddKeyPicker("BoxKey", { Default = "None", Mode = "Toggle", Text = "Box" })
+visuals:AddDropdown("BoxStyle", { Values = { "2D", "3D" }, Default = "2D", Text = "Box Style", Callback = function(v) boxStyle = v end })
+visuals:AddToggle("Chams", { Text = "Chams", Default = false }):AddKeyPicker("ChamsKey", { Default = "None", Mode = "Toggle", Text = "Chams" }):AddColorPicker("ChamsColor", { Default = Color3.fromRGB(255, 50, 50), Title = "Chams Color" })
+visuals:AddToggle("Skeleton", { Text = "Skeleton", Default = false }):AddKeyPicker("SkeletonKey", { Default = "None", Mode = "Toggle", Text = "Skeleton" })
+
+local Storage = Instance.new("Folder")
+Storage.Name = "AXIS_Flick"
+Storage.Parent = game:GetService("CoreGui")
+
+local espData = {}
+local chamsData = {}
+local skeletonData = {}
+
+local bonePairs = {
+    {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
+    {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
+    {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
+    {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
+    {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"}
+}
+
+local function getChar(p)
+    return p and p.Character
+end
+
+local function isAlive(char)
+    local h = char and char:FindFirstChild("Humanoid")
+    return h and h.Health > 0
+end
+
+local function worldToScreen(pos)
+    local vec, onScreen = cam:WorldToViewportPoint(pos)
+    return Vector2.new(vec.X, vec.Y), onScreen, vec.Z
+end
+
+local function getClosestPart(char)
+    local closest, dist = nil, math.huge
+    for _, p in pairs(char:GetChildren()) do
+        if p:IsA("BasePart") then
+            local screenPos, onScreen = worldToScreen(p.Position)
+            if onScreen then
+                local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+                local d = (screenPos - center).Magnitude
+                if d < dist then
+                    dist = d
+                    closest = p
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function getRandomPart(char)
+    local parts = {}
+    for _, p in pairs(char:GetChildren()) do
+        if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+            table.insert(parts, p)
+        end
+    end
+    return #parts > 0 and parts[math.random(1, #parts)] or nil
+end
+
+local function getAimTarget()
+    local closest, dist = nil, math.huge
+    for _, p in pairs(plrs:GetPlayers()) do
+        if p ~= lp then
+            local char = getChar(p)
+            if char and isAlive(char) then
+                local root = char:FindFirstChild("HumanoidRootPart")
+                if root then
+                    local screenPos, onScreen = worldToScreen(root.Position)
+                    if onScreen then
+                        local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+                        local d = (screenPos - center).Magnitude
+                        if d < dist then
+                            dist = d
+                            closest = char
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function getTargetPart(char)
+    if aimPart == "Random" then
+        return getRandomPart(char)
+    elseif aimPart == "Closest" then
+        return getClosestPart(char)
+    else
+        return char:FindFirstChild(aimPart) or char:FindFirstChild("Head")
+    end
+end
+
+local function cleanupPlayer(p)
+    if espData[p] then
+        for _, d in pairs(espData[p]) do d:Remove() end
+        espData[p] = nil
+    end
+    if chamsData[p] then
+        chamsData[p]:Destroy()
+        chamsData[p] = nil
+    end
+    if skeletonData[p] then
+        for _, l in pairs(skeletonData[p]) do l:Remove() end
+        skeletonData[p] = nil
+    end
+end
+
+local lastTrigger = 0
+local mainLoop = rs.RenderStepped:Connect(function()
+    local espOn = lib.Toggles.ESPEnabled and lib.Toggles.ESPEnabled.Value
+    local boxOn = lib.Toggles.BoxESP and lib.Toggles.BoxESP.Value
+    local chamsOn = lib.Toggles.Chams and lib.Toggles.Chams.Value
+    local skelOn = lib.Toggles.Skeleton and lib.Toggles.Skeleton.Value
+    local triggerOn = lib.Toggles.Triggerbot and lib.Toggles.Triggerbot.Value
+    local aimbotOn = lib.Toggles.Aimbot and lib.Toggles.Aimbot.Value
+    local chamsColor = lib.Options.ChamsColor and lib.Options.ChamsColor.Value or Color3.new(1, 0.2, 0.2)
+
+    if aimbotOn then
+        local target = getAimTarget()
+        if target then
+            local part = getTargetPart(target)
+            if part then
+                cam.CFrame = CFrame.new(cam.CFrame.Position, part.Position)
+            end
+        end
+    end
+
+    if triggerOn then
+        local now = tick()
+        if now - lastTrigger >= triggerDelay then
+            local ray = Ray.new(cam.CFrame.Position, cam.CFrame.LookVector * 1000)
+            local hit = workspace:FindPartOnRayWithIgnoreList(ray, {lp.Character})
+            if hit then
+                local model = hit:FindFirstAncestorOfClass("Model")
+                if model and plrs:GetPlayerFromCharacter(model) then
+                    local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
+                    if tool then
+                        local shoot = tool:FindFirstChild("Shoot") or tool:FindFirstChild("Fire") or tool:FindFirstChild("Activate")
+                        if shoot and shoot:IsA("RemoteEvent") then
+                            shoot:FireServer()
+                            lastTrigger = now
+                        elseif shoot and shoot:IsA("RemoteFunction") then
+                            pcall(function() shoot:InvokeServer() end)
+                            lastTrigger = now
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    for _, p in pairs(plrs:GetPlayers()) do
+        if p ~= lp then
+            local char = getChar(p)
+            local alive = char and isAlive(char)
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local head = char and char:FindFirstChild("Head")
+
+            if espOn and boxOn and alive and root then
+                if not espData[p] then
+                    espData[p] = {
+                        t = Drawing.new("Line"), b = Drawing.new("Line"),
+                        l = Drawing.new("Line"), r = Drawing.new("Line"),
+                        tl = Drawing.new("Line"), tr = Drawing.new("Line"),
+                        bl = Drawing.new("Line"), br = Drawing.new("Line"),
+                        lb = Drawing.new("Line"), rb = Drawing.new("Line"),
+                        tf = Drawing.new("Line"), bf = Drawing.new("Line")
+                    }
+                    for _, d in pairs(espData[p]) do
+                        d.Color = Color3.new(1, 1, 1)
+                        d.Thickness = 1
+                    end
+                end
+
+                local cf = root.CFrame
+                local size = Vector3.new(4, 5, 2)
+
+                if boxStyle == "2D" then
+                    local pos, onScreen = worldToScreen(root.Position)
+                    local dist = (cam.CFrame.Position - root.Position).Magnitude
+                    local factor = 1 / (dist * math.tan(math.rad(cam.FieldOfView / 2)) * 2 / cam.ViewportSize.Y)
+                    local w, h = size.X * factor, size.Y * factor
+
+                    for _, d in pairs(espData[p]) do d.Visible = onScreen end
+
+                    if onScreen then
+                        espData[p].t.From = Vector2.new(pos.X - w / 2, pos.Y - h / 2)
+                        espData[p].t.To = Vector2.new(pos.X + w / 2, pos.Y - h / 2)
+                        espData[p].b.From = Vector2.new(pos.X - w / 2, pos.Y + h / 2)
+                        espData[p].b.To = Vector2.new(pos.X + w / 2, pos.Y + h / 2)
+                        espData[p].l.From = Vector2.new(pos.X - w / 2, pos.Y - h / 2)
+                        espData[p].l.To = Vector2.new(pos.X - w / 2, pos.Y + h / 2)
+                        espData[p].r.From = Vector2.new(pos.X + w / 2, pos.Y - h / 2)
+                        espData[p].r.To = Vector2.new(pos.X + w / 2, pos.Y + h / 2)
+                        espData[p].tl.Visible = false
+                        espData[p].tr.Visible = false
+                        espData[p].bl.Visible = false
+                        espData[p].br.Visible = false
+                        espData[p].lb.Visible = false
+                        espData[p].rb.Visible = false
+                        espData[p].tf.Visible = false
+                        espData[p].bf.Visible = false
+                    end
+                else
+                    local corners = {
+                        cf * CFrame.new(-size.X/2, size.Y/2, -size.Z/2),
+                        cf * CFrame.new(size.X/2, size.Y/2, -size.Z/2),
+                        cf * CFrame.new(-size.X/2, -size.Y/2, -size.Z/2),
+                        cf * CFrame.new(size.X/2, -size.Y/2, -size.Z/2),
+                        cf * CFrame.new(-size.X/2, size.Y/2, size.Z/2),
+                        cf * CFrame.new(size.X/2, size.Y/2, size.Z/2),
+                        cf * CFrame.new(-size.X/2, -size.Y/2, size.Z/2),
+                        cf * CFrame.new(size.X/2, -size.Y/2, size.Z/2)
+                    }
+                    local sc = {}
+                    local allOn = true
+                    for i, c in ipairs(corners) do
+                        local v, on = worldToScreen(c.Position)
+                        sc[i] = v
+                        if not on then allOn = false end
+                    end
+
+                    for _, d in pairs(espData[p]) do d.Visible = allOn end
+
+                    if allOn then
+                        espData[p].t.From, espData[p].t.To = sc[1], sc[2]
+                        espData[p].b.From, espData[p].b.To = sc[3], sc[4]
+                        espData[p].l.From, espData[p].l.To = sc[1], sc[3]
+                        espData[p].r.From, espData[p].r.To = sc[2], sc[4]
+                        espData[p].tl.From, espData[p].tl.To = sc[5], sc[6]
+                        espData[p].tr.From, espData[p].tr.To = sc[7], sc[8]
+                        espData[p].bl.From, espData[p].bl.To = sc[5], sc[7]
+                        espData[p].br.From, espData[p].br.To = sc[6], sc[8]
+                        espData[p].lb.From, espData[p].lb.To = sc[1], sc[5]
+                        espData[p].rb.From, espData[p].rb.To = sc[2], sc[6]
+                        espData[p].tf.From, espData[p].tf.To = sc[3], sc[7]
+                        espData[p].bf.From, espData[p].bf.To = sc[4], sc[8]
+                        for _, d in pairs(espData[p]) do d.Visible = true end
+                    end
+                end
+            else
+                if espData[p] then
+                    for _, d in pairs(espData[p]) do d.Visible = false end
+                end
+            end
+
+            if espOn and chamsOn and alive and char then
+                if not chamsData[p] then
+                    local h = Instance.new("Highlight")
+                    h.Name = p.Name
+                    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    h.FillTransparency = 0.55
+                    h.OutlineTransparency = 0
+                    h.OutlineColor = Color3.new(1, 1, 1)
+                    h.Parent = Storage
+                    chamsData[p] = h
+                end
+                chamsData[p].Adornee = char
+                chamsData[p].FillColor = chamsColor
+                chamsData[p].Enabled = true
+            else
+                if chamsData[p] then chamsData[p].Enabled = false end
+            end
+
+            if espOn and skelOn and alive and char then
+                if not skeletonData[p] then
+                    skeletonData[p] = {}
+                    for i = 1, #bonePairs do
+                        local l = Drawing.new("Line")
+                        l.Color = Color3.new(1, 1, 1)
+                        l.Thickness = 1
+                        skeletonData[p][i] = l
+                    end
+                end
+                for i, pair in ipairs(bonePairs) do
+                    local p0 = char:FindFirstChild(pair[1])
+                    local p1 = char:FindFirstChild(pair[2])
+                    if p0 and p1 then
+                        local s0, on0 = worldToScreen(p0.Position)
+                        local s1, on1 = worldToScreen(p1.Position)
+                        skeletonData[p][i].From = s0
+                        skeletonData[p][i].To = s1
+                        skeletonData[p][i].Visible = on0 and on1
+                    else
+                        skeletonData[p][i].Visible = false
+                    end
+                end
+            else
+                if skeletonData[p] then
+                    for _, l in pairs(skeletonData[p]) do l.Visible = false end
+                end
+            end
+        end
+    end
+end)
+
+plrs.PlayerRemoving:Connect(cleanupPlayer)
+
+cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
+cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
+lib.ToggleKeybind = lib.Options.MenuKeybind
+
+local elap, frames = 0, 0
+local conn = rs.RenderStepped:Connect(function(dt)
+    frames = frames + 1
+    elap = elap + dt
+    if elap >= 1 then
+        fpsLbl:SetText("FPS: " .. math.floor(frames / elap + 0.5))
+        local net = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]
+        pingLbl:SetText("Ping: " .. (net and math.floor(net:GetValue()) or 0) .. " ms")
+        frames, elap = 0, 0
+    end
+end)
+
+theme:SetLibrary(lib)
+save:SetLibrary(lib)
+save:IgnoreThemeSettings()
+save:SetIgnoreIndexes({ "MenuKeybind" })
+theme:SetFolder("PlowsScriptHub")
+save:SetFolder("PlowsScriptHub/Flick")
+save:BuildConfigSection(config)
+theme:ApplyToTab(config)
+save:LoadAutoloadConfig()
+
+lib:OnUnload(function()
+    if mainLoop then mainLoop:Disconnect() end
+    if conn then conn:Disconnect() end
+    for _, p in pairs(plrs:GetPlayers()) do cleanupPlayer(p) end
+    if Storage then Storage:Destroy() end
+end)
