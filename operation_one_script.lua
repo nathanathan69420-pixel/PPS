@@ -33,33 +33,13 @@ local function bypass()
     local old_idx
     old_idx = hookmetamethod(g, "__index", newcclosure(function(self, k)
         if not checkcaller() then
-            if k == "Drawing" or k == "getrawmetatable" or k == "setreadonly" or k == "newcclosure" or k == "hookmetamethod" then
+            if k == "Drawing" or k == "VirtualInputManager" then
                 return nil
             end
         end
         return old_idx(self, k)
     end))
 
-    -- Spoof Camera CFrame to game scripts
-    local old_cam_idx
-    old_cam_idx = hookmetamethod(cam, "__index", newcclosure(function(self, k)
-        if not checkcaller() and k == "CFrame" then
-            return old_cam_idx(self, "CFrame") -- We return the "true" CFrame or we could spoof a value
-        end
-        return old_cam_idx(self, k)
-    end))
-
-    local old_fenv
-    old_fenv = hookfunction(getfenv, newcclosure(function(f)
-        local res = old_fenv(f)
-        if not checkcaller() then
-            if rawget(res, "Drawing") then rawset(res, "Drawing", nil) end
-            if rawget(res, "cloneref") then rawset(res, "cloneref", nil) end
-            if rawget(res, "getrawmetatable") then rawset(res, "getrawmetatable", nil) end
-        end
-        return res
-    end))
-    
     setreadonly(gm, true)
 end
 
