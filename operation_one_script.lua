@@ -18,7 +18,7 @@ local function bypass()
         
         if (method == "GetService" or method == "getService") and self == g then
             local s = args[1]
-            if s == "VirtualInputManager" or s == "HttpService" or s == "LogService" then
+            if s == "VirtualInputManager" or s == "HttpService" or s == "LogService" or s == "Drawing" then
                 return nil
             end
         end
@@ -29,6 +29,25 @@ local function bypass()
         
         return old_nc(self, ...)
     end)
+    
+    local old_idx
+    old_idx = hookmetamethod(g, "__index", newcclosure(function(self, k)
+        if not checkcaller() and (k == "Drawing" or k == "getrawmetatable" or k == "setreadonly" or k == "newcclosure") then
+            return nil
+        end
+        return old_idx(self, k)
+    end))
+
+    local old_fenv
+    old_fenv = hookfunction(getfenv, newcclosure(function(f)
+        local res = old_fenv(f)
+        if not checkcaller() then
+            if rawget(res, "Drawing") then rawset(res, "Drawing", nil) end
+            if rawget(res, "cloneref") then rawset(res, "cloneref", nil) end
+        end
+        return res
+    end))
+    
     setreadonly(gm, true)
 end
 
