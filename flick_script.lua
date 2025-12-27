@@ -10,35 +10,23 @@ local function bypass()
     
     local gm = getrawmetatable(g)
     local old_nc = gm.__namecall
+    local old_idx = gm.__index
     
     setreadonly(gm, false)
     gm.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
-        local args = {...}
-        
-        if (method == "GetService" or method == "getService") and self == g then
-            local s = args[1]
-            if s == "VirtualInputManager" or s == "HttpService" or s == "LogService" or s == "Drawing" then
-                return nil
-            end
+        if not checkcaller() then
+            if method == "Kick" and self == lp then return nil end
         end
-        
-        if method == "Kick" and self == lp then
-            return nil
-        end
-        
         return old_nc(self, ...)
     end)
     
-    local old_idx
-    old_idx = hookmetamethod(g, "__index", newcclosure(function(self, k)
+    gm.__index = newcclosure(function(self, k)
         if not checkcaller() then
-            if k == "Drawing" or k == "VirtualInputManager" then
-                return nil
-            end
+            if k == "Drawing" then return nil end
         end
         return old_idx(self, k)
-    end))
+    end)
     
     setreadonly(gm, true)
 end
@@ -58,10 +46,9 @@ local rs = get("RunService")
 local plrs = get("Players")
 local uis = get("UserInputService")
 local vim = get("VirtualInputManager")
-local statsService = get("Stats")
 local cam = workspace.CurrentCamera
 local lp = plrs.LocalPlayer
-local mouse = lp:GetMouse()
+
 
 theme.BuiltInThemes["Default"][2] = {
     BackgroundColor = "16293a",
@@ -94,8 +81,7 @@ local cfgBox = config:AddLeftGroupbox("Config")
 status:AddLabel(string.format("Welcome, %s\nGame: Flick", lp.DisplayName), true)
 status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
-local fpsLbl = stats:AddLabel("FPS: ...", true)
-local pingLbl = stats:AddLabel("Ping: ...", true)
+
 
 local triggerDelay = 0.32
 local aimPart = "Head"
@@ -478,19 +464,7 @@ cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybin
 cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
 lib.ToggleKeybind = lib.Options.MenuKeybind
 
-local elap, frames = 0, 0
-local conn = rs.RenderStepped:Connect(function(dt)
-    frames = frames + 1
-    elap = elap + dt
-    if elap >= 1 then
-        fpsLbl:SetText("FPS: " .. math.floor(frames / elap + 0.5))
-        pcall(function()
-            local net = statsService and statsService.Network.ServerStatsItem["Data Ping"]
-            pingLbl:SetText("Ping: " .. (net and math.floor(net:GetValue()) or 0) .. " ms")
-        end)
-        frames, elap = 0, 0
-    end
-end)
+
 
 theme:SetLibrary(lib)
 save:SetLibrary(lib)
@@ -504,7 +478,6 @@ save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
     if mainLoop then mainLoop:Disconnect() end
-    if conn then conn:Disconnect() end
     for _, p in pairs(plrs:GetPlayers()) do cleanupPlayer(p) end
     if Storage then Storage:Destroy() end
 end)

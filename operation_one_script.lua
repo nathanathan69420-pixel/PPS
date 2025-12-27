@@ -13,21 +13,9 @@ local function bypass()
     local old_idx = gm.__index
     
     setreadonly(gm, false)
-    
-    
-    local hiddenName = ""
-    for i = 1, 10 do hiddenName ..= string.char(math.random(97, 122)) end
-    
     gm.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         if not checkcaller() then
-            if (method == "GetService" or method == "getService") and self == g then
-                local s = ({...})[1]
-                if s == "VirtualInputManager" or s == "HttpService" or s == "LogService" then
-                    
-                    return old_nc(self, "HttpService") 
-                end
-            end
             if method == "Kick" and self == lp then return nil end
         end
         return old_nc(self, ...)
@@ -35,38 +23,19 @@ local function bypass()
     
     gm.__index = newcclosure(function(self, k)
         if not checkcaller() then
-            if k == "VirtualInputManager" or k == "Drawing" then return nil end
+            if k == "Drawing" then return nil end
         end
         return old_idx(self, k)
     end)
     
-    old_ni = hookmetamethod(cam, "__newindex", newcclosure(function(self, k, v)
-        return old_ni(self, k, v)
-    end))
-    
-    local old_cam_nc
-    old_cam_nc = hookmetamethod(cam, "__namecall", newcclosure(function(self, ...)
-        return old_cam_nc(self, ...)
-    end))
-    
-    
-    local old_grm
-    old_grm = hookfunction(getrawmetatable, newcclosure(function(target)
-        local mt = old_grm(target)
-        if not checkcaller() and target == g then
-            
-            return mt 
-        end
-        return mt
-    end))
 
-    local old_hmm
-    old_hmm = hookfunction(hookmetamethod, newcclosure(function(target, method, func)
-        if not checkcaller() and target == g then
-            return nil
-        end
-        return old_hmm(target, method, func)
-    end))
+    
+
+    
+    
+
+
+
     
     setreadonly(gm, true)
 end
@@ -87,9 +56,6 @@ local rs = get("RunService")
 local plrs = get("Players")
 local lp = plrs.LocalPlayer
 local cam = workspace.CurrentCamera
-local mouse = lp:GetMouse()
-local vim = get("VirtualInputManager")
-local statsService = get("Stats")
 
 theme.BuiltInThemes["Default"][2] = {
     BackgroundColor = "16293a",
@@ -112,15 +78,13 @@ local main = win:AddTab("Main", "target")
 local config = win:AddTab("Settings", "settings")
 
 local status = home:AddLeftGroupbox("Status")
-local stats = home:AddRightGroupbox("FPS & Ping")
 local visuals = main:AddLeftGroupbox("Visuals")
 local cfgBox = config:AddLeftGroupbox("Config")
 
 status:AddLabel(string.format("Welcome, %s\nGame: Operation One", lp.DisplayName), true)
 status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
-local fpsLbl = stats:AddLabel("FPS: ...", true)
-local pingLbl = stats:AddLabel("Ping: ...", true)
+
 
 
 
@@ -142,8 +106,8 @@ visuals:AddToggle("Chams", { Text = "Chams", Default = false }):AddKeyPicker("Ch
 local tracerType = 1
 local Toggles = lib.Toggles
 local Options = lib.Options
-
 local espboxes = {}
+
 local espboxoutlines = {}
 local esptracers = {}
 local esptraceroutlines = {}
@@ -422,30 +386,11 @@ local mainLoop = rs.RenderStepped:Connect(function()
     for name, _ in pairs(espboxes) do if not alive[name] then removeplr(name) end end
     for drone, _ in pairs(espdrones) do if not drone or not drone:IsDescendantOf(workspace) or not (espOn and Toggles.DroneESP.Value) then removedrone(drone) end end
 end)
-
-
-
-
-
-
-
 cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
 cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
 lib.ToggleKeybind = lib.Options.MenuKeybind
 
-local elap, frames = 0, 0
-local conn = rs.RenderStepped:Connect(function(dt)
-    frames = frames + 1
-    elap = elap + dt
-    if elap >= 1 then
-        fpsLbl:SetText("FPS: " .. math.floor(frames / elap + 0.5))
-        pcall(function()
-            local net = statsService and statsService.Network.ServerStatsItem["Data Ping"]
-            pingLbl:SetText("Ping: " .. (net and math.floor(net:GetValue()) or 0) .. " ms")
-        end)
-        frames, elap = 0, 0
-    end
-end)
+
 
 theme:SetLibrary(lib)
 save:SetLibrary(lib)
@@ -459,7 +404,6 @@ save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
     if mainLoop then mainLoop:Disconnect() end
-    if conn then conn:Disconnect() end
     for name, _ in pairs(espboxes) do removeplr(name) end
     for drone, _ in pairs(espdrones) do removedrone(drone) end
     if Storage then Storage:Destroy() end
