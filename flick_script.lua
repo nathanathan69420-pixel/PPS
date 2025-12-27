@@ -6,9 +6,9 @@ local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 local rs = game:GetService("RunService")
 local plrs = game:GetService("Players")
 local uis = game:GetService("UserInputService")
-local vim = game:GetService("VirtualInputManager")
 local cam = workspace.CurrentCamera
 local lp = plrs.LocalPlayer
+local mouse = lp:GetMouse()
 
 theme.BuiltInThemes["Default"][2] = {
     BackgroundColor = "16293a",
@@ -240,10 +240,11 @@ local mainLoop = rs.RenderStepped:Connect(function()
             if hit then
                 local model = hit:FindFirstAncestorOfClass("Model")
                 if model and plrs:GetPlayerFromCharacter(model) and plrs:GetPlayerFromCharacter(model) ~= lp then
-                    vim:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-                    task.wait(0.01)
-                    vim:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-                    lastTrigger = now
+                    local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
+                    if tool then
+                        tool:Activate()
+                        lastTrigger = now
+                    end
                 end
             end
         end
