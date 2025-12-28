@@ -5,7 +5,7 @@ local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
 local win = lib:CreateWindow({
     Title = "AXIS HUB",
-    Footer = "v1.3.2",
+    Footer = "v1.6.2",
     NotifySide = "Right",
     ShowCustomCursor = true,
 })
