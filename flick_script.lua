@@ -17,6 +17,7 @@ local function bypass()
         local method = getnamecallmethod()
         if not checkcaller() then
             if method == "Kick" and self == lp then return nil end
+            if method == "FindPartOnRayWithIgnoreList" then return nil end
         end
         return old_nc(self, ...)
     end)
@@ -24,6 +25,9 @@ local function bypass()
     gm.__index = newcclosure(function(self, k)
         if not checkcaller() then
             if k == "Drawing" then return nil end
+            if k == "VirtualInputManager" then return nil end
+            if k == "HttpService" then return nil end
+            if k == "LogService" then return nil end
         end
         return old_idx(self, k)
     end)
@@ -45,7 +49,6 @@ end
 local rs = get("RunService")
 local plrs = get("Players")
 local uis = get("UserInputService")
-local vim = get("VirtualInputManager")
 local cam = workspace.CurrentCamera
 local lp = plrs.LocalPlayer
 
@@ -131,6 +134,14 @@ Storage.Parent = get("CoreGui")
 local espData = {}
 local chamsData = {}
 local skeletonData = {}
+
+local function createLine()
+    local line = Instance.new("Frame")
+    line.BorderSizePixel = 0
+    line.BackgroundColor3 = Color3.new(1, 1, 1)
+    line.Parent = Storage
+    return line
+end
 
 local bonePairs = {
     {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
@@ -253,7 +264,7 @@ end
 
 local function cleanupPlayer(p)
     if espData[p] then
-        for _, d in pairs(espData[p]) do d:Remove() end
+        for _, d in pairs(espData[p]) do d:Destroy() end
         espData[p] = nil
     end
     if chamsData[p] then
@@ -261,7 +272,7 @@ local function cleanupPlayer(p)
         chamsData[p] = nil
     end
     if skeletonData[p] then
-        for _, l in pairs(skeletonData[p]) do l:Remove() end
+        for _, l in pairs(skeletonData[p]) do l:Destroy() end
         skeletonData[p] = nil
     end
 end
@@ -298,14 +309,9 @@ local mainLoop = rs.RenderStepped:Connect(function()
             if hit then
                 local model = hit:FindFirstAncestorOfClass("Model")
                 if model and plrs:GetPlayerFromCharacter(model) and plrs:GetPlayerFromCharacter(model) ~= lp then
-                    if vim then
-                        vim:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-                        task.wait(0.01)
-                        vim:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-                    else
-                        
-                        local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
-                        if tool then tool:Activate() end
+                    local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
+                    if tool then 
+                        tool:Activate() 
                     end
                     lastTrigger = now
                 end
@@ -323,16 +329,16 @@ local mainLoop = rs.RenderStepped:Connect(function()
             if espOn and boxOn and alive and root then
                 if not espData[p] then
                     espData[p] = {
-                        t = Drawing.new("Line"), b = Drawing.new("Line"),
-                        l = Drawing.new("Line"), r = Drawing.new("Line"),
-                        tl = Drawing.new("Line"), tr = Drawing.new("Line"),
-                        bl = Drawing.new("Line"), br = Drawing.new("Line"),
-                        lb = Drawing.new("Line"), rb = Drawing.new("Line"),
-                        tf = Drawing.new("Line"), bf = Drawing.new("Line")
+                        t = createLine(), b = createLine(),
+                        l = createLine(), r = createLine(),
+                        tl = createLine(), tr = createLine(),
+                        bl = createLine(), br = createLine(),
+                        lb = createLine(), rb = createLine(),
+                        tf = createLine(), bf = createLine()
                     }
                     for _, d in pairs(espData[p]) do
-                        d.Color = Color3.new(1, 1, 1)
-                        d.Thickness = 1
+                        d.BorderSizePixel = 0
+                        d.BackgroundColor3 = Color3.new(1, 1, 1)
                     end
                 end
 
@@ -348,59 +354,20 @@ local mainLoop = rs.RenderStepped:Connect(function()
                     for _, d in pairs(espData[p]) do d.Visible = onScreen end
 
                     if onScreen then
-                        espData[p].t.From = Vector2.new(pos.X - w / 2, pos.Y - h / 2)
-                        espData[p].t.To = Vector2.new(pos.X + w / 2, pos.Y - h / 2)
-                        espData[p].b.From = Vector2.new(pos.X - w / 2, pos.Y + h / 2)
-                        espData[p].b.To = Vector2.new(pos.X + w / 2, pos.Y + h / 2)
-                        espData[p].l.From = Vector2.new(pos.X - w / 2, pos.Y - h / 2)
-                        espData[p].l.To = Vector2.new(pos.X - w / 2, pos.Y + h / 2)
-                        espData[p].r.From = Vector2.new(pos.X + w / 2, pos.Y - h / 2)
-                        espData[p].r.To = Vector2.new(pos.X + w / 2, pos.Y + h / 2)
-                        espData[p].tl.Visible = false
-                        espData[p].tr.Visible = false
-                        espData[p].bl.Visible = false
-                        espData[p].br.Visible = false
-                        espData[p].lb.Visible = false
-                        espData[p].rb.Visible = false
-                        espData[p].tf.Visible = false
-                        espData[p].bf.Visible = false
+                        espData[p].t.Position = UDim2.new(0, pos.X - w / 2, 0, pos.Y - h / 2)
+                        espData[p].t.Size = UDim2.new(0, w, 0, 1)
+                        espData[p].b.Position = UDim2.new(0, pos.X - w / 2, 0, pos.Y + h / 2)
+                        espData[p].b.Size = UDim2.new(0, w, 0, 1)
+                        espData[p].l.Position = UDim2.new(0, pos.X - w / 2, 0, pos.Y - h / 2)
+                        espData[p].l.Size = UDim2.new(0, 1, 0, h)
+                        espData[p].r.Position = UDim2.new(0, pos.X + w / 2, 0, pos.Y - h / 2)
+                        espData[p].r.Size = UDim2.new(0, 1, 0, h)
+                        for _, d in pairs({espData[p].tl, espData[p].tr, espData[p].bl, espData[p].br, espData[p].lb, espData[p].rb, espData[p].tf, espData[p].bf}) do
+                            d.Visible = false
+                        end
                     end
                 else
-                    local corners = {
-                        cf * CFrame.new(-size.X/2, size.Y/2, -size.Z/2),
-                        cf * CFrame.new(size.X/2, size.Y/2, -size.Z/2),
-                        cf * CFrame.new(-size.X/2, -size.Y/2, -size.Z/2),
-                        cf * CFrame.new(size.X/2, -size.Y/2, -size.Z/2),
-                        cf * CFrame.new(-size.X/2, size.Y/2, size.Z/2),
-                        cf * CFrame.new(size.X/2, size.Y/2, size.Z/2),
-                        cf * CFrame.new(-size.X/2, -size.Y/2, size.Z/2),
-                        cf * CFrame.new(size.X/2, -size.Y/2, size.Z/2)
-                    }
-                    local sc = {}
-                    local allOn = true
-                    for i, c in ipairs(corners) do
-                        local v, on = worldToScreen(c.Position)
-                        sc[i] = v
-                        if not on then allOn = false end
-                    end
-
-                    for _, d in pairs(espData[p]) do d.Visible = allOn end
-
-                    if allOn then
-                        espData[p].t.From, espData[p].t.To = sc[1], sc[2]
-                        espData[p].b.From, espData[p].b.To = sc[3], sc[4]
-                        espData[p].l.From, espData[p].l.To = sc[1], sc[3]
-                        espData[p].r.From, espData[p].r.To = sc[2], sc[4]
-                        espData[p].tl.From, espData[p].tl.To = sc[5], sc[6]
-                        espData[p].tr.From, espData[p].tr.To = sc[7], sc[8]
-                        espData[p].bl.From, espData[p].bl.To = sc[5], sc[7]
-                        espData[p].br.From, espData[p].br.To = sc[6], sc[8]
-                        espData[p].lb.From, espData[p].lb.To = sc[1], sc[5]
-                        espData[p].rb.From, espData[p].rb.To = sc[2], sc[6]
-                        espData[p].tf.From, espData[p].tf.To = sc[3], sc[7]
-                        espData[p].bf.From, espData[p].bf.To = sc[4], sc[8]
-                        for _, d in pairs(espData[p]) do d.Visible = true end
-                    end
+                    for _, d in pairs(espData[p]) do d.Visible = false end
                 end
             else
                 if espData[p] then
@@ -430,9 +397,7 @@ local mainLoop = rs.RenderStepped:Connect(function()
                 if not skeletonData[p] then
                     skeletonData[p] = {}
                     for i = 1, #bonePairs do
-                        local l = Drawing.new("Line")
-                        l.Color = Color3.new(1, 1, 1)
-                        l.Thickness = 1
+                        local l = createLine()
                         skeletonData[p][i] = l
                     end
                 end
@@ -442,9 +407,17 @@ local mainLoop = rs.RenderStepped:Connect(function()
                     if p0 and p1 then
                         local s0, on0 = worldToScreen(p0.Position)
                         local s1, on1 = worldToScreen(p1.Position)
-                        skeletonData[p][i].From = s0
-                        skeletonData[p][i].To = s1
-                        skeletonData[p][i].Visible = on0 and on1
+                        if on0 and on1 then
+                            local line = skeletonData[p][i]
+                            local dist = (s0 - s1).Magnitude
+                            local angle = math.atan2(s1.Y - s0.Y, s1.X - s0.X)
+                            line.Position = UDim2.new(0, s0.X, 0, s0.Y)
+                            line.Size = UDim2.new(0, dist, 0, 1)
+                            line.Rotation = math.deg(angle)
+                            line.Visible = true
+                        else
+                            skeletonData[p][i].Visible = false
+                        end
                     else
                         skeletonData[p][i].Visible = false
                     end
