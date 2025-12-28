@@ -20,24 +20,55 @@ local function bypass()
     local gm = getrawmetatable(g)
     local old_nc = gm.__namecall
     local old_idx = gm.__index
+    local old_ns = gm.__newindex
     
     setreadonly(gm, false)
+    
     gm.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         if not checkcaller() then
             if method == "Kick" and self == lp then return nil end
+            if method == "GetService" then
+                local service = select(1, ...)
+                if service == "VirtualInputManager" or service == "HttpService" or service == "TeleportService" then
+                    return Instance.new("Folder")
+                end
+            end
         end
         return old_nc(self, ...)
     end)
     
     gm.__index = newcclosure(function(self, k)
         if not checkcaller() then
-            if k == "Drawing" then return nil end
+            if k == "Drawing" or k == "VirtualInputManager" or k == "HttpService" or k == "TeleportService" then
+                return Instance.new("Folder")
+            end
         end
         return old_idx(self, k)
     end)
     
+    gm.__newindex = newcclosure(function(self, k, v)
+        if not checkcaller() then
+            if k == "Enabled" and self:IsA("Script") then
+                return
+            end
+        end
+        return old_ns(self, k, v)
+    end)
+    
     setreadonly(gm, true)
+    
+    local oldHttpGet = game.HttpGet
+    game.HttpGet = function(...)
+        if not checkcaller() then return "" end
+        return oldHttpGet(...)
+    end
+    
+    local oldHttpGetAsync = game.HttpGetAsync
+    game.HttpGetAsync = function(...)
+        if not checkcaller() then return "" end
+        return oldHttpGetAsync(...)
+    end
 end
 
 
