@@ -6,10 +6,9 @@ local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 local function safeClick()
     local vim = game:GetService("VirtualInputManager")
     if vim then
-        local pos = uis:GetMouseLocation()
-        vim:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
+        vim:SendMouseButtonEvent(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2, 0, true, game, 0)
         task.wait(0.01)
-        vim:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
+        vim:SendMouseButtonEvent(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2, 0, false, game, 0)
     end
 end
 
@@ -304,7 +303,7 @@ local mainLoop = rs.RenderStepped:Connect(function()
     if triggerOn then
         local now = tick()
         if now - lastTrigger >= triggerDelay then
-            local mousePos = uis:GetMouseLocation()
+            local mousePos = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
             local ray = cam:ViewportPointToRay(mousePos.X, mousePos.Y)
             local hit = workspace:FindPartOnRayWithIgnoreList(ray, {lp.Character})
             if hit then
