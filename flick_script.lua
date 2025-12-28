@@ -82,7 +82,6 @@ local config = win:AddTab("Settings", "settings")
 local status = home:AddLeftGroupbox("Status")
 local stats = home:AddRightGroupbox("FPS & Ping")
 local aiming = main:AddLeftGroupbox("Aiming")
-local checks = main:AddLeftGroupbox("Checks")
 local visuals = main:AddRightGroupbox("Visuals")
 local cfgBox = config:AddLeftGroupbox("Config")
 
@@ -109,7 +108,6 @@ aiming:AddToggle("Triggerbot", { Text = "Triggerbot", Default = false }):AddKeyP
 aiming:AddSlider("TriggerDelay", { Text = "Triggerbot Delay", Default = 0.32, Min = 0.01, Max = 1, Rounding = 2, Callback = function(v) triggerDelay = v end })
 aiming:AddDivider()
 aiming:AddToggle("Aimbot", { Text = "Aimbot", Default = false }):AddKeyPicker("AimbotKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Aimbot" })
-aiming:AddDropdown("AimPart", { Values = bodyParts, Default = "Head", Text = "Aim Part", Callback = function(v) aimPart = v end })
 aiming:AddSlider("AimSmooth", { Text = "Aim Smooth", Default = 0.5, Min = 0.1, Max = 1, Rounding = 2, Callback = function(v) aimSmooth = v end })
 
 visuals:AddToggle("ESPEnabled", { Text = "General ESP Toggle", Default = false }):AddKeyPicker("ESPKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "ESP" })
@@ -117,11 +115,6 @@ visuals:AddToggle("BoxESP", { Text = "Box", Default = false }):AddKeyPicker("Box
 visuals:AddDropdown("BoxStyle", { Values = { "2D", "3D" }, Default = "2D", Text = "Box Style", Callback = function(v) boxStyle = v end })
 visuals:AddToggle("Chams", { Text = "Chams", Default = false }):AddKeyPicker("ChamsKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Chams" }):AddColorPicker("ChamsColor", { Default = Color3.fromRGB(255, 50, 50), Title = "Chams Color" })
 visuals:AddToggle("Skeleton", { Text = "Skeleton", Default = false }):AddKeyPicker("SkeletonKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Skeleton" })
-
-checks:AddToggle("WallCheck", { Text = "Wall Check", Default = true })
-checks:AddToggle("TeamCheck", { Text = "Team Check", Default = true })
-checks:AddToggle("ForceFieldCheck", { Text = "ForceField Check", Default = true })
-checks:AddToggle("AliveCheck", { Text = "Alive Check", Default = true })
 
 local Toggles = lib.Toggles
 local Options = lib.Options
@@ -212,10 +205,10 @@ local function hasForceField(char)
 end
 
 local function passesChecks(player, char)
-    local wallCheck = lib.Toggles.WallCheck and lib.Toggles.WallCheck.Value
-    local teamCheck = lib.Toggles.TeamCheck and lib.Toggles.TeamCheck.Value
-    local ffCheck = lib.Toggles.ForceFieldCheck and lib.Toggles.ForceFieldCheck.Value
-    local aliveCheck = lib.Toggles.AliveCheck and lib.Toggles.AliveCheck.Value
+    local wallCheck = true
+    local teamCheck = true
+    local ffCheck = true
+    local aliveCheck = true
     
     if aliveCheck and not isAlive(char) then return false end
     if teamCheck and player.Team == lp.Team then return false end
