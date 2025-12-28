@@ -347,6 +347,7 @@ task.spawn(function()
         
         local bestMatch = ""
         local bestScore = 0
+        local foundAny = false
         
         for _, v in pairs(lp.PlayerGui:GetDescendants()) do
             if v:IsA("TextLabel") and v.Visible and #v.Text > 0 then
@@ -354,6 +355,7 @@ task.spawn(function()
                 local clean = text:gsub("%s+", ""):lower()
                 
                 if clean:match("^[%a]+$") and #clean <= 20 then
+                    foundAny = true
                     local score = 0
                     
                     if #clean >= 2 then
@@ -393,6 +395,8 @@ task.spawn(function()
         
         if #bestMatch > 0 then
             updateHUD(bestMatch)
+        elseif not foundAny then
+            updateWaitingAnimation()
         end
     end
 end)
