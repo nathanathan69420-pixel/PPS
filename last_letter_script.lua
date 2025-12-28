@@ -274,28 +274,30 @@ wordbox:AddInput("LetterInput", {
 })
 
 task.spawn(function()
-    while task.wait(0.3) do
+    while task.wait(0.5) do
         if not autoDetect then continue end
-        
-        local foundText = nil
-        
+        local foundLabel = nil
         for _, v in pairs(lp.PlayerGui:GetDescendants()) do
             if v:IsA("TextLabel") and v.Visible and #v.Text > 0 then
-                local clean = v.Text:gsub("%s+", "")
-                if #clean >= 1 and #clean <= 20 and string.match(clean, "^[%a]+$") then
-                    foundText = clean:lower()
-                    if debugMode then
-                        hudLabel.Text = "FOUND: '" .. foundText .. "' (" .. v.Name .. ")"
-                    end
+                local t = v.Text:gsub("%s+", ""):lower()
+                if #t == 1 and t:match("[a-z]") then
+                    foundLabel = v
                     break
+                elseif #t > 1 then
+                    local clean = t:match("([a-z]+)$")
+                    if clean and #clean > 1 then
+                        foundLabel = v
+                        break
+                    end
                 end
             end
         end
-        
-        if foundText and not debugMode then
-            updateHUD(foundText)
-        elseif not foundText and not debugMode then
-            updateWaitingAnimation()
+        if foundLabel then
+            local t = foundLabel.Text:gsub("%s+", ""):lower()
+            local char = t:sub(-1)
+            if char:match("[a-z]") then
+                updateHUD(char)
+            end
         end
     end
 end)
