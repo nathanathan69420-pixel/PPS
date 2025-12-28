@@ -286,34 +286,14 @@ task.spawn(function()
             if v:IsA("TextLabel") and v.Visible and #v.Text > 0 then
                 local clean = v.Text:gsub("%s+", ""):lower()
                 if string.match(clean, "^[%a]+$") and #clean <= 20 then
-                    local nameLower = v.Name:lower()
-                    local parentLower = v.Parent and v.Parent.Name:lower() or ""
                     foundAny = true
                     
                     if #clean >= 2 then
-                        local priority = 15
-                        if #clean >= 3 then priority = priority + 2 end
-                        if #clean >= 4 then priority = priority + 2 end
-                        if #clean >= 5 then priority = priority + 3 end
-                        
-                        if nameLower:find("word") or nameLower:find("current") or parentLower:find("word") or
-                           nameLower:find("pattern") or nameLower:find("sequence") or parentLower:find("pattern") or
-                           nameLower:find("input") or parentLower:find("input") or
-                           nameLower:find("text") or parentLower:find("text") or
-                           nameLower:find("display") or parentLower:find("display") or
-                           nameLower:find("label") or parentLower:find("label") then
-                            priority = priority + 10
-                        end
-                        
-                        table.insert(gameLabels, {text = clean, label = v, priority = priority})
-                        if debugMode then table.insert(debugInfo, string.format("WORD: '%s' (%s) prio:%d", clean, v.Name, priority)) end
+                        table.insert(gameLabels, {text = clean, label = v, priority = #clean})
+                        if debugMode then table.insert(debugInfo, string.format("WORD: '%s' (%s)", clean, v.Name)) end
                     elseif #clean == 1 then
-                        local priority = 5
-                        if nameLower:find("letter") or nameLower:find("current") or parentLower:find("letter") then
-                            priority = 8
-                        end
-                        table.insert(candidates, {text = clean, label = v, priority = priority})
-                        if debugMode then table.insert(debugInfo, string.format("LETTER: '%s' (%s) prio:%d", clean, v.Name, priority)) end
+                        table.insert(candidates, {text = clean, label = v, priority = 1})
+                        if debugMode then table.insert(debugInfo, string.format("LETTER: '%s' (%s)", clean, v.Name)) end
                     end
                 end
             end
@@ -341,7 +321,7 @@ task.spawn(function()
         if debugMode and #debugInfo > 0 then
             local debugText = "DEBUG: " .. table.concat(debugInfo, " | ")
             if bestMatch then
-                debugText = debugText .. " -> SELECTED: '" .. bestMatch.text .. "' (prio:" .. bestMatch.priority .. ")"
+                debugText = debugText .. " -> SELECTED: '" .. bestMatch.text .. "'"
             end
             hudLabel.Text = debugText
         elseif bestMatch then
