@@ -273,7 +273,11 @@ local function getTarget()
 end
 
 local function getAimTarget()
-    return getTarget():GetParent()
+    local target = getTarget()
+    if target then
+        return target.Parent
+    end
+    return nil
 end
 
 local function getTargetPart(char)
