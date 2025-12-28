@@ -3,6 +3,16 @@ local lib = loadstring(game:HttpGet(repo .. "Library.lua"))()
 local theme = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
 local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
+local function safeClick()
+    local vim = game:GetService("VirtualInputManager")
+    if vim then
+        local pos = uis:GetMouseLocation()
+        vim:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
+        task.wait(0.01)
+        vim:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
+    end
+end
+
 local function bypass()
     local g = game
     local lp = g:GetService("Players").LocalPlayer
@@ -17,7 +27,6 @@ local function bypass()
         local method = getnamecallmethod()
         if not checkcaller() then
             if method == "Kick" and self == lp then return nil end
-            if method == "GetService" and select(1, ...) == "VirtualInputManager" then return nil end
         end
         return old_nc(self, ...)
     end)
@@ -25,22 +34,11 @@ local function bypass()
     gm.__index = newcclosure(function(self, k)
         if not checkcaller() then
             if k == "Drawing" then return nil end
-            if k == "VirtualInputManager" then return nil end
         end
         return old_idx(self, k)
     end)
     
     setreadonly(gm, true)
-end
-
-local function safeClick()
-    local vim = game:GetService("VirtualInputManager")
-    if vim then
-        local pos = uis:GetMouseLocation()
-        vim:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
-        task.wait(0.01)
-        vim:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
-    end
 end
 
 
@@ -315,21 +313,8 @@ local mainLoop = rs.RenderStepped:Connect(function()
                     local targetPlayer = plrs:GetPlayerFromCharacter(model)
                     local targetChar = targetPlayer.Character
                     if passesChecks(targetPlayer, targetChar) then
-                        local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
-                        if tool then 
-                            tool:Activate() 
-                            task.wait(0.05)
-                            safeClick()
-                            lastTrigger = now
-                        else
-                            local humanoid = lp.Character:FindFirstChildOfClass("Humanoid")
-                            if humanoid then
-                                humanoid:Activate()
-                                task.wait(0.05)
-                                safeClick()
-                                lastTrigger = now
-                            end
-                        end
+                        safeClick()
+                        lastTrigger = now
                     end
                 end
             end
