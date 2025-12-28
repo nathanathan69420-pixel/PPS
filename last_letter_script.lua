@@ -335,6 +335,17 @@ task.spawn(function()
     end
 end)
 
+local LogService = game:GetService("LogService")
+
+LogService.MessageOut:Connect(function(message, messageType)
+    if autoDetect and message:find("Word:") then
+        local letters = message:match("Word:%s*([A-Z][A-Z]?[A-Z]?[A-Z]?)")
+        if letters then
+            updateHUD(letters:lower())
+        end
+    end
+end)
+
 
 wordbox:AddSlider("MinLen", {
     Text = "Minimum Length",
