@@ -73,34 +73,50 @@ local cfgBox = config:AddLeftGroupbox("Config")
 status:AddLabel(string.format("Welcome, %s\nGame: Last Letter", lp.DisplayName), true)
 status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
-local lastWords = {
-    a = {"apple", "anchor", "abyss", "active"},
-    b = {"bread", "bright", "bottle", "bubble"},
-    c = {"crown", "cloud", "camera", "cactus"},
-    d = {"dream", "dance", "danger", "desert"},
-    e = {"earth", "eagle", "engine", "energy"},
-    f = {"flame", "frost", "flower", "forest"},
-    g = {"ghost", "glass", "guitar", "garden"},
-    h = {"heart", "honey", "hammer", "island"},
-    i = {"image", "impact", "ivory", "insect"},
-    j = {"jungle", "jacket", "jumper", "junior"},
-    k = {"knight", "kettle", "keyboard", "kitchen"},
-    l = {"light", "lemon", "ladder", "lizard"},
-    m = {"mountain", "mirror", "museum", "marine"},
-    n = {"nature", "night", "number", "nebula"},
-    o = {"ocean", "orange", "object", "orbit"},
-    p = {"planet", "purple", "postal", "player"},
-    q = {"quartz", "queen", "quiet", "quiver"},
-    r = {"rocket", "river", "random", "radius"},
-    s = {"shadow", "silver", "spirit", "stream"},
-    t = {"target", "timber", "travel", "theory"},
-    u = {"unique", "update", "urban", "useful"},
-    v = {"valley", "vector", "velvet", "visual"},
-    w = {"winter", "window", "wisdom", "weapon"},
-    x = {"xenon", "xerox", "xylem", "xbird"},
-    y = {"yellow", "yield", "young", "yonder"},
-    z = {"zebra", "zenith", "zigzag", "zodiac"}
-}
+local function downloadWords()
+    local url = "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words.txt"
+    if not isfile("words.txt") then
+        local res = request({Url = url, Method = "GET"})
+        if res and res.Body then
+            writefile("words.txt", res.Body)
+        end
+    end
+end
+
+local Words = {}
+local function loadWords()
+    if isfile("words.txt") then
+        local content = readfile("words.txt")
+        for w in content:gmatch("[^\r\n]+") do
+            table.insert(Words, w)
+        end
+    end
+end
+
+local success = pcall(downloadWords)
+if success then pcall(loadWords) end
+
+local function SuggestWords(letter, count)
+    letter = letter:lower()
+    local possible = {}
+    for _, w in ipairs(Words) do
+        if w:sub(1,1):lower() == letter then
+            table.insert(possible, w)
+        end
+    end
+    local results = {}
+    local used = {}
+    local found = 0
+    while found < count and found < #possible do
+        local r = math.random(1, #possible)
+        if not used[r] then
+            table.insert(results, possible[r])
+            used[r] = true
+            found = found + 1
+        end
+    end
+    return results
+end
 
 local wordLabel = wordbox:AddLabel("Select a letter below")
 wordbox:AddInput("LetterInput", {
@@ -109,10 +125,12 @@ wordbox:AddInput("LetterInput", {
     Placeholder = "a-z",
     Callback = function(v)
         local l = v:sub(1,1):lower()
-        if lastWords[l] then
-            wordLabel:SetText("Words: " .. table.concat(lastWords[l], ", "))
+        if #l == 0 then return end
+        local suggests = SuggestWords(l, 5)
+        if #suggests > 0 then
+            wordLabel:SetText("Words: " .. table.concat(suggests, ", "))
         else
-            wordLabel:SetText("No words found for: " .. v)
+            wordLabel:SetText("No words found for: " .. l)
         end
     end
 })
