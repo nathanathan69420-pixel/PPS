@@ -3,6 +3,14 @@ local lib = loadstring(game:HttpGet(repo .. "Library.lua"))()
 local theme = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
 local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
+theme.BuiltInThemes["Default"][2] = {
+    BackgroundColor = "16293a",
+    MainColor = "26445f",
+    AccentColor = "5983a0",
+    OutlineColor = "325573",
+    FontColor = "d2dae1"
+}
+
 local win = lib:CreateWindow({
     Title = "AXIS HUB",
     Footer = "v1.6.2",
