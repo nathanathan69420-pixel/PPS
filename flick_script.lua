@@ -227,28 +227,29 @@ local function passesChecks(player, char)
     return true
 end
 
-local function getAimTarget()
-    local closest, dist = nil, math.huge
+local function getTarget()
+    local best, dist = nil, math.huge
+    local center = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
     for _, p in pairs(plrs:GetPlayers()) do
-        if p ~= lp then
-            local char = getChar(p)
-            if char and passesChecks(p, char) then
-                local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
-                if root then
-                    local screenPos, onScreen = worldToScreen(root.Position)
-                    if onScreen then
-                        local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-                        local d = (screenPos - center).Magnitude
-                        if d < dist then
-                            dist = d
-                            closest = char
-                        end
-                    end
+        if p ~= lp and p.Character and p.Character:FindFirstChild("Head")
+        and p.Character:FindFirstChild("Humanoid")
+        and p.Character.Humanoid.Health > 0
+        and passesChecks(p, p.Character) then
+            local pos, vis = cam:WorldToViewportPoint(p.Character.Head.Position)
+            if vis then
+                local mag = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                if mag < dist then
+                    dist = mag
+                    best = p.Character.Head
                 end
             end
         end
     end
-    return closest
+    return best
+end
+
+local function getAimTarget()
+    return getTarget():GetParent()
 end
 
 local function getTargetPart(char)
@@ -303,19 +304,10 @@ local mainLoop = rs.RenderStepped:Connect(function()
     if triggerOn then
         local now = tick()
         if now - lastTrigger >= triggerDelay then
-            local mousePos = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-            local ray = cam:ViewportPointToRay(mousePos.X, mousePos.Y)
-            local hit = workspace:FindPartOnRayWithIgnoreList(ray, {lp.Character})
-            if hit then
-                local model = hit:FindFirstAncestorOfClass("Model")
-                if model and plrs:GetPlayerFromCharacter(model) and plrs:GetPlayerFromCharacter(model) ~= lp then
-                    local targetPlayer = plrs:GetPlayerFromCharacter(model)
-                    local targetChar = targetPlayer.Character
-                    if passesChecks(targetPlayer, targetChar) then
-                        safeClick()
-                        lastTrigger = now
-                    end
-                end
+            local target = getTarget()
+            if target then
+                safeClick()
+                lastTrigger = now
             end
         end
     end
