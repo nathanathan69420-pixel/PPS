@@ -292,9 +292,9 @@ task.spawn(function()
                     foundAny = true
                     
                     if #clean == 1 then
-                        local priority = 10
+                        local priority = 8
                         if nameLower:find("letter") or nameLower:find("current") or parentLower:find("letter") then
-                            priority = 20
+                            priority = 12
                             table.insert(priorityLabels, {text = clean, label = v, priority = priority})
                             if debugMode then table.insert(debugInfo, string.format("HIGH: '%s' (%s)", clean, v.Name)) end
                         else
@@ -302,10 +302,17 @@ task.spawn(function()
                             if debugMode then table.insert(debugInfo, string.format("CAND: '%s' (%s)", clean, v.Name)) end
                         end
                     elseif #clean >= 2 then
-                        local priority = 5
+                        local priority = 10
+                        if #clean >= 4 then
+                            priority = priority + 2
+                        end
+                        if #clean >= 6 then
+                            priority = priority + 2
+                        end
                         if nameLower:find("word") or nameLower:find("current") or parentLower:find("word") or
-                           nameLower:find("pattern") or nameLower:find("sequence") or parentLower:find("pattern") then
-                            priority = 15
+                           nameLower:find("pattern") or nameLower:find("sequence") or parentLower:find("pattern") or
+                           nameLower:find("input") or parentLower:find("input") then
+                            priority = priority + 8
                             table.insert(gameLabels, {text = clean, label = v, priority = priority})
                             if debugMode then table.insert(debugInfo, string.format("WORD: '%s' (%s)", clean, v.Name)) end
                         else
@@ -348,7 +355,7 @@ task.spawn(function()
         if debugMode and #debugInfo > 0 then
             local debugText = "DEBUG: " .. table.concat(debugInfo, " | ")
             if bestMatch then
-                debugText = debugText .. " -> SELECTED: '" .. bestMatch.text .. "'"
+                debugText = debugText .. " -> SELECTED: '" .. bestMatch.text .. "' (prio:" .. bestMatch.priority .. ")"
             end
             hudLabel.Text = debugText
         elseif bestMatch then
