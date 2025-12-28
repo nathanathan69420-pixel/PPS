@@ -282,10 +282,9 @@ task.spawn(function()
         
         for _, v in pairs(lp.PlayerGui:GetDescendants()) do
             if v:IsA("TextLabel") and v.Visible and #v.Text > 0 then
-                local original = v.Text
-                local clean = original:gsub("%s+", ""):lower()
+                local clean = v.Text:gsub("%s+", ""):lower()
                 
-                if string.match(clean, "^[%a]+$") and #clean <= 15 then
+                if clean:match("^[%a]+$") and #clean <= 15 then
                     local score = 0
                     
                     if #clean == 1 then
