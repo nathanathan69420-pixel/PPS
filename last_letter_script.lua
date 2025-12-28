@@ -67,10 +67,46 @@ local config = win:AddTab("Settings", "settings")
 
 local status = home:AddLeftGroupbox("Status")
 local wordbox = main:AddLeftGroupbox("Word Helper")
+local hudCol = main:AddRightGroupbox("HUD Settings")
 local cfgBox = config:AddLeftGroupbox("Config")
 
 status:AddLabel(string.format("Welcome, %s\nGame: Last Letter", lp.DisplayName), true)
 status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
+
+local hudOn = true
+local autoDetect = true
+local lastDetected = ""
+local hudGui = Instance.new("ScreenGui", get("CoreGui"))
+hudGui.Name = "AXISHUD"
+
+local hudFrame = Instance.new("Frame", hudGui)
+hudFrame.Size = UDim2.new(0, 300, 0, 45)
+hudFrame.Position = UDim2.new(0.5, -150, 0, 45)
+hudFrame.BackgroundColor3 = Color3.fromRGB(22, 41, 58)
+hudFrame.BorderSizePixel = 0
+hudFrame.Active = true
+hudFrame.Draggable = true
+local corner = Instance.new("UICorner", hudFrame)
+corner.CornerRadius = UDim.new(0, 8)
+local stroke = Instance.new("UIStroke", hudFrame)
+stroke.Color = Color3.fromRGB(50, 85, 115)
+stroke.Thickness = 1.5
+
+local hudLabel = Instance.new("TextLabel", hudFrame)
+hudLabel.Size = UDim2.new(1, -20, 1, 0)
+hudLabel.Position = UDim2.new(0, 10, 0, 0)
+hudLabel.BackgroundTransparency = 1
+hudLabel.TextColor3 = Color3.new(1, 1, 1)
+hudLabel.Font = Enum.Font.GothamMedium
+hudLabel.TextSize = 13
+hudLabel.Text = "Waiting for game..."
+hudLabel.TextWrapped = true
+
+
+hudCol:AddToggle("HUDVisible", { Text = "Show HUD", Default = true, Callback = function(v) hudFrame.Visible = v end })
+hudCol:AddToggle("AutoDetect", { Text = "Auto Detect Letter", Default = true, Callback = function(v) autoDetect = v end })
+hudCol:AddButton({ Text = "Reset Detection", Func = function() lastDetected = "" hudLabel.Text = "Waiting..." end })
+
 
 local charMin, charMax = 2, 8
 
@@ -124,20 +160,65 @@ end
 
 local wordLabel = wordbox:AddLabel("Search results will appear here")
 
+local function updateHUD(text)
+    local l = text:sub(-1):lower()
+    if #l == 0 then return end
+    if l == lastDetected then return end
+    lastDetected = l
+    local suggests = getSuggestions(l, 3)
+    if #suggests > 0 then
+        hudLabel.Text = "Letter: " .. l:upper() .. " | Words: " .. table.concat(suggests, ", ")
+    else
+        hudLabel.Text = "Letter: " .. l:upper() .. " | No words found"
+    end
+end
+
 wordbox:AddInput("LetterInput", {
-    Text = "Word Starter",
+    Text = "Manual Letter",
     Default = "",
-    Placeholder = "type Here...",
+    Placeholder = "Type Here...",
     Callback = function(v)
         if #v == 0 then return end
-        local res = getSuggestions(v, 6)
+        local l = v:sub(1,1):lower()
+        local res = getSuggestions(l, 6)
         if #res > 0 then
             wordLabel:SetText("Result: " .. table.concat(res, ", "))
+            updateHUD(l)
         else
-            wordLabel:SetText("No matches for: " .. v)
+            wordLabel:SetText("No matches for: " .. l)
         end
     end
 })
+
+task.spawn(function()
+    while task.wait(0.5) do
+        if not autoDetect then continue end
+        local foundLabel = nil
+        for _, v in pairs(lp.PlayerGui:GetDescendants()) do
+            if v:IsA("TextLabel") and v.Visible and #v.Text > 0 then
+                local t = v.Text:gsub("%s+", ""):lower()
+                if #t == 1 and t:match("[a-z]") then
+                    foundLabel = v
+                    break
+                elseif #t > 1 then
+                    local clean = t:match("([a-z]+)$")
+                    if clean and #clean > 1 then
+                        foundLabel = v
+                        break
+                    end
+                end
+            end
+        end
+        if foundLabel then
+            local t = foundLabel.Text:gsub("%s+", ""):lower()
+            local char = t:sub(-1)
+            if char:match("[a-z]") then
+                updateHUD(char)
+            end
+        end
+    end
+end)
+
 
 wordbox:AddSlider("MinLen", {
     Text = "Minimum Length",
@@ -172,6 +253,8 @@ save:BuildConfigSection(config)
 theme:ApplyToTab(config)
 save:LoadAutoloadConfig()
 
-lib:OnUnload(function() end)
+lib:OnUnload(function()
+    if hudGui then hudGui:Destroy() end
+end)
 
 pcall(bypass)
