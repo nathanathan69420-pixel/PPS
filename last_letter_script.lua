@@ -77,11 +77,12 @@ local hudOn = true
 local autoDetect = true
 local debugMode = false
 local lastDetected = ""
+local currentLetter = ""
 local hudGui = Instance.new("ScreenGui", get("CoreGui"))
 hudGui.Name = "AXISHUD"
 
 local hudFrame = Instance.new("Frame", hudGui)
-hudFrame.Size = UDim2.new(0, 300, 0, 45)
+hudFrame.Size = UDim2.new(0, 300, 0, 70)
 hudFrame.Position = UDim2.new(0.5, -150, 0, 45)
 hudFrame.BackgroundColor3 = Color3.fromRGB(22, 41, 58)
 hudFrame.BorderSizePixel = 0
@@ -94,7 +95,7 @@ stroke.Color = Color3.fromRGB(50, 85, 115)
 stroke.Thickness = 1.5
 
 local hudLabel = Instance.new("TextLabel", hudFrame)
-hudLabel.Size = UDim2.new(1, -20, 1, 0)
+hudLabel.Size = UDim2.new(1, -70, 1, 0)
 hudLabel.Position = UDim2.new(0, 10, 0, 0)
 hudLabel.BackgroundTransparency = 1
 hudLabel.TextColor3 = Color3.new(1, 1, 1)
@@ -102,6 +103,26 @@ hudLabel.Font = Enum.Font.GothamMedium
 hudLabel.TextSize = 13
 hudLabel.Text = "Waiting for game..."
 hudLabel.TextWrapped = true
+
+local rerollBtn = Instance.new("TextButton", hudFrame)
+rerollBtn.Size = UDim2.new(0, 50, 0, 25)
+rerollBtn.Position = UDim2.new(1, -60, 0, 10)
+rerollBtn.BackgroundColor3 = Color3.fromRGB(89, 131, 160)
+rerollBtn.BorderSizePixel = 0
+rerollBtn.Font = Enum.Font.GothamMedium
+rerollBtn.TextSize = 10
+rerollBtn.Text = "Reroll"
+rerollBtn.TextColor3 = Color3.new(1, 1, 1)
+local btnCorner = Instance.new("UICorner", rerollBtn)
+btnCorner.CornerRadius = UDim.new(0, 4)
+
+rerollBtn.MouseEnter:Connect(function()
+    rerollBtn.BackgroundColor3 = Color3.fromRGB(105, 150, 180)
+end)
+
+rerollBtn.MouseLeave:Connect(function()
+    rerollBtn.BackgroundColor3 = Color3.fromRGB(89, 131, 160)
+end)
 
 
 hudCol:AddToggle("HUDVisible", { Text = "Show HUD", Default = true, Callback = function(v) hudFrame.Visible = v end })
@@ -162,32 +183,85 @@ end
 
 local wordLabel = wordbox:AddLabel("Search results will appear here")
 
-local function updateHUD(text)
-    local l = text:sub(-1):lower()
-    if #l == 0 then return end
-    if l == lastDetected then return end
-    lastDetected = l
-    local suggests = getSuggestions(l, 3)
+local function updateHUD(text, forceReroll)
+    local cleanText = text:gsub("%s+", ""):lower()
+    if #cleanText == 0 then return end
+    
+    local letter = cleanText:sub(-1)
+    local prefix = cleanText:sub(1, #cleanText - 1)
+    
+    if not forceReroll and cleanText == lastDetected then return end
+    lastDetected = cleanText
+    currentLetter = letter
+    
+    local suggests = getSuggestions(prefix .. letter, 3)
     if #suggests > 0 then
-        hudLabel.Text = "Letter: " .. l:upper() .. " | Words: " .. table.concat(suggests, ", ")
+        local displayText = ""
+        if #prefix > 0 then
+            displayText = string.format("%s+%s: %s", prefix:upper(), letter:upper(), table.concat(suggests, ", "))
+        else
+            displayText = string.format("Letter: %s | Words: %s", letter:upper(), table.concat(suggests, ", "))
+        end
+        hudLabel.Text = displayText
     else
-        hudLabel.Text = "Letter: " .. l:upper() .. " | No words found"
+        if #prefix > 0 then
+            hudLabel.Text = string.format("%s+%s: No words found", prefix:upper(), letter:upper())
+        else
+            hudLabel.Text = string.format("Letter: %s | No words found", letter:upper())
+        end
     end
 end
 
+local function rerollWords()
+    if currentLetter == "" then return end
+    
+    local allSuggestions = getSuggestions(currentLetter, 20)
+    if #allSuggestions <= 3 then return end
+    
+    local used = {}
+    for word in hudLabel.Text:gmatch("(%a+)") do
+        used[word:lower()] = true
+    end
+    
+    local available = {}
+    for _, word in ipairs(allSuggestions) do
+        if not used[word:lower()] then
+            table.insert(available, word)
+        end
+    end
+    
+    if #available > 0 then
+        local newSuggestions = {}
+        for i = 1, math.min(3, #available) do
+            local idx = math.random(1, #available)
+            table.insert(newSuggestions, available[idx])
+            table.remove(available, idx)
+        end
+        
+        local prefix = lastDetected:sub(1, #lastDetected - 1)
+        if #prefix > 0 then
+            hudLabel.Text = string.format("%s+%s: %s", prefix:upper(), currentLetter:upper(), table.concat(newSuggestions, ", "))
+        else
+            hudLabel.Text = string.format("Letter: %s | Words: %s", currentLetter:upper(), table.concat(newSuggestions, ", "))
+        end
+    end
+end
+
+rerollBtn.MouseButton1Click:Connect(rerollWords)
+
 wordbox:AddInput("LetterInput", {
-    Text = "Manual Letter",
+    Text = "Manual Letter/Word",
     Default = "",
-    Placeholder = "Type Here...",
+    Placeholder = "Type letter or word...",
     Callback = function(v)
         if #v == 0 then return end
-        local l = v:sub(1,1):lower()
-        local res = getSuggestions(l, 6)
+        local clean = v:gsub("%s+", ""):lower()
+        local res = getSuggestions(clean, 6)
         if #res > 0 then
             wordLabel:SetText("Result: " .. table.concat(res, ", "))
-            updateHUD(l)
+            updateHUD(clean)
         else
-            wordLabel:SetText("No matches for: " .. l)
+            wordLabel:SetText("No matches for: " .. clean)
         end
     end
 })
@@ -269,13 +343,7 @@ task.spawn(function()
             hudLabel.Text = debugText
         elseif bestMatch then
             local text = bestMatch.text
-            local char = text:sub(-1)
-            
-            if #text == 1 then
-                updateHUD(text)
-            elseif char:match("[%a]") then
-                updateHUD(char)
-            end
+            updateHUD(text)
         end
     end
 end)
