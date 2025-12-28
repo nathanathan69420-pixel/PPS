@@ -296,14 +296,21 @@ local mainLoop = rs.RenderStepped:Connect(function()
     if triggerOn then
         local now = tick()
         if now - lastTrigger >= triggerDelay then
-            local ray = Ray.new(cam.CFrame.Position, cam.CFrame.LookVector * 1000)
+            local mousePos = uis:GetMouseLocation()
+            local ray = cam:ViewportPointToRay(mousePos.X, mousePos.Y)
             local hit = workspace:FindPartOnRayWithIgnoreList(ray, {lp.Character})
             if hit then
                 local model = hit:FindFirstAncestorOfClass("Model")
                 if model and plrs:GetPlayerFromCharacter(model) and plrs:GetPlayerFromCharacter(model) ~= lp then
-                    local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
-                    if tool then tool:Activate() end
-                    lastTrigger = now
+                    local targetPlayer = plrs:GetPlayerFromCharacter(model)
+                    local targetChar = targetPlayer.Character
+                    if passesChecks(targetPlayer, targetChar) then
+                        local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
+                        if tool then 
+                            tool:Activate() 
+                            lastTrigger = now
+                        end
+                    end
                 end
             end
         end
