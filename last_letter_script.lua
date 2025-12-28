@@ -274,60 +274,27 @@ wordbox:AddInput("LetterInput", {
 })
 
 task.spawn(function()
-    while task.wait(0.25) do
+    while task.wait(0.3) do
         if not autoDetect then continue end
         
-        local candidates = {}
-        local gameLabels = {}
-        local debugInfo = {}
-        local foundAny = false
+        local foundText = nil
         
         for _, v in pairs(lp.PlayerGui:GetDescendants()) do
             if v:IsA("TextLabel") and v.Visible and #v.Text > 0 then
-                local clean = v.Text:gsub("%s+", ""):lower()
-                if string.match(clean, "^[%a]+$") and #clean <= 20 then
-                    foundAny = true
-                    
-                    if #clean >= 2 then
-                        table.insert(gameLabels, {text = clean, label = v, priority = #clean})
-                        if debugMode then table.insert(debugInfo, string.format("WORD: '%s' (%s)", clean, v.Name)) end
-                    elseif #clean == 1 then
-                        table.insert(candidates, {text = clean, label = v, priority = 1})
-                        if debugMode then table.insert(debugInfo, string.format("LETTER: '%s' (%s)", clean, v.Name)) end
+                local clean = v.Text:gsub("%s+", "")
+                if #clean >= 1 and #clean <= 20 and string.match(clean, "^[%a]+$") then
+                    foundText = clean:lower()
+                    if debugMode then
+                        hudLabel.Text = "FOUND: '" .. foundText .. "' (" .. v.Name .. ")"
                     end
+                    break
                 end
             end
         end
         
-        local bestMatch = nil
-        local highestPriority = 0
-        
-        for _, candidate in ipairs(gameLabels) do
-            if candidate.priority > highestPriority then
-                highestPriority = candidate.priority
-                bestMatch = candidate
-            end
-        end
-        
-        if not bestMatch then
-            for _, candidate in ipairs(candidates) do
-                if candidate.priority > highestPriority then
-                    highestPriority = candidate.priority
-                    bestMatch = candidate
-                end
-            end
-        end
-        
-        if debugMode and #debugInfo > 0 then
-            local debugText = "DEBUG: " .. table.concat(debugInfo, " | ")
-            if bestMatch then
-                debugText = debugText .. " -> SELECTED: '" .. bestMatch.text .. "'"
-            end
-            hudLabel.Text = debugText
-        elseif bestMatch then
-            local text = bestMatch.text
-            updateHUD(text)
-        elseif not foundAny then
+        if foundText and not debugMode then
+            updateHUD(foundText)
+        elseif not foundText and not debugMode then
             updateWaitingAnimation()
         end
     end
