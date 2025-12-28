@@ -274,7 +274,7 @@ wordbox:AddInput("LetterInput", {
 })
 
 task.spawn(function()
-    while task.wait(0.4) do
+    while task.wait(0.3) do
         if not autoDetect then continue end
         
         local bestMatch = ""
@@ -282,19 +282,31 @@ task.spawn(function()
         
         for _, v in pairs(lp.PlayerGui:GetDescendants()) do
             if v:IsA("TextLabel") and v.Visible and #v.Text > 0 then
-                local clean = v.Text:gsub("%s+", ""):lower()
+                local text = v.Text
+                local clean = text:gsub("%s+", ""):lower()
                 
-                if clean:match("^[%a]+$") and #clean <= 15 then
+                if clean:match("^[%a]+$") and #clean <= 20 then
                     local score = 0
                     
-                    if #clean == 1 then
-                        score = 10
-                    elseif #clean >= 2 then
-                        score = 15 + (#clean * 2)
+                    if #clean >= 2 then
+                        score = 20 + (#clean * 3)
+                    else
+                        score = 5
                     end
                     
                     local nameLower = v.Name:lower()
-                    if nameLower:find("letter") or nameLower:find("word") or nameLower:find("text") then
+                    local parentName = v.Parent and v.Parent.Name:lower() or ""
+                    
+                    if nameLower:find("letter") or nameLower:find("word") or nameLower:find("text") or
+                       parentName:find("letter") or parentName:find("word") or parentName:find("text") then
+                        score = score + 15
+                    end
+                    
+                    if text:upper() == text then
+                        score = score + 10
+                    end
+                    
+                    if v.AbsoluteSize.X >= 50 and v.AbsoluteSize.Y >= 20 then
                         score = score + 5
                     end
                     
