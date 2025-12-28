@@ -144,17 +144,23 @@ end
 
 local Words = {}
 local WordMap = {}
+local loaded = false
 
 local function loadWords()
+    if loaded then return end
+    
     if isfile("words_alpha.txt") then
         local content = readfile("words_alpha.txt")
         for w in content:gmatch("[^\r\n]+") do
             local word = w:lower()
-            table.insert(Words, word)
-            local first = word:sub(1,1)
-            if not WordMap[first] then WordMap[first] = {} end
-            table.insert(WordMap[first], word)
+            if #word >= 1 and #word <= 20 then
+                table.insert(Words, word)
+                local first = word:sub(1,1)
+                if not WordMap[first] then WordMap[first] = {} end
+                table.insert(WordMap[first], word)
+            end
         end
+        loaded = true
     end
 end
 
@@ -274,7 +280,7 @@ wordbox:AddInput("LetterInput", {
 })
 
 task.spawn(function()
-    while task.wait(0.3) do
+    while task.wait(0.2) do
         if not autoDetect then continue end
         
         local bestMatch = ""
@@ -289,24 +295,29 @@ task.spawn(function()
                     local score = 0
                     
                     if #clean >= 2 then
-                        score = 20 + (#clean * 3)
+                        score = 50 + (#clean * 5)
                     else
-                        score = 5
+                        score = 10
                     end
                     
                     local nameLower = v.Name:lower()
                     local parentName = v.Parent and v.Parent.Name:lower() or ""
                     
                     if nameLower:find("letter") or nameLower:find("word") or nameLower:find("text") or
+                       nameLower:find("current") or nameLower:find("display") or
                        parentName:find("letter") or parentName:find("word") or parentName:find("text") then
-                        score = score + 15
+                        score = score + 25
                     end
                     
                     if text:upper() == text then
+                        score = score + 15
+                    end
+                    
+                    if v.AbsoluteSize.X >= 60 and v.AbsoluteSize.Y >= 25 then
                         score = score + 10
                     end
                     
-                    if v.AbsoluteSize.X >= 50 and v.AbsoluteSize.Y >= 20 then
+                    if v.Font.Size >= 14 then
                         score = score + 5
                     end
                     
