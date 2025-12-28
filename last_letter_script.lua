@@ -72,66 +72,89 @@ local cfgBox = config:AddLeftGroupbox("Config")
 status:AddLabel(string.format("Welcome, %s\nGame: Last Letter", lp.DisplayName), true)
 status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
+local charMin, charMax = 2, 8
+
 local function downloadWords()
     local url = "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_alpha.txt"
     if not isfile("words_alpha.txt") then
         local res = request({Url = url, Method = "GET"})
-        if res and res.Body then
-            writefile("words_alpha.txt", res.Body)
-        end
+        if res and res.Body then writefile("words_alpha.txt", res.Body) end
     end
 end
 
 local Words = {}
+local WordMap = {}
+
 local function loadWords()
     if isfile("words_alpha.txt") then
         local content = readfile("words_alpha.txt")
         for w in content:gmatch("[^\r\n]+") do
-            table.insert(Words, w)
+            local word = w:lower()
+            table.insert(Words, word)
+            local first = word:sub(1,1)
+            if not WordMap[first] then WordMap[first] = {} end
+            table.insert(WordMap[first], word)
         end
     end
 end
 
-local success = pcall(downloadWords)
-if success then pcall(loadWords) end
+pcall(downloadWords)
+pcall(loadWords)
 
-local function SuggestWords(letter, count)
-    letter = letter:lower()
-    local possible = {}
-    for _, w in ipairs(Words) do
-        if w:sub(1,1):lower() == letter then
-            table.insert(possible, w)
+local function getSuggestions(input, count)
+    input = input:lower()
+    local first = input:sub(1,1)
+    local pool = WordMap[first] or {}
+    local matches = {}
+
+    for _, w in ipairs(pool) do
+        if w:sub(1, #input) == input and #w >= charMin and #w <= charMax then
+            table.insert(matches, w)
         end
     end
-    local results = {}
-    local used = {}
-    local found = 0
-    while found < count and found < #possible do
-        local r = math.random(1, #possible)
-        if not used[r] then
-            table.insert(results, possible[r])
-            used[r] = true
-            found = found + 1
-        end
+
+    table.sort(matches, function(a, b) return #a < #b end)
+
+    local final = {}
+    for i = 1, math.min(count, #matches) do
+        table.insert(final, matches[i])
     end
-    return results
+    return final
 end
 
-local wordLabel = wordbox:AddLabel("Select a letter below")
+local wordLabel = wordbox:AddLabel("Search results will appear here")
+
 wordbox:AddInput("LetterInput", {
-    Text = "Starting Letter",
+    Text = "Word Starter",
     Default = "",
-    Placeholder = "a-z",
+    Placeholder = "type Here...",
     Callback = function(v)
-        local l = v:sub(1,1):lower()
-        if #l == 0 then return end
-        local suggests = SuggestWords(l, 5)
-        if #suggests > 0 then
-            wordLabel:SetText("Words: " .. table.concat(suggests, ", "))
+        if #v == 0 then return end
+        local res = getSuggestions(v, 6)
+        if #res > 0 then
+            wordLabel:SetText("Result: " .. table.concat(res, ", "))
         else
-            wordLabel:SetText("No words found for: " .. l)
+            wordLabel:SetText("No matches for: " .. v)
         end
     end
+})
+
+wordbox:AddSlider("MinLen", {
+    Text = "Minimum Length",
+    Default = 2,
+    Min = 1,
+    Max = 15,
+    Rounding = 0,
+    Callback = function(v) charMin = v end
+})
+
+wordbox:AddSlider("MaxLen", {
+    Text = "Maximum Length",
+    Default = 8,
+    Min = 1,
+    Max = 25,
+    Rounding = 0,
+    Callback = function(v) charMax = v end
 })
 
 local Options = lib.Options
