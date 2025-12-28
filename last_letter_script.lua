@@ -274,30 +274,41 @@ wordbox:AddInput("LetterInput", {
 })
 
 task.spawn(function()
-    while task.wait(0.5) do
+    while task.wait(0.4) do
         if not autoDetect then continue end
-        local foundLabel = nil
+        
+        local bestMatch = ""
+        local bestScore = 0
+        
         for _, v in pairs(lp.PlayerGui:GetDescendants()) do
             if v:IsA("TextLabel") and v.Visible and #v.Text > 0 then
-                local t = v.Text:gsub("%s+", ""):lower()
-                if #t == 1 and t:match("[a-z]") then
-                    foundLabel = v
-                    break
-                elseif #t > 1 then
-                    local clean = t:match("([a-z]+)$")
-                    if clean and #clean > 1 then
-                        foundLabel = v
-                        break
+                local original = v.Text
+                local clean = original:gsub("%s+", ""):lower()
+                
+                if string.match(clean, "^[%a]+$") and #clean <= 15 then
+                    local score = 0
+                    
+                    if #clean == 1 then
+                        score = 10
+                    elseif #clean >= 2 then
+                        score = 15 + (#clean * 2)
+                    end
+                    
+                    local nameLower = v.Name:lower()
+                    if nameLower:find("letter") or nameLower:find("word") or nameLower:find("text") then
+                        score = score + 5
+                    end
+                    
+                    if score > bestScore then
+                        bestScore = score
+                        bestMatch = clean
                     end
                 end
             end
         end
-        if foundLabel then
-            local t = foundLabel.Text:gsub("%s+", ""):lower()
-            local char = t:sub(-1)
-            if char:match("[a-z]") then
-                updateHUD(char)
-            end
+        
+        if #bestMatch > 0 then
+            updateHUD(bestMatch)
         end
     end
 end)
