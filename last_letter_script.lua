@@ -279,7 +279,6 @@ task.spawn(function()
         
         local candidates = {}
         local gameLabels = {}
-        local priorityLabels = {}
         local debugInfo = {}
         local foundAny = false
         
@@ -291,34 +290,30 @@ task.spawn(function()
                     local parentLower = v.Parent and v.Parent.Name:lower() or ""
                     foundAny = true
                     
-                    if #clean == 1 then
-                        local priority = 8
-                        if nameLower:find("letter") or nameLower:find("current") or parentLower:find("letter") then
-                            priority = 12
-                            table.insert(priorityLabels, {text = clean, label = v, priority = priority})
-                            if debugMode then table.insert(debugInfo, string.format("HIGH: '%s' (%s)", clean, v.Name)) end
-                        else
-                            table.insert(candidates, {text = clean, label = v, priority = priority})
-                            if debugMode then table.insert(debugInfo, string.format("CAND: '%s' (%s)", clean, v.Name)) end
-                        end
-                    elseif #clean >= 2 then
-                        local priority = 10
-                        if #clean >= 4 then
-                            priority = priority + 2
-                        end
-                        if #clean >= 6 then
-                            priority = priority + 2
-                        end
+                    if #clean >= 2 then
+                        local priority = 15
+                        if #clean >= 3 then priority = priority + 2 end
+                        if #clean >= 4 then priority = priority + 2 end
+                        if #clean >= 5 then priority = priority + 3 end
+                        
                         if nameLower:find("word") or nameLower:find("current") or parentLower:find("word") or
                            nameLower:find("pattern") or nameLower:find("sequence") or parentLower:find("pattern") or
-                           nameLower:find("input") or parentLower:find("input") then
-                            priority = priority + 8
-                            table.insert(gameLabels, {text = clean, label = v, priority = priority})
-                            if debugMode then table.insert(debugInfo, string.format("WORD: '%s' (%s)", clean, v.Name)) end
-                        else
-                            table.insert(candidates, {text = clean, label = v, priority = priority})
-                            if debugMode and #debugInfo < 5 then table.insert(debugInfo, string.format("CAND: '%s' (%s)", clean, v.Name)) end
+                           nameLower:find("input") or parentLower:find("input") or
+                           nameLower:find("text") or parentLower:find("text") or
+                           nameLower:find("display") or parentLower:find("display") or
+                           nameLower:find("label") or parentLower:find("label") then
+                            priority = priority + 10
                         end
+                        
+                        table.insert(gameLabels, {text = clean, label = v, priority = priority})
+                        if debugMode then table.insert(debugInfo, string.format("WORD: '%s' (%s) prio:%d", clean, v.Name, priority)) end
+                    elseif #clean == 1 then
+                        local priority = 5
+                        if nameLower:find("letter") or nameLower:find("current") or parentLower:find("letter") then
+                            priority = 8
+                        end
+                        table.insert(candidates, {text = clean, label = v, priority = priority})
+                        if debugMode then table.insert(debugInfo, string.format("LETTER: '%s' (%s) prio:%d", clean, v.Name, priority)) end
                     end
                 end
             end
@@ -327,19 +322,10 @@ task.spawn(function()
         local bestMatch = nil
         local highestPriority = 0
         
-        for _, candidate in ipairs(priorityLabels) do
+        for _, candidate in ipairs(gameLabels) do
             if candidate.priority > highestPriority then
                 highestPriority = candidate.priority
                 bestMatch = candidate
-            end
-        end
-        
-        if not bestMatch then
-            for _, candidate in ipairs(gameLabels) do
-                if candidate.priority > highestPriority then
-                    highestPriority = candidate.priority
-                    bestMatch = candidate
-                end
             end
         end
         
