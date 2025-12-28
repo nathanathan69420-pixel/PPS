@@ -135,32 +135,83 @@ hudCol:AddButton({ Text = "Reset Detection", Func = function() lastDetected = ""
 local charMin, charMax = 2, 8
 
 local function downloadWords()
-    local url = "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_alpha.txt"
-    if not isfile("words_alpha.txt") then
+    local urls = {
+        "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_dictionary.json",
+        "https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-usa-no-swears.txt"
+    }
+    
+    for i, url in ipairs(urls) do
         local res = request({Url = url, Method = "GET"})
-        if res and res.Body then writefile("words_alpha.txt", res.Body) end
+        if res and res.Body then
+            if url:find("json") then
+                writefile("words_dictionary.json", res.Body)
+            else
+                writefile("words_alpha.txt", res.Body)
+            end
+            break
+        end
     end
 end
 
 local Words = {}
 local WordMap = {}
 local loaded = false
+local commonWords = {
+    ["the"] = true, ["and"] = true, ["a"] = true, ["an"] = true,
+    ["is"] = true, ["it"] = true, ["to"] = true, ["of"] = true,
+    ["in"] = true, ["for"] = true, ["on"] = true, ["with"] = true,
+    ["as"] = true, ["at"] = true, ["by"] = true, ["or"] = true,
+}
+
+local function loadFromJSON(content)
+    local success, wordsJson = pcall(function()
+        return game:GetService("HttpService"):JSONDecode(content)
+    end)
+    
+    if success then
+        for word, _ in pairs(wordsJson) do
+            local len = #word
+            if len >= 1 and len <= 20 and not commonWords[word:lower()] then
+                table.insert(Words, word:lower())
+                local first = word:lower():sub(1,1)
+                if not WordMap[first] then WordMap[first] = {} end
+                table.insert(WordMap[first], word:lower())
+            end
+        end
+        return true
+    end
+    return false
+end
+
+local function loadFromText(content)
+    for word in content:gmatch("[^\r\n]+") do
+        local len = #word
+        if len >= 1 and len <= 20 and not commonWords[word:lower()] then
+            table.insert(Words, word:lower())
+            local first = word:lower():sub(1,1)
+            if not WordMap[first] then WordMap[first] = {} end
+            table.insert(WordMap[first], word:lower())
+        end
+    end
+    return #Words > 0
+end
 
 local function loadWords()
     if loaded then return end
     
+    if isfile("words_dictionary.json") then
+        local content = readfile("words_dictionary.json")
+        if loadFromJSON(content) then
+            loaded = true
+            return
+        end
+    end
+    
     if isfile("words_alpha.txt") then
         local content = readfile("words_alpha.txt")
-        for w in content:gmatch("[^\r\n]+") do
-            local word = w:lower()
-            if #word >= 1 and #word <= 20 then
-                table.insert(Words, word)
-                local first = word:sub(1,1)
-                if not WordMap[first] then WordMap[first] = {} end
-                table.insert(WordMap[first], word)
-            end
+        if loadFromText(content) then
+            loaded = true
         end
-        loaded = true
     end
 end
 
@@ -169,23 +220,34 @@ pcall(loadWords)
 
 local function getSuggestions(input, count)
     input = input:lower()
-    local first = input:sub(1,1)
-    local pool = WordMap[first] or {}
-    local matches = {}
-
-    for _, w in ipairs(pool) do
-        if w:sub(1, #input) == input and #w >= charMin and #w <= charMax then
-            table.insert(matches, w)
+    local suggestions = {}
+    
+    for _, w in ipairs(Words) do
+        if w:sub(1, #input) == input and w ~= input then
+            table.insert(suggestions, w)
         end
     end
-
-    table.sort(matches, function(a, b) return #a < #b end)
-
-    local final = {}
-    for i = 1, math.min(count, #matches) do
-        table.insert(final, matches[i])
+    
+    table.sort(suggestions, function(a, b)
+        local idealLength = 6
+        local distA = math.abs(#a - idealLength)
+        local distB = math.abs(#b - idealLength)
+        
+        if distA == distB then
+            if #a == #b then
+                return a < b
+            end
+            return #a < #b
+        end
+        return distA < distB
+    end)
+    
+    local result = {}
+    for i = 1, math.min(count, #suggestions) do
+        table.insert(result, suggestions[i])
     end
-    return final
+    
+    return result
 end
 
 local wordLabel = wordbox:AddLabel("Search results will appear here")
