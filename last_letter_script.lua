@@ -78,6 +78,7 @@ local autoDetect = true
 local debugMode = false
 local lastDetected = ""
 local currentLetter = ""
+local waitingAnimation = 0
 local hudGui = Instance.new("ScreenGui", get("CoreGui"))
 hudGui.Name = "AXISHUD"
 
@@ -183,6 +184,12 @@ end
 
 local wordLabel = wordbox:AddLabel("Search results will appear here")
 
+local function updateWaitingAnimation()
+    waitingAnimation = (waitingAnimation + 1) % 4
+    local dots = string.rep(".", waitingAnimation)
+    hudLabel.Text = "Waiting" .. dots
+end
+
 local function updateHUD(text, forceReroll)
     local cleanText = text:gsub("%s+", ""):lower()
     if #cleanText == 0 then return end
@@ -274,13 +281,15 @@ task.spawn(function()
         local gameLabels = {}
         local priorityLabels = {}
         local debugInfo = {}
+        local foundAny = false
         
         for _, v in pairs(lp.PlayerGui:GetDescendants()) do
             if v:IsA("TextLabel") and v.Visible and #v.Text > 0 then
                 local clean = v.Text:gsub("%s+", ""):lower()
-                if string.match(clean, "^[%a]+$") then
+                if string.match(clean, "^[%a]+$") and #clean <= 20 then
                     local nameLower = v.Name:lower()
                     local parentLower = v.Parent and v.Parent.Name:lower() or ""
+                    foundAny = true
                     
                     if #clean == 1 then
                         local priority = 10
@@ -292,9 +301,10 @@ task.spawn(function()
                             table.insert(candidates, {text = clean, label = v, priority = priority})
                             if debugMode then table.insert(debugInfo, string.format("CAND: '%s' (%s)", clean, v.Name)) end
                         end
-                    elseif #clean >= 2 and #clean <= 15 then
+                    elseif #clean >= 2 then
                         local priority = 5
-                        if nameLower:find("word") or nameLower:find("current") or parentLower:find("word") then
+                        if nameLower:find("word") or nameLower:find("current") or parentLower:find("word") or
+                           nameLower:find("pattern") or nameLower:find("sequence") or parentLower:find("pattern") then
                             priority = 15
                             table.insert(gameLabels, {text = clean, label = v, priority = priority})
                             if debugMode then table.insert(debugInfo, string.format("WORD: '%s' (%s)", clean, v.Name)) end
@@ -344,6 +354,8 @@ task.spawn(function()
         elseif bestMatch then
             local text = bestMatch.text
             updateHUD(text)
+        elseif not foundAny then
+            updateWaitingAnimation()
         end
     end
 end)
