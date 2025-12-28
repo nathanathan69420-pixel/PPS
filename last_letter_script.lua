@@ -74,19 +74,19 @@ status:AddLabel(string.format("Welcome, %s\nGame: Last Letter", lp.DisplayName),
 status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
 local function downloadWords()
-    local url = "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words.txt"
-    if not isfile("words.txt") then
+    local url = "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_alpha.txt"
+    if not isfile("words_alpha.txt") then
         local res = request({Url = url, Method = "GET"})
         if res and res.Body then
-            writefile("words.txt", res.Body)
+            writefile("words_alpha.txt", res.Body)
         end
     end
 end
 
 local Words = {}
 local function loadWords()
-    if isfile("words.txt") then
-        local content = readfile("words.txt")
+    if isfile("words_alpha.txt") then
+        local content = readfile("words_alpha.txt")
         for w in content:gmatch("[^\r\n]+") do
             table.insert(Words, w)
         end
