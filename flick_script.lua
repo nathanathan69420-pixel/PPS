@@ -33,6 +33,16 @@ local function bypass()
     setreadonly(gm, true)
 end
 
+local function safeClick()
+    local vim = game:GetService("VirtualInputManager")
+    if vim then
+        local pos = uis:GetMouseLocation()
+        vim:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
+        task.wait(0.01)
+        vim:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
+    end
+end
+
 
 local function get(name)
     local s = game:GetService(name)
@@ -308,7 +318,17 @@ local mainLoop = rs.RenderStepped:Connect(function()
                         local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
                         if tool then 
                             tool:Activate() 
+                            task.wait(0.05)
+                            safeClick()
                             lastTrigger = now
+                        else
+                            local humanoid = lp.Character:FindFirstChildOfClass("Humanoid")
+                            if humanoid then
+                                humanoid:Activate()
+                                task.wait(0.05)
+                                safeClick()
+                                lastTrigger = now
+                            end
                         end
                     end
                 end
