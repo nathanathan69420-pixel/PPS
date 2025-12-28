@@ -67,7 +67,6 @@ local config = win:AddTab("Settings", "settings")
 
 local status = home:AddLeftGroupbox("Status")
 local wordbox = main:AddLeftGroupbox("Word Helper")
-local visuals = main:AddRightGroupbox("Visuals")
 local cfgBox = config:AddLeftGroupbox("Config")
 
 status:AddLabel(string.format("Welcome, %s\nGame: Last Letter", lp.DisplayName), true)
@@ -135,70 +134,10 @@ wordbox:AddInput("LetterInput", {
     end
 })
 
-visuals:AddToggle("ESPEnabled", { Text = "General ESP Toggle", Default = false }):AddKeyPicker("ESPKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "ESP" })
-visuals:AddToggle("BoxESP", { Text = "Box", Default = true }):AddKeyPicker("BoxKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Box" })
-
-local Toggles = lib.Toggles
 local Options = lib.Options
-
-local espboxes = {}
-local function removeplr(name)
-    if espboxes[name] then espboxes[name]:Remove() espboxes[name] = nil end
-end
-
-local function getCharMinMax(char)
-    local minX, maxX = math.huge, -math.huge
-    local minY, maxY = math.huge, -math.huge
-    for _, part in pairs(char:GetChildren()) do
-        if part:IsA("BasePart") then
-            local screenPos, onScreen = cam:WorldToViewportPoint(part.Position)
-            if onScreen then
-                minX = math.min(minX, screenPos.X)
-                maxX = math.max(maxX, screenPos.X)
-                minY = math.min(minY, screenPos.Y)
-                maxY = math.max(maxY, screenPos.Y)
-            end
-        end
-    end
-    return maxX, maxY, minX, minY
-end
-
-local function mainESP(target)
-    if not target or not target:IsA("Model") then return end
-    local name = target.Name
-    local espOn = Toggles.ESPEnabled and Toggles.ESPEnabled.Value
-    local boxOn = Toggles.BoxESP and Toggles.BoxESP.Value
-    
-    local maxX, maxY, minX, minY = getCharMinMax(target)
-    if maxX == -math.huge then return end
-
-    if not espboxes[name] then
-        espboxes[name] = Drawing.new("Square")
-        espboxes[name].Transparency = 0.5
-        espboxes[name].Color = Color3.new(1, 1, 1)
-        espboxes[name].Thickness = 1
-        espboxes[name].Filled = false
-    end
-    espboxes[name].Size = Vector2.new(maxX - minX, maxY - minY)
-    espboxes[name].Position = Vector2.new(minX, minY)
-    espboxes[name].Visible = espOn and boxOn
-end
-
-local mainLoop = rs.RenderStepped:Connect(function()
-    local espOn = Toggles.ESPEnabled and Toggles.ESPEnabled.Value
-    local alive = {}
-    for _, plr in pairs(plrs:GetPlayers()) do
-        if plr ~= lp and plr.Character and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health > 0 then
-            alive[plr.Name] = true
-            if espOn then mainESP(plr.Character) end
-        end
-    end
-    for name, _ in pairs(espboxes) do if not alive[name] then removeplr(name) end end
-end)
-
 cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
 cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
-lib.ToggleKeybind = lib.Options.MenuKeybind
+lib.ToggleKeybind = Options.MenuKeybind
 
 theme:SetLibrary(lib)
 save:SetLibrary(lib)
@@ -210,9 +149,6 @@ save:BuildConfigSection(config)
 theme:ApplyToTab(config)
 save:LoadAutoloadConfig()
 
-lib:OnUnload(function()
-    if mainLoop then mainLoop:Disconnect() end
-    for name, _ in pairs(espboxes) do removeplr(name) end
-end)
+lib:OnUnload(function() end)
 
 pcall(bypass)
