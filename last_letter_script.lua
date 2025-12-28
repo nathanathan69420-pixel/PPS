@@ -75,6 +75,7 @@ status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
 local hudOn = true
 local autoDetect = true
+local debugMode = false
 local lastDetected = ""
 local hudGui = Instance.new("ScreenGui", get("CoreGui"))
 hudGui.Name = "AXISHUD"
@@ -105,6 +106,7 @@ hudLabel.TextWrapped = true
 
 hudCol:AddToggle("HUDVisible", { Text = "Show HUD", Default = true, Callback = function(v) hudFrame.Visible = v end })
 hudCol:AddToggle("AutoDetect", { Text = "Auto Detect Letter", Default = true, Callback = function(v) autoDetect = v end })
+hudCol:AddToggle("DebugMode", { Text = "Debug Mode", Default = false, Callback = function(v) debugMode = v end })
 hudCol:AddButton({ Text = "Reset Detection", Func = function() lastDetected = "" hudLabel.Text = "Waiting..." end })
 
 
@@ -191,28 +193,87 @@ wordbox:AddInput("LetterInput", {
 })
 
 task.spawn(function()
-    while task.wait(0.5) do
+    while task.wait(0.25) do
         if not autoDetect then continue end
-        local foundLabel = nil
+        
+        local candidates = {}
+        local gameLabels = {}
+        local priorityLabels = {}
+        local debugInfo = {}
+        
         for _, v in pairs(lp.PlayerGui:GetDescendants()) do
             if v:IsA("TextLabel") and v.Visible and #v.Text > 0 then
-                local t = v.Text:gsub("%s+", ""):lower()
-                if #t == 1 and t:match("[a-z]") then
-                    foundLabel = v
-                    break
-                elseif #t > 1 then
-                    local clean = t:match("([a-z]+)$")
-                    if clean and #clean > 1 then
-                        foundLabel = v
-                        break
+                local clean = v.Text:gsub("%s+", ""):lower()
+                if string.match(clean, "^[%a]+$") then
+                    local nameLower = v.Name:lower()
+                    local parentLower = v.Parent and v.Parent.Name:lower() or ""
+                    
+                    if #clean == 1 then
+                        local priority = 10
+                        if nameLower:find("letter") or nameLower:find("current") or parentLower:find("letter") then
+                            priority = 20
+                            table.insert(priorityLabels, {text = clean, label = v, priority = priority})
+                            if debugMode then table.insert(debugInfo, string.format("HIGH: '%s' (%s)", clean, v.Name)) end
+                        else
+                            table.insert(candidates, {text = clean, label = v, priority = priority})
+                            if debugMode then table.insert(debugInfo, string.format("CAND: '%s' (%s)", clean, v.Name)) end
+                        end
+                    elseif #clean >= 2 and #clean <= 15 then
+                        local priority = 5
+                        if nameLower:find("word") or nameLower:find("current") or parentLower:find("word") then
+                            priority = 15
+                            table.insert(gameLabels, {text = clean, label = v, priority = priority})
+                            if debugMode then table.insert(debugInfo, string.format("WORD: '%s' (%s)", clean, v.Name)) end
+                        else
+                            table.insert(candidates, {text = clean, label = v, priority = priority})
+                            if debugMode and #debugInfo < 5 then table.insert(debugInfo, string.format("CAND: '%s' (%s)", clean, v.Name)) end
+                        end
                     end
                 end
             end
         end
-        if foundLabel then
-            local t = foundLabel.Text:gsub("%s+", ""):lower()
-            local char = t:sub(-1)
-            if char:match("[a-z]") then
+        
+        local bestMatch = nil
+        local highestPriority = 0
+        
+        for _, candidate in ipairs(priorityLabels) do
+            if candidate.priority > highestPriority then
+                highestPriority = candidate.priority
+                bestMatch = candidate
+            end
+        end
+        
+        if not bestMatch then
+            for _, candidate in ipairs(gameLabels) do
+                if candidate.priority > highestPriority then
+                    highestPriority = candidate.priority
+                    bestMatch = candidate
+                end
+            end
+        end
+        
+        if not bestMatch then
+            for _, candidate in ipairs(candidates) do
+                if candidate.priority > highestPriority then
+                    highestPriority = candidate.priority
+                    bestMatch = candidate
+                end
+            end
+        end
+        
+        if debugMode and #debugInfo > 0 then
+            local debugText = "DEBUG: " .. table.concat(debugInfo, " | ")
+            if bestMatch then
+                debugText = debugText .. " -> SELECTED: '" .. bestMatch.text .. "'"
+            end
+            hudLabel.Text = debugText
+        elseif bestMatch then
+            local text = bestMatch.text
+            local char = text:sub(-1)
+            
+            if #text == 1 then
+                updateHUD(text)
+            elseif char:match("[%a]") then
                 updateHUD(char)
             end
         end
