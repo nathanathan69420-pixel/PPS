@@ -224,7 +224,10 @@ local function getSuggestions(input, count)
     
     for _, w in ipairs(Words) do
         if w:sub(1, #input) == input and w ~= input then
-            table.insert(suggestions, w)
+            local len = #w
+            if len >= charMin and len <= charMax then
+                table.insert(suggestions, w)
+            end
         end
     end
     
@@ -290,17 +293,17 @@ end
 local function rerollWords()
     if currentLetter == "" then return end
     
-    local allSuggestions = getSuggestions(currentLetter, 20)
+    local allSuggestions = getSuggestions(currentLetter, 50)
     if #allSuggestions <= 3 then return end
     
-    local used = {}
+    local currentWords = {}
     for word in hudLabel.Text:gmatch("(%a+)") do
-        used[word:lower()] = true
+        currentWords[word:lower()] = true
     end
     
     local available = {}
     for _, word in ipairs(allSuggestions) do
-        if not used[word:lower()] then
+        if not currentWords[word:lower()] then
             table.insert(available, word)
         end
     end
