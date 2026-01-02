@@ -291,9 +291,9 @@ local function updateHUD(text, forceReroll)
 end
 
 local function rerollWords()
-    if currentLetter == "" then return end
+    if lastDetected == "" then return end
     
-    local allSuggestions = getSuggestions(currentLetter, 50)
+    local allSuggestions = getSuggestions(lastDetected, 50)
     if #allSuggestions <= 3 then return end
     
     local currentWords = {}
