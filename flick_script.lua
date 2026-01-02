@@ -220,15 +220,17 @@ local function isVisible(part, char)
     if not part then return false end
     local origin = cam.CFrame.Position
     local direction = part.Position - origin
-    local ray = Ray.new(origin, direction)
-    local hit, pos = workspace:FindPartOnRayWithIgnoreList(ray, {lp.Character})
-    
-    if hit and hit:IsDescendantOf(char) then
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterDescendantsInstances = {lp.Character}
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    local raycastResult = workspace:Raycast(origin, direction, raycastParams)
+
+    if raycastResult and raycastResult.Instance:IsDescendantOf(char) then
         return true
     end
-    
-    if not hit then return true end
-    return (pos - part.Position).Magnitude < 1
+
+    if not raycastResult then return true end
+    return (raycastResult.Position - part.Position).Magnitude < 1
 end
 
 local function hasForceField(char)
