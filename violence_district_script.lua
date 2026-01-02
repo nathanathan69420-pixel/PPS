@@ -20,21 +20,23 @@ local function bypass()
     
     gm.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
+        local args = {...}
         if not checkcaller() then
             if method == "Kick" and self == lp then return nil end
-            if method == "GetService" then
-                local service = select(1, ...)
-                if service == "VirtualInputManager" or service == "HttpService" or service == "TeleportService" then
+            if method == "GetService" or method == "getService" then
+                local s = args[1]
+                if s == "VirtualInputManager" or s == "HttpService" or s == "TeleportService" or s == "GuiService" then
                     return Instance.new("Folder")
                 end
             end
+            if method == "OpenBrowserWindow" or method == "OpenVideo" then return nil end
         end
         return old_nc(self, ...)
     end)
     
     gm.__index = newcclosure(function(self, k)
         if not checkcaller() then
-            if k == "Drawing" or k == "VirtualInputManager" or k == "HttpService" or k == "TeleportService" then
+            if k == "Drawing" or k == "VirtualInputManager" or k == "HttpService" or k == "TeleportService" or k == "GuiService" then
                 return Instance.new("Folder")
             end
         end
@@ -43,7 +45,7 @@ local function bypass()
     
     gm.__newindex = newcclosure(function(self, k, v)
         if not checkcaller() then
-            if k == "Enabled" and self:IsA("Script") then
+            if k == "Enabled" and (self:IsA("Script") or self:IsA("LocalScript")) then
                 return
             end
         end
@@ -52,16 +54,10 @@ local function bypass()
     
     setreadonly(gm, true)
     
-    local oldHttpGet = game.HttpGet
-    game.HttpGet = function(...)
+    local oldHttpGet = g.HttpGet
+    g.HttpGet = function(self, url, ...)
         if not checkcaller() then return "" end
-        return oldHttpGet(...)
-    end
-    
-    local oldHttpGetAsync = game.HttpGetAsync
-    game.HttpGetAsync = function(...)
-        if not checkcaller() then return "" end
-        return oldHttpGetAsync(...)
+        return oldHttpGet(self, url, ...)
     end
 end
 
@@ -113,8 +109,9 @@ local playerESPData = {}
 local chamsData = {}
 
 generatorsBox:AddToggle("GeneratorESP", { Text = "Generator ESP", Default = false }):AddKeyPicker("GeneratorESPKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Generator ESP" }):AddColorPicker("GeneratorESPColor", { Default = Color3.fromRGB(255, 255, 0), Title = "Generator ESP Color" })
+generatorsBox:AddDropdown("GeneratorESPType", { Values = { "Highlight", "Box" }, Default = "Highlight", Text = "ESP Type" })
 
-visualsBox:AddToggle("Chams", { Text = "Chams", Default = false })
+visualsBox:AddToggle("Chams", { Text = "Chams", Default = false }):AddColorPicker("ChamsColor", { Default = Color3.fromRGB(255, 255, 255), Title = "Chams Color" })
 visualsBox:AddToggle("Box", { Text = "Box ESP", Default = false })
 visualsBox:AddDropdown("BoxType", { Values = { "2D", "3D" }, Default = "2D", Text = "Box Type" })
 visualsBox:AddToggle("KillerESP", { Text = "Killer ESP", Default = false })
@@ -123,6 +120,7 @@ visualsBox:AddToggle("SurvivorESP", { Text = "Survivor ESP", Default = false })
 local function updateGeneratorESP()
     local enabled = Toggles.GeneratorESP and Toggles.GeneratorESP.Value
     local color = Options.GeneratorESPColor and Options.GeneratorESPColor.Value or Color3.new(1, 1, 0)
+    local type = Options.GeneratorESPType and Options.GeneratorESPType.Value or "Highlight"
     
     if enabled then
         local gens = workspace:FindFirstChild("Generators") or workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Generators")
@@ -139,35 +137,42 @@ local function updateGeneratorESP()
         for _, gen in pairs(list) do
             if gen:IsA("Model") then
                 if not generatorESPData[gen] then
+                    local h = Instance.new("Highlight")
+                    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    h.FillTransparency = 0.5
+                    h.OutlineTransparency = 0
+                    h.Parent = get("CoreGui")
+                    
                     generatorESPData[gen] = {
                         box = Drawing.new("Square"),
-                        text = Drawing.new("Text")
+                        highlight = h
                     }
                     generatorESPData[gen].box.Thickness = 1
                     generatorESPData[gen].box.Filled = false
-                    generatorESPData[gen].text.Size = 13
-                    generatorESPData[gen].text.Font = 2
-                    generatorESPData[gen].text.Outline = true
-                    generatorESPData[gen].text.Text = "Generator"
                 end
                 
                 local data = generatorESPData[gen]
-                data.box.Color = color
-                data.text.Color = color
-                
                 local part = gen.PrimaryPart or gen:FindFirstChildWhichIsA("BasePart")
-                if part then
-                    local pos, screen = cam:WorldToViewportPoint(part.Position)
-                    if screen then
-                        local size = Vector2.new(50, 50)
-                        data.box.Position = Vector2.new(pos.X - size.X/2, pos.Y - size.Y/2)
-                        data.box.Size = size
-                        data.box.Visible = true
-                        data.text.Position = Vector2.new(pos.X, pos.Y - 35)
-                        data.text.Visible = true
-                    else
-                        data.box.Visible = false
-                        data.text.Visible = false
+                
+                if type == "Highlight" then
+                    data.box.Visible = false
+                    data.highlight.FillColor = color
+                    data.highlight.OutlineColor = color
+                    data.highlight.Adornee = gen
+                    data.highlight.Enabled = true
+                elseif type == "Box" then
+                    data.highlight.Enabled = false
+                    if part then
+                        local pos, screen = cam:WorldToViewportPoint(part.Position)
+                        if screen then
+                            local size = Vector2.new(50, 50)
+                            data.box.Position = Vector2.new(pos.X - size.X/2, pos.Y - size.Y/2)
+                            data.box.Size = size
+                            data.box.Color = color
+                            data.box.Visible = true
+                        else
+                            data.box.Visible = false
+                        end
                     end
                 end
             end
@@ -175,7 +180,7 @@ local function updateGeneratorESP()
     else
         for _, data in pairs(generatorESPData) do
             data.box.Visible = false
-            data.text.Visible = false
+            if data.highlight then data.highlight.Enabled = false end
         end
     end
 end
@@ -186,6 +191,7 @@ local function updatePlayerESP()
     local bType = Options.BoxType and Options.BoxType.Value or "2D"
     local kESP = Toggles.KillerESP and Toggles.KillerESP.Value
     local sESP = Toggles.SurvivorESP and Toggles.SurvivorESP.Value
+    local chamColor = Options.ChamsColor and Options.ChamsColor.Value or Color3.new(1, 1, 1)
     
     for _, player in pairs(plrs:GetPlayers()) do
         if player ~= lp then
@@ -194,105 +200,109 @@ local function updatePlayerESP()
                 local isK = player.Team and player.Team.TeamColor == BrickColor.new("Crimson")
                 local isS = player.Team and player.Team.TeamColor == BrickColor.new("Deep blue")
                 
-                local show = false
-                local color = Color3.new(1, 1, 1)
+                local showHighlight = false
+                local highlightColor = Color3.new(1, 1, 1)
                 
                 if kESP and isK then
-                    show = true
-                    color = Color3.new(1, 0, 0)
+                    showHighlight = true
+                    highlightColor = Color3.new(1, 0, 0)
                 elseif sESP and isS then
-                    show = true
-                    color = Color3.new(0, 0, 1)
+                    showHighlight = true
+                    highlightColor = Color3.new(0, 0, 1)
                 elseif chams then
-                    show = true
-                    color = Color3.new(1, 1, 1)
+                    showHighlight = true
+                    highlightColor = chamColor
                 end
                 
-                if show then
-                    if not playerESPData[player] then
-                        playerESPData[player] = {
-                            box2D = Drawing.new("Square"),
-                            box3D = {},
-                            text = Drawing.new("Text")
-                        }
-                        playerESPData[player].box2D.Thickness = 1
-                        playerESPData[player].box2D.Filled = false
-                        playerESPData[player].text.Size = 13
-                        playerESPData[player].text.Font = 2
-                        playerESPData[player].text.Outline = true
-                        for i = 1, 12 do
-                            table.insert(playerESPData[player].box3D, Drawing.new("Line"))
-                        end
+                if not playerESPData[player] then
+                    playerESPData[player] = {
+                        box2D = Drawing.new("Square"),
+                        box3D = {},
+                        text = Drawing.new("Text")
+                    }
+                    playerESPData[player].box2D.Thickness = 1
+                    playerESPData[player].box2D.Filled = false
+                    playerESPData[player].text.Size = 13
+                    playerESPData[player].text.Font = 2
+                    playerESPData[player].text.Outline = true
+                    for i = 1, 12 do
+                        table.insert(playerESPData[player].box3D, Drawing.new("Line"))
                     end
-                    
-                    local data = playerESPData[player]
-                    data.box2D.Color = color
-                    data.text.Color = color
-                    for _, l in pairs(data.box3D) do l.Color = color end
-                    
-                    local root = char.HumanoidRootPart
-                    local head = char:FindFirstChild("Head")
-                    local pos, screen = cam:WorldToViewportPoint(root.Position)
-                    
-                    if screen then
-                        if box then
-                            if bType == "2D" and head then
-                                local hPos = cam:WorldToViewportPoint(head.Position)
-                                local h = math.abs(hPos.Y - pos.Y) * 1.2
-                                local w = h * 0.6
-                                data.box2D.Position = Vector2.new(pos.X - w/2, hPos.Y - (h*0.1))
-                                data.box2D.Size = Vector2.new(w, h)
+                end
+                
+                local data = playerESPData[player]
+                local root = char.HumanoidRootPart
+                local head = char:FindFirstChild("Head")
+                local pos, screen = cam:WorldToViewportPoint(root.Position)
+                
+                if screen then
+                    if box then
+                        local cf, size = char:GetBoundingBox()
+                        local corners = {
+                            cf * CFrame.new(size.X/2, size.Y/2, size.Z/2),
+                            cf * CFrame.new(-size.X/2, size.Y/2, size.Z/2),
+                            cf * CFrame.new(size.X/2, -size.Y/2, size.Z/2),
+                            cf * CFrame.new(-size.X/2, -size.Y/2, size.Z/2),
+                            cf * CFrame.new(size.X/2, size.Y/2, -size.Z/2),
+                            cf * CFrame.new(-size.X/2, size.Y/2, -size.Z/2),
+                            cf * CFrame.new(size.X/2, -size.Y/2, -size.Z/2),
+                            cf * CFrame.new(-size.X/2, -size.Y/2, -size.Z/2)
+                        }
+
+                        data.box2D.Color = highlightColor
+                        for _, l in pairs(data.box3D) do l.Color = highlightColor end
+
+                        if bType == "2D" then
+                            local minX, minY = math.huge, math.huge
+                            local maxX, maxY = -math.huge, -math.huge
+                            local allOff = true
+                            for _, c in pairs(corners) do
+                                local p, s = cam:WorldToViewportPoint(c.Position)
+                                if s then
+                                    allOff = false
+                                    minX = math.min(minX, p.X)
+                                    minY = math.min(minY, p.Y)
+                                    maxX = math.max(maxX, p.X)
+                                    maxY = math.max(maxY, p.Y)
+                                end
+                            end
+
+                            if not allOff then
+                                data.box2D.Position = Vector2.new(minX, minY)
+                                data.box2D.Size = Vector2.new(maxX - minX, maxY - minY)
                                 data.box2D.Visible = true
-                                for _, l in pairs(data.box3D) do l.Visible = false end
-                            elseif bType == "3D" then
-                                data.box2D.Visible = false
-                                local cf, size = char:GetBoundingBox()
-                                local corners = {
-                                    cf * CFrame.new(size.X/2, size.Y/2, size.Z/2),
-                                    cf * CFrame.new(-size.X/2, size.Y/2, size.Z/2),
-                                    cf * CFrame.new(size.X/2, -size.Y/2, size.Z/2),
-                                    cf * CFrame.new(-size.X/2, -size.Y/2, size.Z/2),
-                                    cf * CFrame.new(size.X/2, size.Y/2, -size.Z/2),
-                                    cf * CFrame.new(-size.X/2, size.Y/2, -size.Z/2),
-                                    cf * CFrame.new(size.X/2, -size.Y/2, -size.Z/2),
-                                    cf * CFrame.new(-size.X/2, -size.Y/2, -size.Z/2)
-                                }
-                                local sCorners = {}
-                                for _, c in pairs(corners) do
-                                    local p = cam:WorldToViewportPoint(c.Position)
-                                    table.insert(sCorners, Vector2.new(p.X, p.Y))
-                                end
-                                local conns = {{1,2},{2,4},{4,3},{3,1},{5,6},{6,8},{8,7},{7,5},{1,5},{2,6},{3,7},{4,8}}
-                                for i, c in pairs(conns) do
-                                    local l = data.box3D[i]
-                                    l.From = sCorners[c[1]]
-                                    l.To = sCorners[c[2]]
-                                    l.Visible = true
-                                end
                             else
                                 data.box2D.Visible = false
-                                for _, l in pairs(data.box3D) do l.Visible = false end
                             end
-                        else
-                            data.box2D.Visible = false
                             for _, l in pairs(data.box3D) do l.Visible = false end
+                        elseif bType == "3D" then
+                            data.box2D.Visible = false
+                            local sCorners = {}
+                            for _, c in pairs(corners) do
+                                local p = cam:WorldToViewportPoint(c.Position)
+                                table.insert(sCorners, Vector2.new(p.X, p.Y))
+                            end
+                            local conns = {{1,2},{2,4},{4,3},{3,1},{5,6},{6,8},{8,7},{7,5},{1,5},{2,6},{3,7},{4,8}}
+                            for i, c in pairs(conns) do
+                                local l = data.box3D[i]
+                                l.From = sCorners[c[1]]
+                                l.To = sCorners[c[2]]
+                                l.Visible = true
+                            end
                         end
-                        
-                        data.text.Position = Vector2.new(pos.X, (head and cam:WorldToViewportPoint(head.Position).Y or pos.Y) - 25)
-                        data.text.Text = player.Name .. " [" .. (isK and "Killer" or isS and "Survivor" or "Player") .. "]"
-                        data.text.Visible = true
                     else
                         data.box2D.Visible = false
-                        data.text.Visible = false
                         for _, l in pairs(data.box3D) do l.Visible = false end
                     end
-                elseif playerESPData[player] then
-                    playerESPData[player].box2D.Visible = false
-                    playerESPData[player].text.Visible = false
-                    for _, l in pairs(playerESPData[player].box3D) do l.Visible = false end
+                    
+                    data.text.Visible = false
+                else
+                    data.box2D.Visible = false
+                    data.text.Visible = false
+                    for _, l in pairs(data.box3D) do l.Visible = false end
                 end
                 
-                if chams and char then
+                if showHighlight and char then
                     if not chamsData[player] then
                         local h = Instance.new("Highlight")
                         h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
@@ -302,8 +312,8 @@ local function updatePlayerESP()
                         chamsData[player] = h
                     end
                     chamsData[player].Adornee = char
-                    chamsData[player].FillColor = color
-                    chamsData[player].OutlineColor = color
+                    chamsData[player].FillColor = highlightColor
+                    chamsData[player].OutlineColor = highlightColor
                     chamsData[player].Enabled = true
                 elseif chamsData[player] then
                     chamsData[player].Enabled = false
@@ -335,7 +345,7 @@ save:LoadAutoloadConfig()
 lib:OnUnload(function()
     for _, data in pairs(generatorESPData) do
         data.box:Remove()
-        data.text:Remove()
+        if data.highlight then data.highlight:Destroy() end
     end
     for _, data in pairs(playerESPData) do
         data.box2D:Remove()

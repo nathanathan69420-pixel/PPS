@@ -26,21 +26,23 @@ local function bypass()
     
     gm.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
+        local args = {...}
         if not checkcaller() then
             if method == "Kick" and self == lp then return nil end
-            if method == "GetService" then
-                local service = select(1, ...)
-                if service == "VirtualInputManager" or service == "HttpService" or service == "TeleportService" then
+            if method == "GetService" or method == "getService" then
+                local s = args[1]
+                if s == "VirtualInputManager" or s == "HttpService" or s == "TeleportService" or s == "GuiService" then
                     return Instance.new("Folder")
                 end
             end
+            if method == "OpenBrowserWindow" or method == "OpenVideo" then return nil end
         end
         return old_nc(self, ...)
     end)
     
     gm.__index = newcclosure(function(self, k)
         if not checkcaller() then
-            if k == "Drawing" or k == "VirtualInputManager" or k == "HttpService" or k == "TeleportService" then
+            if k == "Drawing" or k == "VirtualInputManager" or k == "HttpService" or k == "TeleportService" or k == "GuiService" then
                 return Instance.new("Folder")
             end
         end
@@ -49,7 +51,7 @@ local function bypass()
     
     gm.__newindex = newcclosure(function(self, k, v)
         if not checkcaller() then
-            if k == "Enabled" and self:IsA("Script") then
+            if k == "Enabled" and (self:IsA("Script") or self:IsA("LocalScript")) then
                 return
             end
         end
@@ -58,19 +60,12 @@ local function bypass()
     
     setreadonly(gm, true)
     
-    local oldHttpGet = game.HttpGet
-    game.HttpGet = function(...)
+    local oldHttpGet = g.HttpGet
+    g.HttpGet = function(self, url, ...)
         if not checkcaller() then return "" end
-        return oldHttpGet(...)
-    end
-    
-    local oldHttpGetAsync = game.HttpGetAsync
-    game.HttpGetAsync = function(...)
-        if not checkcaller() then return "" end
-        return oldHttpGetAsync(...)
+        return oldHttpGet(self, url, ...)
     end
 end
-
 
 local function get(name)
     local s = game:GetService(name)
@@ -87,7 +82,6 @@ local plrs = get("Players")
 local uis = get("UserInputService")
 local cam = workspace.CurrentCamera
 local lp = plrs.LocalPlayer
-
 
 theme.BuiltInThemes["Default"][2] = {
     BackgroundColor = "16293a",
@@ -119,21 +113,10 @@ local cfgBox = config:AddLeftGroupbox("Config")
 status:AddLabel(string.format("Welcome, %s\nGame: Flick", lp.DisplayName), true)
 status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 
-
-
 local triggerDelay = 0.32
 local aimPart = "Head"
 local boxStyle = "2D"
 local aimSmooth = 0.5
-
-local bodyParts = {
-    "Random", "Closest", "Head", "HumanoidRootPart", "Torso",
-    "UpperTorso", "LowerTorso", "LeftArm", "RightArm",
-    "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm",
-    "LeftHand", "RightHand", "LeftLeg", "RightLeg",
-    "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg",
-    "LeftFoot", "RightFoot"
-}
 
 aiming:AddToggle("Triggerbot", { Text = "Triggerbot", Default = false }):AddKeyPicker("TriggerbotKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Triggerbot" })
 aiming:AddSlider("TriggerDelay", { Text = "Triggerbot Delay", Default = 0.32, Min = 0.01, Max = 1, Rounding = 2, Callback = function(v) triggerDelay = v end })
@@ -188,66 +171,22 @@ local function worldToScreen(pos)
     return Vector2.new(vec.X, vec.Y), onScreen, vec.Z
 end
 
-local function getClosestPart(char)
-    local closest, dist = nil, math.huge
-    for _, p in pairs(char:GetChildren()) do
-        if p:IsA("BasePart") then
-            local screenPos, onScreen = worldToScreen(p.Position)
-            if onScreen then
-                local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-                local d = (screenPos - center).Magnitude
-                if d < dist then
-                    dist = d
-                    closest = p
-                end
-            end
-        end
-    end
-    return closest
-end
-
-local function getRandomPart(char)
-    local parts = {}
-    for _, p in pairs(char:GetChildren()) do
-        if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
-            table.insert(parts, p)
-        end
-    end
-    return #parts > 0 and parts[math.random(1, #parts)] or nil
-end
-
 local function isVisible(part, char)
     if not part then return false end
     local origin = cam.CFrame.Position
     local direction = part.Position - origin
     local ray = Ray.new(origin, direction)
     local hit, pos = workspace:FindPartOnRayWithIgnoreList(ray, {lp.Character})
-    
-    if hit and hit:IsDescendantOf(char) then
-        return true
-    end
-    
+    if hit and hit:IsDescendantOf(char) then return true end
     if not hit then return true end
     return (pos - part.Position).Magnitude < 1
 end
 
-local function hasForceField(char)
-    return char:FindFirstChildOfClass("ForceField") ~= nil
-end
-
 local function passesChecks(player, char)
-    local wallCheck = true
-    local teamCheck = true
-    local ffCheck = true
-    local aliveCheck = true
-    
-    if aliveCheck and not isAlive(char) then return false end
-    if teamCheck and player.Team == lp.Team then return false end
-    if ffCheck and hasForceField(char) then return false end
-    if wallCheck then
-        local head = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
-        if head and not isVisible(head, char) then return false end
-    end
+    if not isAlive(char) then return false end
+    if player.Team == lp.Team then return false end
+    local head = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+    if head and not isVisible(head, char) then return false end
     return true
 end
 
@@ -270,24 +209,6 @@ local function getTarget()
         end
     end
     return best
-end
-
-local function getAimTarget()
-    local target = getTarget()
-    if target then
-        return target.Parent
-    end
-    return nil
-end
-
-local function getTargetPart(char)
-    if aimPart == "Random" then
-        return getRandomPart(char)
-    elseif aimPart == "Closest" then
-        return getClosestPart(char)
-    else
-        return char:FindFirstChild(aimPart) or char:FindFirstChild("Head")
-    end
 end
 
 local function cleanupPlayer(p)
@@ -316,16 +237,13 @@ local mainLoop = rs.RenderStepped:Connect(function()
     local chamsColor = Options.ChamsColor and Options.ChamsColor.Value or Color3.new(1, 1, 1)
 
     if aimbotOn then
-        local target = getAimTarget()
+        local target = getTarget()
         if target then
-            local part = getTargetPart(target)
-            if part then
-                local targetPos = part.Position
-                local camPos = cam.CFrame.Position
-                local direction = (targetPos - camPos).Unit
-                local targetCFrame = CFrame.lookAt(camPos, camPos + direction)
-                cam.CFrame = cam.CFrame:Lerp(targetCFrame, aimSmooth)
-            end
+            local targetPos = target.Position
+            local camPos = cam.CFrame.Position
+            local direction = (targetPos - camPos).Unit
+            local targetCFrame = CFrame.lookAt(camPos, camPos + direction)
+            cam.CFrame = cam.CFrame:Lerp(targetCFrame, aimSmooth)
         end
     end
 
@@ -345,113 +263,90 @@ local mainLoop = rs.RenderStepped:Connect(function()
             local char = getChar(p)
             local alive = char and isAlive(char)
             local root = char and char:FindFirstChild("HumanoidRootPart")
-            local head = char and char:FindFirstChild("Head")
 
             if espOn and boxOn and alive and root then
                 if not espData[p] then
                     espData[p] = {
-                        t = Drawing.new("Line"), b = Drawing.new("Line"),
-                        l = Drawing.new("Line"), r = Drawing.new("Line"),
-                        tl = Drawing.new("Line"), tr = Drawing.new("Line"),
-                        bl = Drawing.new("Line"), br = Drawing.new("Line"),
-                        lb = Drawing.new("Line"), rb = Drawing.new("Line"),
-                        tf = Drawing.new("Line"), bf = Drawing.new("Line")
+                        box2D = Drawing.new("Square"),
+                        box3D = {}
                     }
-                    for _, d in pairs(espData[p]) do
-                        d.Color = Color3.new(1, 1, 1)
-                        d.Thickness = 1
+                    espData[p].box2D.Color = Color3.new(1, 1, 1)
+                    espData[p].box2D.Thickness = 1
+                    for i = 1, 12 do
+                        local l = Drawing.new("Line")
+                        l.Color = Color3.new(1, 1, 1)
+                        l.Thickness = 1
+                        table.insert(espData[p].box3D, l)
                     end
                 end
 
-                local cf = root.CFrame
-                local size = Vector3.new(4, 5, 2)
+                local cf, size = char:GetBoundingBox()
+                local corners = {
+                    cf * CFrame.new(size.X/2, size.Y/2, size.Z/2),
+                    cf * CFrame.new(-size.X/2, size.Y/2, size.Z/2),
+                    cf * CFrame.new(size.X/2, -size.Y/2, size.Z/2),
+                    cf * CFrame.new(-size.X/2, -size.Y/2, size.Z/2),
+                    cf * CFrame.new(size.X/2, size.Y/2, -size.Z/2),
+                    cf * CFrame.new(-size.X/2, size.Y/2, -size.Z/2),
+                    cf * CFrame.new(size.X/2, -size.Y/2, -size.Z/2),
+                    cf * CFrame.new(-size.X/2, -size.Y/2, -size.Z/2)
+                }
 
                 if boxStyle == "2D" then
-                    local pos, onScreen = worldToScreen(root.Position)
-                    local dist = (cam.CFrame.Position - root.Position).Magnitude
-                    local factor = 1 / (dist * math.tan(math.rad(cam.FieldOfView / 2)) * 2 / cam.ViewportSize.Y)
-                    local w, h = size.X * factor, size.Y * factor
-
-                    for _, d in pairs(espData[p]) do d.Visible = onScreen end
-
-                    if onScreen then
-                        espData[p].t.From = Vector2.new(pos.X - w / 2, pos.Y - h / 2)
-                        espData[p].t.To = Vector2.new(pos.X + w / 2, pos.Y - h / 2)
-                        espData[p].b.From = Vector2.new(pos.X - w / 2, pos.Y + h / 2)
-                        espData[p].b.To = Vector2.new(pos.X + w / 2, pos.Y + h / 2)
-                        espData[p].l.From = Vector2.new(pos.X - w / 2, pos.Y - h / 2)
-                        espData[p].l.To = Vector2.new(pos.X - w / 2, pos.Y + h / 2)
-                        espData[p].r.From = Vector2.new(pos.X + w / 2, pos.Y - h / 2)
-                        espData[p].r.To = Vector2.new(pos.X + w / 2, pos.Y + h / 2)
-                        espData[p].tl.Visible = false
-                        espData[p].tr.Visible = false
-                        espData[p].bl.Visible = false
-                        espData[p].br.Visible = false
-                        espData[p].lb.Visible = false
-                        espData[p].rb.Visible = false
-                        espData[p].tf.Visible = false
-                        espData[p].bf.Visible = false
+                    local minX, minY = math.huge, math.huge
+                    local maxX, maxY = -math.huge, -math.huge
+                    local allOff = true
+                    for _, c in pairs(corners) do
+                        local pos, on = cam:WorldToViewportPoint(c.Position)
+                        if on then
+                            allOff = false
+                            minX = math.min(minX, pos.X)
+                            minY = math.min(minY, pos.Y)
+                            maxX = math.max(maxX, pos.X)
+                            maxY = math.max(maxY, pos.Y)
+                        end
                     end
+                    if not allOff then
+                        espData[p].box2D.Position = Vector2.new(minX, minY)
+                        espData[p].box2D.Size = Vector2.new(maxX - minX, maxY - minY)
+                        espData[p].box2D.Visible = true
+                    else
+                        espData[p].box2D.Visible = false
+                    end
+                    for _, l in pairs(espData[p].box3D) do l.Visible = false end
                 else
-                    local corners = {
-                        cf * CFrame.new(-size.X/2, size.Y/2, -size.Z/2),
-                        cf * CFrame.new(size.X/2, size.Y/2, -size.Z/2),
-                        cf * CFrame.new(-size.X/2, -size.Y/2, -size.Z/2),
-                        cf * CFrame.new(size.X/2, -size.Y/2, -size.Z/2),
-                        cf * CFrame.new(-size.X/2, size.Y/2, size.Z/2),
-                        cf * CFrame.new(size.X/2, size.Y/2, size.Z/2),
-                        cf * CFrame.new(-size.X/2, -size.Y/2, size.Z/2),
-                        cf * CFrame.new(size.X/2, -size.Y/2, size.Z/2)
-                    }
+                    espData[p].box2D.Visible = false
                     local sc = {}
-                    local allOn = true
-                    for i, c in ipairs(corners) do
-                        local v, on = worldToScreen(c.Position)
-                        sc[i] = v
-                        if not on then allOn = false end
+                    for _, c in pairs(corners) do
+                        local pos = cam:WorldToViewportPoint(c.Position)
+                        table.insert(sc, Vector2.new(pos.X, pos.Y))
                     end
-
-                    for _, d in pairs(espData[p]) do d.Visible = allOn end
-
-                    if allOn then
-                        espData[p].t.From, espData[p].t.To = sc[1], sc[2]
-                        espData[p].b.From, espData[p].b.To = sc[3], sc[4]
-                        espData[p].l.From, espData[p].l.To = sc[1], sc[3]
-                        espData[p].r.From, espData[p].r.To = sc[2], sc[4]
-                        espData[p].tl.From, espData[p].tl.To = sc[5], sc[6]
-                        espData[p].tr.From, espData[p].tr.To = sc[7], sc[8]
-                        espData[p].bl.From, espData[p].bl.To = sc[5], sc[7]
-                        espData[p].br.From, espData[p].br.To = sc[6], sc[8]
-                        espData[p].lb.From, espData[p].lb.To = sc[1], sc[5]
-                        espData[p].rb.From, espData[p].rb.To = sc[2], sc[6]
-                        espData[p].tf.From, espData[p].tf.To = sc[3], sc[7]
-                        espData[p].bf.From, espData[p].bf.To = sc[4], sc[8]
-                        for _, d in pairs(espData[p]) do d.Visible = true end
+                    local conns = {{1,2},{2,4},{4,3},{3,1},{5,6},{6,8},{8,7},{7,5},{1,5},{2,6},{3,7},{4,8}}
+                    for i, c in pairs(conns) do
+                        local l = espData[p].box3D[i]
+                        l.From = sc[c[1]]
+                        l.To = sc[c[2]]
+                        l.Visible = true
                     end
                 end
-            else
-                if espData[p] then
-                    for _, d in pairs(espData[p]) do d.Visible = false end
-                end
+            elseif espData[p] then
+                espData[p].box2D.Visible = false
+                for _, l in pairs(espData[p].box3D) do l.Visible = false end
             end
 
             if espOn and chamsOn and alive and char then
                 if not chamsData[p] then
                     local h = Instance.new("Highlight")
-                    h.Name = p.Name
                     h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                     h.FillTransparency = 0.55
                     h.OutlineTransparency = 0
-                    h.OutlineColor = Color3.new(1, 1, 1)
                     h.Parent = Storage
                     chamsData[p] = h
                 end
                 chamsData[p].Adornee = char
                 chamsData[p].FillColor = chamsColor
                 chamsData[p].Enabled = true
-            else
-                if chamsData[p] then chamsData[p].Enabled = false end
-            end
+            elseif chamsData[p] then chamsData[p].Enabled = false end
 
             if espOn and skelOn and alive and char then
                 if not skeletonData[p] then
@@ -476,10 +371,8 @@ local mainLoop = rs.RenderStepped:Connect(function()
                         skeletonData[p][i].Visible = false
                     end
                 end
-            else
-                if skeletonData[p] then
-                    for _, l in pairs(skeletonData[p]) do l.Visible = false end
-                end
+            elseif skeletonData[p] then
+                for _, l in pairs(skeletonData[p]) do l.Visible = false end
             end
         end
     end
@@ -490,8 +383,6 @@ plrs.PlayerRemoving:Connect(cleanupPlayer)
 cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
 cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
 lib.ToggleKeybind = lib.Options.MenuKeybind
-
-
 
 theme:SetLibrary(lib)
 save:SetLibrary(lib)
