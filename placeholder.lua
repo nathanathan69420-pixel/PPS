@@ -13,7 +13,7 @@ theme.BuiltInThemes["Default"][2] = {
 
 local win = lib:CreateWindow({
     Title = "Axis Hub - Placeholder.lua",
-    Footer = "by RwalDev & Plow | 1.7.3 | Discord: .gg/UuyxhqgEVs",
+    Footer = "by RwalDev & Plow | 2.7.4 | Discord: .gg/UuyxhqgEVs",
     NotifySide = "Right",
     ShowCustomCursor = true,
 })
