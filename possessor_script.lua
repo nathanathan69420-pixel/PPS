@@ -17,7 +17,7 @@ theme.BuiltInThemes["Default"][2] = {
 
 local win = lib:CreateWindow({
     Title = "AXIS HUB",
-    Footer = "v1.6.2",
+    Footer = "v1.7.2",
     NotifySide = "Right",
     ShowCustomCursor = true,
 })
