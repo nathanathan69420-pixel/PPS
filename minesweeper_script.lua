@@ -20,7 +20,6 @@ end
 local Toggles = lib.Toggles
 local Options = lib.Options
 
--- State & Config
 local config = {
     Enabled = false,
     GuessHelper = true,
@@ -58,7 +57,6 @@ local COLOR_GUESS = Color3.fromRGB(0, 170, 255)
 local abs, floor, huge = math.abs, math.floor, math.huge
 local tsort = table.sort
 
--- Math Helpers
 local function clusterAndAverage(values, maxDiff)
     local clusters = {}
     local n = #values
@@ -107,7 +105,6 @@ local function findClosestIndex(target, sorted)
     return bestIdx - 1
 end
 
--- Grid & Logic
 local function hasFlagChild(parent)
     for _, child in ipairs(parent:GetChildren()) do
         if child.Name:sub(1, 4) == "Flag" then return true end
@@ -138,9 +135,14 @@ local function clearAllCellBorders()
         if column then
             for z = 0, state.grid.h - 1 do
                 local cell = column[z]
-                if cell and cell.borders then
-                    for _, b in pairs(cell.borders) do b:Destroy() end
-                    cell.borders = nil
+                if cell then
+                    if cell.borders then
+                        for _, b in pairs(cell.borders) do b:Destroy() end
+                        cell.borders = nil
+                    end
+                    cell.isHighlightedMine = false
+                    cell.isHighlightedSafe = false
+                    cell.isHighlightedGuess = false
                 end
             end
         end
@@ -318,12 +320,10 @@ local function countRemainingMines(cell, flaggedSet)
     return remaining
 end
 
--- CSP Solver Logic
 local function getBoundaryComponents(numbered, flaggedSet, safeSet)
     local boundaryCells = {}
     local cellMap = {}
     
-    -- 1. Identify all boundary variables (unknowns neighbors of numbered cells)
     for _, numCell in ipairs(numbered) do
         local rem = (numCell.number or 0)
         local neighbors = {}
@@ -342,7 +342,6 @@ local function getBoundaryComponents(numbered, flaggedSet, safeSet)
         numCell._csp_neigh = neighbors
     end
     
-    -- 2. Build adjacency for variables
     local adj = {}
     for _, u in ipairs(boundaryCells) do adj[u] = {} end
     
@@ -359,7 +358,6 @@ local function getBoundaryComponents(numbered, flaggedSet, safeSet)
         end
     end
     
-    -- 3. Find connected components (clusters)
     local visited = {}
     local components = {}
     
@@ -390,17 +388,14 @@ local function solveCSP(flaggedSet, safeSet)
     local components = getBoundaryComponents(numbered, flaggedSet, safeSet)
     
     for _, vars in ipairs(components) do
-        -- Only solve small/medium clusters to prevent lag (max 14 vars is safe for strict realtime, maybe 16)
         if #vars > 0 and #vars <= 14 then
             local solutions = {}
             local solutionCount = 0
-            local MAX_SOLUTIONS = 500 -- bail out if too ambiguous
+            local MAX_SOLUTIONS = 500 
             
-            -- Map variables to 1..N indices
             local varMap = {}
             for i, v in ipairs(vars) do varMap[v] = i end
             
-            -- Find relevant constraints (numbered cells touching this component)
             local constraints = {}
             for _, numCell in ipairs(numbered) do
                 local relevant = false
@@ -416,13 +411,12 @@ local function solveCSP(flaggedSet, safeSet)
                     table.insert(constraints, {
                         vars = cVars,
                         rem = numCell._csp_rem,
-                        total_vars = #numCell._csp_neigh -- used to check if constraint is already busted
+                        total_vars = #numCell._csp_neigh 
                     })
                 end
             end
             
-            -- Backtracking
-            local current = {} -- current assignment (0 or 1)
+            local current = {} 
             
             local function backtrack(idx)
                 if solutionCount >= MAX_SOLUTIONS then return end
@@ -435,11 +429,9 @@ local function solveCSP(flaggedSet, safeSet)
                     return
                 end
                 
-                -- Try 0 (Safe) and 1 (Mine)
                 for val = 0, 1 do
                     current[idx] = val
                     
-                    -- Check consistency
                     local consistent = true
                     for _, c in ipairs(constraints) do
                         local sum = 0
@@ -449,9 +441,6 @@ local function solveCSP(flaggedSet, safeSet)
                             else unassigned = unassigned + 1 end
                         end
                         
-                        -- Pruning:
-                        -- If sum > rem, effective mines exceed number -> invalid
-                        -- If sum + unassigned < rem, not enough space for mines -> invalid
                         if sum > c.rem or (sum + unassigned) < c.rem then
                             consistent = false
                             break
@@ -466,7 +455,6 @@ local function solveCSP(flaggedSet, safeSet)
             
             backtrack(1)
             
-            -- Analyze solutions
             if solutionCount > 0 and solutionCount < MAX_SOLUTIONS then
                 for i, v in ipairs(vars) do
                     local mineCount = 0
@@ -481,7 +469,6 @@ local function solveCSP(flaggedSet, safeSet)
                         if not safeSet[v] then safeSet[v] = true end
                     end
                     
-                    -- Store precise probability for guessing (Gold Standard)
                     v._prob = mineCount / solutionCount
                 end
             end
@@ -508,7 +495,6 @@ local function applySimpleDeductionRule(cellA, cellB, unknownsA, unknownsB, flag
     local minesA = countRemainingMines(cellA, flaggedSet)
     local minesB = countRemainingMines(cellB, flaggedSet)
 
-    -- Standard set operations
     if #onlyA == 0 and #onlyB > 0 then
         local diff = minesB - minesA
         if diff == 0 then for _, u in ipairs(onlyB) do safeSet[u] = true end
@@ -519,29 +505,6 @@ local function applySimpleDeductionRule(cellA, cellB, unknownsA, unknownsB, flag
         elseif diff == #onlyA then for _, u in ipairs(onlyA) do flaggedSet[u] = true end end
     end
     
-    -- Pattern 1-1: Two numbers with equal remaining mines (usually 1) sharing at least 2 unknowns
-    -- If minesA == minesB (e.g. both 1) and they share unknowns, check 1-1 reduction
-    if minesA == 1 and minesB == 1 and #inter >= 2 then
-        -- If A has 1 extra unknown (onlyA has 1 item), that item MUST be safe (because the mine is in the intersection due to B's constraint)
-        -- Actually, strictly speaking: if A has 1 unknown in intersection and 1 outside, and B has same intersection...
-        -- Simplified 1-1 On Edge logic:
-        -- If (onlyA is empty) -> covered above.
-        -- If (onlyA has items) and (onlyB has items) and (minesA == minesB):
-        -- We can't conclude without more info usually, UNLESS intersection size == #unknownsA - 1 ??
-        
-        -- Let's stick to the classic "1-2 pattern" which is stronger, but implement refined logic here
-    end
-    
-    -- Pattern 1-2: minesA=1, minesB=2. 
-    -- If A's unknowns are a SUBSET of B's unknowns, then the difference in B must be mines.
-    -- (Covered by #onlyA == 0 logic above: diff=1, #onlyB=1 -> mine)
-    
-    -- Advanced 1-1:
-    -- If minesA=1, minesB=1. They touch.
-    -- If intersection has 2 cells, and A has 1 unique cell -> that unique cell is SAFE.
-    -- Because if unique was mine, A is satisfied, so intersection is safe -> B needs 1 mine in intersection -> impossible as intersection is safe.
-    -- Wait, if unique is mine, intersection is safe. B needs 1 mine. B has other unique cells?
-    -- Correct constrained 1-1:
     if minesA == 1 and minesB == 1 then
         if #onlyA == 1 and #inter == 2 and #onlyB == 0 then
             safeSet[onlyA[1]] = true
@@ -549,19 +512,6 @@ local function applySimpleDeductionRule(cellA, cellB, unknownsA, unknownsB, flag
             safeSet[onlyB[1]] = true
         end
     end
-    
-    -- Advanced 1-2:
-    -- minesA=1, minesB=2.
-    -- If A has 2 unknowns in intersection, and 0 outside (subset).
-    -- B has 1 unknown outside.
-    -- Covered by basic subset rule (diff=1, onlyB=1 -> mine).
-    
-    -- Harder 1-2:
-    -- minesA=1, minesB=2.
-    -- A has 2 cells in intersection, X cells outside.
-    -- B has those 2 intersection cells + Y cells outside.
-    -- If A is satisfied by intersection (it needs 1), B needs 1 more from Y.
-    -- This specific geometry is tricky without full CSP.
 end
 
 local function checkAdjacentNumberedCells(flaggedSet, safeSet)
@@ -585,34 +535,8 @@ local function checkAdjacentNumberedCells(flaggedSet, safeSet)
             end
         end
     end
-    
-    -- Global 1-1 and 1-2 Search on edges
-    -- Refined pattern scanning
-    for _, cell in ipairs(numbered) do
-        local u = getUnknownsForCell(cell, flaggedSet, safeSet) -- Helper needed
-        local m = countRemainingMines(cell, flaggedSet)
-        
-        if m == 1 then
-            -- Check for 1-1 and 1-2 against neighbors
-            for _, n in ipairs(cell.neigh) do
-                if n.state == "number" then
-                    local u2 = getUnknownsForCell(n, flaggedSet, safeSet)
-                    local m2 = countRemainingMines(n, flaggedSet)
-                    
-                    if m2 == 1 then
-                        -- Check 1-1
-                        -- effective 1-1 reduction
-                        -- (Specific to linear patterns on edges usually)
-                    elseif m2 == 2 then
-                        -- Check 1-2
-                    end
-                end
-            end
-        end
-    end
 end
 
--- Helper alias
 function getUnknownsForCell(cell, flaggedSet, safeSet) 
     return getUnknownNeighborsExcluding(cell, flaggedSet, safeSet)
 end
@@ -662,10 +586,7 @@ local function updateLogic()
         end
         checkAdjacentNumberedCells(knownFlags, state.cells.toClear)
         
-        -- Run CSP if simple logic stalled but we might solve more complex stuff
         if not changed then
-            -- We only run CSP once when stalled to try and kickstart progress
-            -- To avoid infinite loops, we check if CSP actually made changes
             local oldFlags = 0
             local oldClears = 0
             for _ in pairs(knownFlags) do oldFlags = oldFlags + 1 end
@@ -706,7 +627,6 @@ local function updateGuess()
     end
     
     local remainingMines = config.TotalMines - knownFlagsCount
-    -- Base probability for disconnected cells (off-frontier)
     local globalDensity = unknownCount > 0 and (remainingMines / unknownCount) or 0.15
     local playerPos = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
     local maxDistance = playerPos and math.sqrt((state.grid.w * 5)^2 + (state.grid.h * 5)^2) or 1
@@ -720,12 +640,10 @@ local function updateGuess()
                 local cell = col[z]
                 if cell and cell.part and isEligibleForClick(cell) and not hasFlagChild(cell.part) and not state.cells.toFlag[cell] and not state.cells.toClear[cell] then
                     
-                    -- Use CSP probability if available (most accurate)
                     local probResult
                     if cell._prob then
                         probResult = cell._prob
                     else
-                        -- Fallback to simple heuristic if not on frontier or CSP didn't run
                         local validCount, probSum = 0, 0
                         local hasNumberedNeighbor = false
                         
@@ -756,7 +674,6 @@ local function updateGuess()
                     
                     local score = probResult
                     
-                    -- Apply penalties/weights to finding distinct best guess
                     if (x == 0 or x == state.grid.w - 1 or z == 0 or z == state.grid.h - 1) then score = score + config.EdgePenalty end
                     if playerPos then score = score + ((cell.pos - playerPos).Magnitude / maxDistance) * config.DistanceWeight end
                     
@@ -859,7 +776,6 @@ local function updateHighlights()
             for z = 0, state.grid.h - 1 do
                 local cell = col[z]
                 if cell and cell.part then
-                    -- Safety check: don't highlight revealed cells
                     local isVisible = cell.covered and cell.state ~= "number" and cell.state ~= "flagged"
                     if not isEligibleForClick(cell) or cell.state == "flagged" or not isVisible then
                         if cell.isHighlightedMine or cell.isHighlightedSafe or cell.isHighlightedGuess then
@@ -894,7 +810,6 @@ local function updateHighlights()
     end
 end
 
--- UI Setup
 theme.BuiltInThemes["Default"][2] = {
     BackgroundColor = "16293a",
     MainColor = "26445f",
@@ -934,7 +849,6 @@ lib.ToggleKeybind = lib.Options.MenuKeybind
 Toggles = lib.Toggles
 Options = lib.Options
 
--- Main Loop
 local function bypass()
     if not getrawmetatable or not hookmetamethod then return end
     local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Patukka")
@@ -960,6 +874,7 @@ rs.Heartbeat:Connect(function()
         clearAllCellBorders()
         state.cells.toFlag = {}
         state.cells.toClear = {}
+        state.parts = -1
         return
     end
 
@@ -971,7 +886,6 @@ rs.Heartbeat:Connect(function()
     local needsRebuild = pc ~= state.parts
 
     if needsRebuild then
-        -- Cleanup old stuff if board changed (new game)
         clearAllCellBorders()
         state.parts = pc
         rebuildGridFromParts(folder)
