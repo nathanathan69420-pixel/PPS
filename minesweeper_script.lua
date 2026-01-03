@@ -107,8 +107,10 @@ local function findClosestIndex(target, sorted)
 end
 
 local function hasFlagChild(parent)
+    if parent:GetAttribute("Flagged") then return true end
     for _, child in ipairs(parent:GetChildren()) do
-        if child.Name:sub(1, 4) == "Flag" then return true end
+        local nm = child.Name
+        if nm == "Flag" or nm == "Flagged" or nm:sub(1, 4) == "Flag" then return true end
     end
     return false
 end
@@ -301,7 +303,7 @@ local function updateCellStates(folder)
                     local partColor = cell.part.Color
                     cell.color = {R = partColor.R, G = partColor.G, B = partColor.B}
 
-                    local numberGui = cell.part:FindFirstChild("NumberGui")
+                    local numberGui = cell.part:FindFirstChild("NumberGui", true)
                     if numberGui then
                         local label = numberGui:FindFirstChild("TextLabel")
                         if label and tonumber(label.Text) then
