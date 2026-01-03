@@ -874,8 +874,8 @@ local function updateGuess()
 end
 
 local function createBorders(cell)
-    local th = 0.08
-    local ins = 0.05
+    local th = 0.15
+    local ins = 0.02
     local function newPart()
         local p = Instance.new("Part")
         p.Anchored = true
@@ -906,8 +906,8 @@ end
 local function updateBorderPositions(cell)
     if not cell.part or not cell.borders then return end
     local sz = cell.part.Size
-    local th = cell._borderThickness or 0.08
-    local ins = cell._borderInset or 0.05
+    local th = cell._borderThickness or 0.15
+    local ins = cell._borderInset or 0.02
     local hx, hz = sz.X / 2 - ins, sz.Z / 2 - ins
     local yoff = sz.Y / 2 + 0.01
     local t, b, l, r = cell.borders.top, cell.borders.bottom, cell.borders.left, cell.borders.right
