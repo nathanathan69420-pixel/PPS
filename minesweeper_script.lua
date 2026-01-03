@@ -201,7 +201,10 @@ local function rebuildGridFromParts(folder)
         end
     end
     
-    if #parts < 10 then return end -- Minimum parts to consider a grid
+    if #parts < 10 then return end
+    
+    table.sort(xs)
+    table.sort(zs)
     
     local spacing = estimateSpacing(xs)
     if spacing < 1 then spacing = 1 end
