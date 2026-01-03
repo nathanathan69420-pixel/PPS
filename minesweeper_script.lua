@@ -107,6 +107,7 @@ local function findClosestIndex(target, sorted)
 end
 
 local function hasFlagChild(parent)
+    if not parent.Parent then return false end
     if parent:GetAttribute("Flagged") then return true end
     for _, child in ipairs(parent:GetChildren()) do
         local nm = child.Name
@@ -120,15 +121,37 @@ local function isEligibleForClick(cell)
 end
 
 local function scanForBoard()
-    local folder = workspace:FindFirstChild("Flag") and workspace.Flag:FindFirstChild("Parts")
-    if folder then return folder end
-    for _, f in ipairs(workspace:GetChildren()) do
-        if f:IsA("Folder") and #f:GetChildren() > 50 then
-            local child = f:GetChildren()[1]
-            if child:IsA("BasePart") and child.Name == "Part" then return f end
+    local bestFolder = nil
+    local bestCount = 0
+    
+    local d = workspace:FindFirstChild("Flag")
+    if d and d:FindFirstChild("Parts") then
+        local f = d.Parts
+        if #f:GetChildren() > bestCount then
+            bestFolder = f
+            bestCount = #f:GetChildren()
         end
     end
-    return nil
+    
+    local p = workspace:FindFirstChild("Parts")
+    if p and #p:GetChildren() > bestCount then
+        bestFolder = p
+        bestCount = #p:GetChildren()
+    end
+
+    if bestFolder then return bestFolder end
+
+    for _, desc in ipairs(workspace:GetDescendants()) do
+        if desc:IsA("Folder") and desc.Name == "Parts" then
+            local c = #desc:GetChildren()
+            if c > bestCount then
+                bestCount = c
+                bestFolder = desc
+            end
+        end
+    end
+    
+    return bestFolder
 end
 
 local function clearAllCellBorders()
