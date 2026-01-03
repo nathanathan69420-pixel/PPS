@@ -6,7 +6,19 @@ local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 local rs = game:GetService("RunService")
 local plrs = game:GetService("Players")
 local lp = plrs.LocalPlayer
-local cam = workspace.CurrentCamera
+
+local function get(name)
+    local s = game:GetService(name)
+    if not s then return nil end
+    if cloneref then
+        local ok, res = pcall(cloneref, s)
+        return ok and res or s
+    end
+    return s
+end
+
+local Toggles = lib.Toggles
+local Options = lib.Options
 
 local state = {
     grid = {},
@@ -21,13 +33,15 @@ local state = {
 
 local function bypass()
     if not getrawmetatable or not hookmetamethod then return end
-    local remote = game:GetService("ReplicatedStorage"):WaitForChild("Patukka", 3)
+    local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Patukka")
     if remote then
         local old
         old = hookmetamethod(game, "__namecall", function(self, ...)
             local m = getnamecallmethod()
-            if self == remote and (m == "InvokeServer" or m == "FireServer") and Toggles.BypassAnticheat and Toggles.BypassAnticheat.Value then
-                return nil
+            if self == remote and (m == "InvokeServer" or m == "FireServer") then
+                if Toggles.BypassAnticheat and Toggles.BypassAnticheat.Value then
+                    return nil
+                end
             end
             return old(self, ...)
         end)
@@ -54,17 +68,23 @@ end
 local function rebuild(folder)
     state.grid = {}
     state.w, state.h = 0, 0
+    state.safe = {}
+    state.mines = {}
+    state.guess = nil
     local p = folder:GetChildren()
     if #p == 0 then return end
     local xs, zs, pos = {}, {}, {}
     local sy = 0
     for _, v in ipairs(p) do
-        local p3 = v.Position
-        table.insert(pos, {v = v, p = p3})
-        table.insert(xs, p3.X)
-        table.insert(zs, p3.Z)
-        sy = sy + p3.Y
+        if v:IsA("BasePart") then
+            local p3 = v.Position
+            table.insert(pos, {v = v, p = p3})
+            table.insert(xs, p3.X)
+            table.insert(zs, p3.Z)
+            sy = sy + p3.Y
+        end
     end
+    if #pos == 0 then return end
     table.sort(xs)
     table.sort(zs)
     local function getSpc(t)
@@ -79,35 +99,36 @@ local function rebuild(folder)
     local uz = cluster(zs, wz)
     state.w, state.h = #ux, #uz
     if state.w == 0 or state.h == 0 then return end
-    local ay = sy / #p
+    local ay = sy / #pos
     for x = 0, state.w - 1 do
         state.grid[x] = {}
         for z = 0, state.h - 1 do
             state.grid[x][z] = {
                 ix = x, iz = z,
                 p = Vector3.new(ux[x+1], ay, uz[z+1]),
-                part = nil, state = "unknown",
+                part = nil, st = "unknown",
                 num = nil, cov = true,
                 neigh = {}
             }
         end
     end
     for _, d in ipairs(pos) do
-        local best, dist = nil, 1000000
-        local xI = 0
+        local xI, zI = 0, 0
+        local dist = 1000000
         for i, val in ipairs(ux) do
             local d2 = math.abs(d.p.X - val)
             if d2 < dist then dist = d2 xI = i - 1 end
         end
         dist = 1000000
-        local zI = 0
         for i, val in ipairs(uz) do
             local d2 = math.abs(d.p.Z - val)
             if d2 < dist then dist = d2 zI = i - 1 end
         end
-        local c = state.grid[xI][zI]
-        if not c.part or (d.p - c.p).Magnitude < (c.part.Position - c.p).Magnitude then
-            c.part, c.p = d.v, d.p
+        local c = state.grid[xI] and state.grid[xI][zI]
+        if c then
+            if not c.part or (d.p - c.p).Magnitude < (c.part.Position - c.p).Magnitude then
+                c.part, c.p = d.v, d.p
+            end
         end
     end
     for x = 0, state.w - 1 do
@@ -126,37 +147,46 @@ local function rebuild(folder)
     end
 end
 
-local function updateStates(folder)
+local function updateStates()
     state.numbered = {}
     if state.w == 0 then return end
     for x = 0, state.w - 1 do
         for z = 0, state.h - 1 do
             local c = state.grid[x][z]
             if c and c.part then
-                c.state, c.num, c.cov = "unknown", nil, true
+                c.st, c.num, c.cov = "unknown", nil, true
                 local gui = c.part:FindFirstChild("NumberGui")
                 if gui then
                     local lbl = gui:FindFirstChild("TextLabel")
                     if lbl and tonumber(lbl.Text) then
                         c.num = tonumber(lbl.Text)
                         c.cov = false
-                        c.state = "number"
+                        c.st = "number"
                         table.insert(state.numbered, c)
                     end
                 end
                 if not gui then
                     local col = c.part.Color
-                    if col.R > 0.7 and col.G > 0.7 and col.B > 0.7 then c.cov = false end
+                    if col.R > 0.7 and col.G > 0.7 and col.B > 0.7 then
+                        c.cov = false
+                        c.st = "empty"
+                    end
                 end
                 for _, child in ipairs(c.part:GetChildren()) do
-                    if child.Name:sub(1, 4) == "Flag" then c.state = "flagged" break end
+                    if child.Name:sub(1, 4) == "Flag" then c.st = "flagged" break end
                 end
             end
         end
     end
 end
 
+local function isUnknown(c)
+    return c.cov and c.st ~= "flagged" and c.st ~= "number"
+end
+
 local function solve()
+    state.mines = {}
+    state.safe = {}
     if state.w == 0 or #state.numbered == 0 then return end
     local f, s = {}, {}
     local changed, iter = true, 0
@@ -167,44 +197,63 @@ local function solve()
             local u = {}
             local fc = 0
             for _, n in ipairs(c.neigh) do
-                if f[n] or n.state == "flagged" then fc = fc + 1
-                elseif not s[n] and c.cov then table.insert(u, n) end
+                if f[n] or n.st == "flagged" then
+                    fc = fc + 1
+                elseif not s[n] and isUnknown(n) then
+                    table.insert(u, n)
+                end
             end
             local rem = (c.num or 0) - fc
             if rem > 0 and rem == #u then
-                for _, v in ipairs(u) do if not f[v] then f[v] = true changed = true end end
+                for _, v in ipairs(u) do
+                    if not f[v] then f[v] = true changed = true end
+                end
             elseif rem == 0 and #u > 0 then
-                for _, v in ipairs(u) do if not s[v] then s[v] = true changed = true end end
+                for _, v in ipairs(u) do
+                    if not s[v] then s[v] = true changed = true end
+                end
             end
         end
         for _, c in ipairs(state.numbered) do
             for _, n in ipairs(c.neigh) do
-                if n.state == "number" then
-                    local u1, u2 = {}, {}
+                if n.st == "number" then
                     local function getU(cell)
                         local r = {}
                         for _, nb in ipairs(cell.neigh) do
-                            if not f[nb] and not s[nb] and nb.state ~= "number" and nb.state ~= "flagged" then table.insert(r, nb) end
+                            if not f[nb] and not s[nb] and isUnknown(nb) then
+                                table.insert(r, nb)
+                            end
                         end
                         return r
                     end
-                    u1 = getU(c) u2 = getU(n)
+                    local u1 = getU(c)
+                    local u2 = getU(n)
                     if #u1 > 0 and #u2 > 0 then
-                        local i, o1, o2 = {}, {}, {}
-                        local m1 = {} for _, v in ipairs(u1) do m1[v] = true end
-                        for _, v in ipairs(u2) do if m1[v] then table.insert(i, v) m1[v] = nil else table.insert(o2, v) end end
+                        local m1 = {}
+                        for _, v in ipairs(u1) do m1[v] = true end
+                        local o1, o2 = {}, {}
+                        for _, v in ipairs(u2) do
+                            if m1[v] then m1[v] = nil else table.insert(o2, v) end
+                        end
                         for v in pairs(m1) do table.insert(o1, v) end
-                        local r1, r2 = (c.num or 0), (n.num or 0)
-                        for _, nb in ipairs(c.neigh) do if f[nb] or nb.state == "flagged" then r1 = r1 - 1 end end
-                        for _, nb in ipairs(n.neigh) do if f[nb] or nb.state == "flagged" then r2 = r2 - 1 end end
+                        local r1 = (c.num or 0)
+                        local r2 = (n.num or 0)
+                        for _, nb in ipairs(c.neigh) do if f[nb] or nb.st == "flagged" then r1 = r1 - 1 end end
+                        for _, nb in ipairs(n.neigh) do if f[nb] or nb.st == "flagged" then r2 = r2 - 1 end end
                         if #o1 == 0 and #o2 > 0 then
                             local d = r2 - r1
-                            if d == 0 then for _, v in ipairs(o2) do if not s[v] then s[v] = true changed = true end end
-                            elseif d == #o2 then for _, v in ipairs(o2) do if not f[v] then f[v] = true changed = true end end end
+                            if d == 0 then
+                                for _, v in ipairs(o2) do if not s[v] then s[v] = true changed = true end end
+                            elseif d == #o2 then
+                                for _, v in ipairs(o2) do if not f[v] then f[v] = true changed = true end end
+                            end
                         elseif #o2 == 0 and #o1 > 0 then
                             local d = r1 - r2
-                            if d == 0 then for _, v in ipairs(o1) do if not s[v] then s[v] = true changed = true end end
-                            elseif d == #o1 then for _, v in ipairs(o1) do if not f[v] then f[v] = true changed = true end end end
+                            if d == 0 then
+                                for _, v in ipairs(o1) do if not s[v] then s[v] = true changed = true end end
+                            elseif d == #o1 then
+                                for _, v in ipairs(o1) do if not f[v] then f[v] = true changed = true end end
+                            end
                         end
                     end
                 end
@@ -214,15 +263,15 @@ local function solve()
     state.mines, state.safe = f, s
 end
 
-local function guess()
+local function calcGuess()
     state.guess = nil
     if state.w == 0 then return end
     local fC, uC = 0, 0
     for x = 0, state.w - 1 do
         for z = 0, state.h - 1 do
             local c = state.grid[x][z]
-            if c.state == "flagged" or state.mines[c] then fC = fC + 1
-            elseif not state.safe[c] and c.state == "unknown" then uC = uC + 1 end
+            if c.st == "flagged" or state.mines[c] then fC = fC + 1
+            elseif not state.safe[c] and isUnknown(c) then uC = uC + 1 end
         end
     end
     local dens = uC > 0 and ((40 - fC) / uC) or 0
@@ -230,16 +279,16 @@ local function guess()
     for x = 0, state.w - 1 do
         for z = 0, state.h - 1 do
             local c = state.grid[x][z]
-            if c.part and c.state == "unknown" and not state.mines[c] and not state.safe[c] then
+            if c.part and isUnknown(c) and not state.mines[c] and not state.safe[c] then
                 local vC, pS = 0, 0
                 for _, n in ipairs(c.neigh) do
-                    if n.state == "number" then
+                    if n.st == "number" then
                         local fl, un = 0, 0
                         for _, nn in ipairs(n.neigh) do
-                            if nn.state == "flagged" or state.mines[nn] then fl = fl+1
-                            elseif not state.mines[nn] and not state.safe[nn] then un = un+1 end
+                            if nn.st == "flagged" or state.mines[nn] then fl = fl+1
+                            elseif isUnknown(nn) and not state.mines[nn] and not state.safe[nn] then un = un+1 end
                         end
-                        local rem = n.num - fl
+                        local rem = (n.num or 0) - fl
                         if rem <= 0 then vC = vC + 1 elseif un > 0 then pS = pS + (rem/un) vC = vC + 1 end
                     end
                 end
@@ -257,9 +306,11 @@ local function highlight()
     for x = 0, state.w - 1 do
         for z = 0, state.h - 1 do
             local c = state.grid[x][z]
-            if not c.part then continue end
+            if not c or not c.part then continue end
             local h = state.highlights[c]
-            local isM, isS, isG = state.mines[c], state.safe[c], (state.guess == c)
+            local isM = state.mines[c]
+            local isS = state.safe[c]
+            local isG = (state.guess == c)
             if en and (isM or isS or isG) then
                 if not h then
                     h = Instance.new("Highlight")
@@ -270,8 +321,14 @@ local function highlight()
                     state.highlights[c] = h
                 end
                 h.Adornee = c.part
-                h.FillColor = isM and Color3.new(1,0,0) or (isS and Color3.new(0,1,0) or Color3.new(0,0.7,1))
-                h.OutlineColor = Color3.new(1,1,1)
+                if isM then
+                    h.FillColor = Color3.new(1, 0, 0)
+                elseif isS then
+                    h.FillColor = Color3.new(0, 1, 0)
+                else
+                    h.FillColor = Color3.new(0, 0.7, 1)
+                end
+                h.OutlineColor = Color3.new(1, 1, 1)
                 h.Enabled = true
             elseif h then
                 h.Enabled = false
@@ -289,7 +346,7 @@ theme.BuiltInThemes["Default"][2] = {
 }
 
 local win = lib:CreateWindow({
-    Title = "Axis Hub - Minesweeper.lua",
+    Title = "Axis Hub -\nMinesweeper.lua",
     Footer = "by RwalDev & Plow | 1.8.4 | Discord: .gg/UuyxhqgEVs",
     NotifySide = "Right",
     ShowCustomCursor = true,
@@ -311,15 +368,21 @@ local mainBox = main:AddLeftGroupbox("Main")
 mainBox:AddToggle("HighlightMines", { Text = "Highlight Mines", Default = false })
 mainBox:AddToggle("BypassAnticheat", { Text = "Bypass Anticheat", Default = true })
 
+Toggles = lib.Toggles
+Options = lib.Options
+
 rs.Heartbeat:Connect(function()
     local folder = workspace:FindFirstChild("Flag") and workspace.Flag:FindFirstChild("Parts")
     if not folder then return end
     local pc = #folder:GetChildren()
-    if pc ~= state.parts then state.parts = pc rebuild(folder) end
+    if pc ~= state.parts then
+        state.parts = pc
+        rebuild(folder)
+    end
     if state.w == 0 then return end
-    updateStates(folder)
+    updateStates()
     solve()
-    guess()
+    calcGuess()
     highlight()
 end)
 
