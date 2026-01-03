@@ -2,1169 +2,306 @@ local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/head
 local lib = loadstring(game:HttpGet(repo .. "Library.lua"))()
 local theme = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
 local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
-
-local rs = game:GetService("RunService")
-local plrs = game:GetService("Players")
+local rs, plrs = game:GetService("RunService"), game:GetService("Players")
 local lp = plrs.LocalPlayer
-
-local function get(name)
-    local s = game:GetService(name)
-    if not s then return nil end
-    if cloneref then
-        local ok, res = pcall(cloneref, s)
-        return ok and res or s
-    end
-    return s
+local Toggles, Options = lib.Toggles, lib.Options
+local config = { Enabled = false, GuessHelper = true, TotalMines = 25, DistanceWeight = 0.1, EdgePenalty = 0.05 }
+local state = { cells = { grid = {}, numbered = {}, toFlag = {}, toClear = {} }, grid = { w = 0, h = 0 }, lastPartCount = -1, bestGuessCell = nil }
+local COLOR_SAFE, COLOR_MINE, COLOR_GUESS, COLOR_WRONG = Color3.fromRGB(0, 255, 0), Color3.fromRGB(255, 0, 0), Color3.fromRGB(0, 170, 255), Color3.fromRGB(255, 0, 255)
+local abs, floor, huge, sqrt, max, min = math.abs, math.floor, math.huge, math.sqrt, math.max, math.min
+local tsort, tinsert, tremove = table.sort, table.insert, table.remove
+local function cluster(vals, d) 
+    local res = {} if #vals == 0 then return res end 
+    local cur, count = vals[1], 1 
+    for i = 2, #vals do 
+        if abs(vals[i] - cur) <= d then count = count + 1 cur = cur + (vals[i] - cur) / count 
+        else tinsert(res, cur) cur, count = vals[i], 1 end 
+    end 
+    tinsert(res, cur) return res 
 end
-
-local Toggles = lib.Toggles
-local Options = lib.Options
-
-local config = {
-    Enabled = false,
-    GuessHelper = true,
-    Debug = false,
-    TotalMines = 25,
-    DistanceWeight = 0.1,
-    EdgePenalty = 0.05
-}
-
-local state = {
-    cells = {
-        grid = {},
-        numbered = {},
-        toFlag = {},
-        toClear = {}
-    },
-    grid = { w = 0, h = 0 },
-    lastPartCount = -1,
-    lastNumberedCount = 0,
-    bestGuessCell = nil,
-    bestGuessScore = nil
-}
-
-local highlightFolder = workspace:FindFirstChild("MinesweeperHighlights")
-if not highlightFolder then
-    highlightFolder = Instance.new("Folder")
-    highlightFolder.Name = "MinesweeperHighlights"
-    highlightFolder.Parent = workspace
+local function median(vals) if #vals == 0 then return nil end tsort(vals) return vals[floor((#vals + 1) / 2)] end
+local function estS(coords) if #coords < 3 then return 4 end local d = {} for i = 2, #coords do d[#d+1] = abs(coords[i] - coords[i-1]) end return median(d) or 4 end
+local function findI(t, s) local bI, bD = 1, huge for i = 1, #s do local d = abs(t - s[i]) if d < bD then bD, bI = d, i end end return bI - 1 end
+local function hasF(p) return p:FindFirstChild("Flag", true) ~= nil end
+local function isE(c) return c.state ~= "number" and c.covered ~= false end
+local cachedB = nil
+local function scanB()
+    if cachedB and cachedB.Parent then return cachedB end
+    local f = workspace:FindFirstChild("Flag") local p = f and f:FindFirstChild("Parts") if p then cachedB = p return p end
+    local ch = workspace:GetChildren() for i = 1, #ch do local v = ch[i] if v:IsA("Folder") and #v:GetChildren() > 50 then local p1 = v:GetChildren()[1] if p1 and p1:IsA("BasePart") and p1.Name == "Part" then cachedB = v return v end end end
+    return nil
 end
-
-local COLOR_SAFE = Color3.fromRGB(0, 255, 0)
-local COLOR_MINE = Color3.fromRGB(255, 0, 0)
-local COLOR_GUESS = Color3.fromRGB(0, 170, 255)
-local COLOR_WRONG = Color3.fromRGB(255, 0, 255)
-
-local abs, floor, huge = math.abs, math.floor, math.huge
-local tsort = table.sort
-
-local function clusterAndAverage(values, maxDiff)
-    local clusters = {}
-    local n = #values
-    if n == 0 then return clusters end
-    local current = values[1]
-    local count = 1
-    for i = 2, n do
-        local v = values[i]
-        if abs(v - current) <= maxDiff then
-            count = count + 1
-            current = current + (v - current) / count
-        else
-            table.insert(clusters, current)
-            current = v
-            count = 1
-        end
-    end
-    table.insert(clusters, current)
-    return clusters
-end
-
-local function median(values)
-    local n = #values
-    if n == 0 then return nil end
-    tsort(values)
-    return values[floor((n + 1) / 2)]
-end
-
-local function estimateSpacing(coords)
-    if #coords < 3 then return 4 end
-    local diffs = {}
-    for i = 2, #coords do diffs[#diffs + 1] = abs(coords[i] - coords[i-1]) end
-    return median(diffs) or 4
-end
-
-local function findClosestIndex(target, sorted)
-    local bestIdx = 1
-    local bestDist = huge
-    for i = 1, #sorted do
-        local dist = abs(target - sorted[i])
-        if dist < bestDist then
-            bestDist = dist
-            bestIdx = i
-        end
-    end
-    return bestIdx - 1
-end
-
-local function hasFlagChild(parent)
-    if not parent.Parent then return false end
-    if parent:GetAttribute("Flagged") then return true end
-    for _, child in ipairs(parent:GetChildren()) do
-        local nm = child.Name
-        if nm == "Flag" or nm == "Flagged" or nm:sub(1, 4) == "Flag" then return true end
-    end
-    return false
-end
-
-local function isEligibleForClick(cell)
-    return not (cell.state == "number") and cell.covered ~= false
-end
-
-local function scanForBoard()
-    local bestFolder = nil
-    local bestCount = 0
-    
-    local d = workspace:FindFirstChild("Flag")
-    if d and d:FindFirstChild("Parts") then
-        local f = d.Parts
-        local c = 0
-        for _, ch in ipairs(f:GetChildren()) do if ch:IsA("BasePart") then c = c + 1 end end
-        if c > bestCount then
-            bestFolder = f
-            bestCount = c
-        end
-    end
-    
-    local p = workspace:FindFirstChild("Parts")
-    if p then
-        local c = 0
-        for _, ch in ipairs(p:GetChildren()) do if ch:IsA("BasePart") then c = c + 1 end end
-        if c > bestCount then
-            bestFolder = p
-            bestCount = c
-        end
-    end
-
-    if bestFolder then return bestFolder end
-
-    for _, desc in ipairs(workspace:GetDescendants()) do
-        if desc:IsA("Folder") and desc.Name == "Parts" then
-            local c = 0
-            for _, ch in ipairs(desc:GetChildren()) do if ch:IsA("BasePart") then c = c + 1 end end
-            if c > bestCount then
-                bestCount = c
-                bestFolder = desc
-            end
-        end
-    end
-    
-    return bestFolder
-end
-
-local function clearAllCellBorders()
+local function clearB()
     if not state.cells.grid then return end
-    for x = 0, state.grid.w - 1 do
-        local column = state.cells.grid[x]
-        if column then
-            for z = 0, state.grid.h - 1 do
-                local cell = column[z]
-                if cell then
-                    if cell.borders then
-                        for _, b in pairs(cell.borders) do b:Destroy() end
-                        cell.borders = nil
-                    end
-                    cell.isHighlightedMine = false
-                    cell.isHighlightedSafe = false
-                    cell.isHighlightedGuess = false
-                    cell.isWrongFlag = false
-                end
-            end
-        end
-    end
+    for x = 0, state.grid.w - 1 do local col = state.cells.grid[x] if col then for z = 0, state.grid.h - 1 do local c = col[z] if c then if c.borders then for _, b in pairs(c.borders) do b:Destroy() end c.borders = nil end c.isHighlightedMine, c.isHighlightedSafe, c.isHighlightedGuess, c.isWrongFlag = false, false, false, false end end end end
 end
-
-local function rebuildGridFromParts(folder)
-    clearAllCellBorders()
-    state.cells.grid = {}
-    state.grid.w = 0
-    state.grid.h = 0
-
-    local children = folder:GetChildren()
-    local parts = {}
-    local xs, zs = {}, {}
-    
-    for _, part in ipairs(children) do
-        if part:IsA("BasePart") then
-            table.insert(parts, part)
-            table.insert(xs, part.Position.X)
-            table.insert(zs, part.Position.Z)
-        end
-    end
-    
-    if #parts < 10 then return end
-    
-    table.sort(xs)
-    table.sort(zs)
-    
-    local spacing = estimateSpacing(xs)
-    if spacing < 1 then spacing = 1 end
-    
-    local minX = xs[1] -- Initialize with first sorted value
-    local minZ = zs[1] -- Initialize with first sorted value
-    
-    for _, x in ipairs(xs) do if x < minX then minX = x end end
-    for _, z in ipairs(zs) do if z < minZ then minZ = z end end
-    
-    local sumY = 0
-    local partCount = 0
-
-    for _, part in ipairs(parts) do
-        local pos = part.Position
-        local x = math.floor((pos.X - minX) / spacing + 0.5)
-        local z = math.floor((pos.Z - minZ) / spacing + 0.5)
-        
-        if x >= 0 and z >= 0 then
-            state.cells.grid[x] = state.cells.grid[x] or {}
-            
-            local area = part.Size.X * part.Size.Z
-            local existing = state.cells.grid[x][z]
-            
-            if not existing or area > existing._area then
-                state.cells.grid[x][z] = {
-                    part = part,
-                    ix = x,
-                    iz = z,
-                    pos = pos, -- Store actual part position for now, will average later
-                    state = "unknown",
-                    number = nil,
-                    covered = true,
-                    color = nil,
-                    neigh = {},
-                    borders = nil,
-                    isHighlightedMine = false,
-                    isHighlightedSafe = false,
-                    isHighlightedGuess = false,
-                    isWrongFlag = false,
-                    lastHighlightChange = 0,
-                    _area = area -- Store area for "largest part wins" logic
-                }
-                sumY = sumY + pos.Y
-                partCount = partCount + 1
-            end
-            
-            if x >= state.grid.w then state.grid.w = x + 1 end
-            if z >= state.grid.h then state.grid.h = z + 1 end
-        end
-    end
-
+local function rebuildG(folder)
+    clearB() state.cells.grid, state.grid.w, state.grid.h = {}, 0, 0
+    local pts = folder:GetChildren() if #pts == 0 then return end
+    local pD, sY = {}, 0
+    for _, p in ipairs(pts) do if p:IsA("BasePart") then tinsert(pD, {p = p, pos = p.Position}) sY = sY + p.Position.Y end end
+    local xs, zs = {}, {} for i = 1, #pD do xs[i], zs[i] = pD[i].pos.X, pD[i].pos.Z end
+    tsort(xs) tsort(zs) local w, h = estS(xs) * 0.6, estS(zs) * 0.6
+    local ux, uz = cluster(xs, w), cluster(zs, h) state.grid.w, state.grid.h = #ux, #uz
     if state.grid.w == 0 or state.grid.h == 0 then return end
-
-    local avgY = sumY / #allPositions
-
-    for x = 0, state.grid.w - 1 do
-        state.cells.grid[x] = {}
-        for z = 0, state.grid.h - 1 do
-            state.cells.grid[x][z] = {
-                ix = x, iz = z,
-                pos = Vector3.new(uniqueX[x+1], avgY, uniqueZ[z+1]),
-                part = nil,
-                state = "unknown",
-                number = nil,
-                covered = true,
-                color = nil,
-                neigh = {},
-                borders = nil,
-                isHighlightedMine = false,
-                isHighlightedSafe = false,
-                isHighlightedGuess = false,
-                isWrongFlag = false,
-                lastHighlightChange = 0
-            }
-        end
-    end
-
-    for _, data in ipairs(allPositions) do
-        local pos = data.pos
-        local part = data.part
-        local xIdx = findClosestIndex(pos.X, uniqueX)
-        local zIdx = findClosestIndex(pos.Z, uniqueZ)
-        local cell = state.cells.grid[xIdx][zIdx]
-        
-        if not cell.part then
-            cell.part = part
-            cell.pos = pos
-        else
-            local currDist = (cell.part.Position - Vector3.new(uniqueX[xIdx+1], cell.part.Position.Y, uniqueZ[zIdx+1])).Magnitude
-            local newDist = (pos - Vector3.new(uniqueX[xIdx+1], pos.Y, uniqueZ[zIdx+1])).Magnitude
-            if newDist < currDist then
-                cell.part = part
-                cell.pos = pos
-            end
-        end
-    end
-
-    for z = 0, state.grid.h - 1 do
-        for x = 0, state.grid.w - 1 do
-            local cell = state.cells.grid[x][z]
-            for dz = -1, 1 do
-                for dx = -1, 1 do
-                    if dx == 0 and dz == 0 then continue end
-                    local nx, nz = x + dx, z + dz
-                    if nx >= 0 and nx < state.grid.w and nz >= 0 and nz < state.grid.h then
-                        table.insert(cell.neigh, state.cells.grid[nx][nz])
-                    end
-                end
-            end
-        end
-    end
+    local ay = sY / #pD
+    for x = 0, state.grid.w - 1 do state.cells.grid[x] = {} for z = 0, state.grid.h - 1 do state.cells.grid[x][z] = { ix = x, iz = z, pos = Vector3.new(ux[x+1], ay, uz[z+1]), part = nil, state = "unknown", covered = true, neigh = {} } end end
+    for _, d in ipairs(pD) do local xi, zi = findI(d.pos.X, ux), findI(d.pos.Z, uz) local c = state.cells.grid[xi][zi] if not c.part or (d.pos - Vector3.new(ux[xi+1], d.pos.Y, uz[zi+1])).Magnitude < (c.part.Position - Vector3.new(ux[xi+1], c.part.Position.Y, uz[zi+1])).Magnitude then c.part, c.pos = d.p, d.pos end end
+    for z = 0, state.grid.h - 1 do for x = 0, state.grid.w - 1 do local c = state.cells.grid[x][z] for dz = -1, 1 do for dx = -1, 1 do if dx ~= 0 or dz ~= 0 then local nx, nz = x + dx, z + dz if nx >= 0 and nx < state.grid.w and nz >= 0 and nz < state.grid.h then tinsert(c.neigh, state.cells.grid[nx][nz]) end end end end end end
 end
-
-local function updateCellStates(folder)
-    state.cells.numbered = {}
-    if state.grid.w == 0 then return end
-
-    for x = 0, state.grid.w - 1 do
-        local column = state.cells.grid[x]
-        if column then
-            for z = 0, state.grid.h - 1 do
-                local cell = column[z]
-                if cell and cell.part then
-                    cell.state = "unknown"
-                    cell.number = nil
-                    cell.covered = true
-                    
-                    if not cell.part.Parent then
-                        cell.covered = false
-                    elseif cell.part.Transparency > 0.9 then
-                        cell.covered = false
-                    end
-
-                    local numberGui = cell.part:FindFirstChild("NumberGui", true)
-                    if numberGui then
-                        local label = numberGui:FindFirstChild("TextLabel")
-                        if label and tonumber(label.Text) then
-                            cell.number = tonumber(label.Text)
-                            cell.covered = false
-                        end
-                    end
-                    
-                    if hasFlagChild(cell.part) then cell.state = "flagged" end
-
-                    if cell.number and not cell.covered then
-                        cell.state = "number"
-                        table.insert(state.cells.numbered, cell)
-                    end
-                end
-            end
+local function updateS(folder)
+    state.cells.numbered = {} local grid = state.cells.grid if state.grid.w == 0 or not grid then return end
+    for x = 0, state.grid.w - 1 do local col = grid[x] if col then for z = 0, state.grid.h - 1 do
+        local c = col[z] local p = c and c.part
+        if p then
+            c.state, c.number, c.covered = "unknown", nil, true
+            local ng = c._ng or p:FindFirstChild("NumberGui")
+            if ng then c._ng = ng local lbl = c._tl or ng:FindFirstChild("TextLabel") if lbl then c._tl = lbl local t = lbl.Text if t ~= "" then local n = tonumber(t) if n then c.number, c.covered, c.state = n, false, "number" tinsert(state.cells.numbered, c) end end end end
+            if c.covered then local cl = p.Color local r, g, b = cl.R*255, cl.G*255, cl.B*255 if r >= 170 and g >= 170 and b >= 170 and abs(r-g) <= 60 and abs(g-b) <= 60 and abs(r-b) <= 60 then c.covered = false end end
+            if c.covered and hasF(p) then c.state = "flagged" end
         end
-    end
+    end end end
 end
-
-local function getUnknownNeighborsExcluding(cell, flaggedSet, safeSet)
-    local result = {}
-    for _, n in ipairs(cell.neigh) do
-        if not flaggedSet[n] and not safeSet[n] and isEligibleForClick(n) then
-            table.insert(result, n)
+local function countR(c, fS) local r = c.number or 0 for _, n in ipairs(c.neigh) do if fS[n] then r = r - 1 end end return r end
+local function getC(num, fS, sS)
+    local bds, map = {}, {}
+    for _, nc in ipairs(num) do
+        local r, ns = nc.number or 0, {}
+        for _, n in ipairs(nc.neigh) do
+            if fS[n] then r = r - 1 
+            elseif isE(n) and not sS[n] then tinsert(ns, n) if not map[n] then map[n] = true tinsert(bds, n) end end
         end
+        nc._cr, nc._cn = r, ns
     end
-    return result
-end
-
-local function countRemainingMines(cell, flaggedSet)
-    local remaining = cell.number or 0
-    for _, n in ipairs(cell.neigh) do
-        if flaggedSet[n] or n.state == "flagged" then
-            remaining = remaining - 1
-        end
-    end
-    return remaining
-end
-
-local function getBoundaryComponents(numbered, flaggedSet, safeSet)
-    local allUnknowns = {}
-    local totalFlags = 0
-    if config.TotalMines and config.TotalMines > 0 then
-        local count = 0
-        for x = 0, state.grid.w - 1 do
-            if state.cells.grid[x] then
-                for z = 0, state.grid.h - 1 do
-                    local cell = state.cells.grid[x][z]
-                    if cell then
-                        if cell.state == "flagged" or flaggedSet[cell] then
-                            totalFlags = totalFlags + 1
-                        elseif isEligibleForClick(cell) and not safeSet[cell] then
-                            table.insert(allUnknowns, cell)
-                        end
-                    end
-                end
-            end
-        end
-        
-        if #allUnknowns <= 26 then
-            allUnknowns._isGlobal = true
-            allUnknowns._remainingMines = config.TotalMines - totalFlags
-            local comp = { allUnknowns }
-            for _, numCell in ipairs(numbered) do
-                local rem = (numCell.number or 0)
-                local neighbors = {}
-                for _, n in ipairs(numCell.neigh) do
-                    if n.state == "flagged" then
-                        table.insert(neighbors, n)
-                    elseif flaggedSet[n] then
-                        rem = rem - 1
-                    elseif not safeSet[n] and isEligibleForClick(n) then
-                        table.insert(neighbors, n)
-                    end
-                end
-                numCell._csp_rem = rem
-                numCell._csp_neigh = neighbors
-            end
-            return comp
-        end
-    end
-
-    local boundaryCells = {}
-    local cellMap = {}
-    
-    for _, numCell in ipairs(numbered) do
-        local rem = (numCell.number or 0)
-        local neighbors = {}
-        for _, n in ipairs(numCell.neigh) do
-            if n.state == "flagged" then
-                table.insert(neighbors, n)
-                if not cellMap[n] then
-                    cellMap[n] = true
-                    table.insert(boundaryCells, n)
-                end
-            elseif flaggedSet[n] then
-                rem = rem - 1
-            elseif not safeSet[n] and isEligibleForClick(n) then
-                table.insert(neighbors, n)
-                if not cellMap[n] then
-                    cellMap[n] = true
-                    table.insert(boundaryCells, n)
-                end
-            end
-        end
-        numCell._csp_rem = rem
-        numCell._csp_neigh = neighbors
-    end
-    
-    local adj = {}
-    for _, u in ipairs(boundaryCells) do adj[u] = {} end
-    
-    for _, numCell in ipairs(numbered) do
-        local ns = numCell._csp_neigh
-        if #ns > 0 then
-            for i = 1, #ns do
-                for j = i+1, #ns do
-                    local u, v = ns[i], ns[j]
-                    adj[u][v] = true
-                    adj[v][u] = true
-                end
-            end
-        end
-    end
-    
-    local visited = {}
-    local components = {}
-    
-    for _, u in ipairs(boundaryCells) do
-        if not visited[u] then
-            local comp = {}
-            local q = {u}
-            visited[u] = true
+    local adj = {} for _, u in ipairs(bds) do adj[u] = {} end
+    for _, nc in ipairs(num) do local ns = nc._cn for i = 1, #ns do for j = i+1, #ns do local u, v = ns[i], ns[j] adj[u][v], adj[v][u] = true, true end end end
+    local vis, comps = {}, {}
+    for _, u in ipairs(bds) do
+        if not vis[u] then
+            local comp, q = {}, {u} vis[u] = true
             while #q > 0 do
-                local curr = table.remove(q)
-                table.insert(comp, curr)
-                for neighbor in pairs(adj[curr] or {}) do
-                    if not visited[neighbor] then
-                        visited[neighbor] = true
-                        table.insert(q, neighbor)
-                    end
-                end
+                local cur = tremove(q) tinsert(comp, cur)
+                for n in pairs(adj[cur] or {}) do if not vis[n] then vis[n] = true tinsert(q, n) end end
             end
-            table.insert(components, comp)
+            tinsert(comps, comp)
         end
     end
-    
-    return components
+    if config.TotalMines and config.TotalMines > 0 then
+        local unks, flags = {}, 0
+        for x = 0, state.grid.w - 1 do 
+            local col = state.cells.grid[x]
+            if col then for z = 0, state.grid.h - 1 do 
+                local c = col[z] if c then if fS[c] then flags = flags + 1 elseif isE(c) and not sS[c] then tinsert(unks, c) end end 
+            end end
+        end
+        if #unks <= 26 then unks._isGlobal, unks._rem = true, config.TotalMines - flags tinsert(comps, 1, unks) end
+    end
+    return comps
 end
-
-local function solveCSP(flaggedSet, safeSet)
-    local numbered = state.cells.numbered
-    local components = getBoundaryComponents(numbered, flaggedSet, safeSet)
-    local tStart = os.clock()
-    
-    local compData = {}
-    local totalCompVars = 0
-    local allVarsSet = {}
-
-    for _, vars in ipairs(components) do
-        local degrees = {}
-        for _, v in ipairs(vars) do 
-            degrees[v] = 0 
-            allVarsSet[v] = true
+local function solveCSP(fS, sS)
+    local num, tS = state.cells.numbered, os.clock()
+    local comps = getC(num, fS, sS) if #comps == 0 then return end
+    local cD, tCV = {}, 0
+    for i = 1, #comps do
+        local v = comps[i] local nV = #v if nV == 0 then continue end
+        local deg = {} for j = 1, nV do deg[v[j]] = 0 end tCV = tCV + nV
+        for j = 1, #num do local nc = num[j] for k = 1, #nc._cn do local n = nc._cn[k] if deg[n] then deg[n] = deg[n] + 1 end end end
+        tsort(v, function(a, b) return deg[a] > deg[b] end)
+        if os.clock() - tS > 0.1 then break end
+        local map, cts, cCts = {}, {}, {} for j = 1, nV do map[v[j]], cCts[j] = j, {} end
+        local cons = {}
+        for j = 1, #num do
+            local nc, cv = num[j], {} for k = 1, #nc._cn do local m = map[nc._cn[k]] if m then cv[#cv+1] = m end end
+            if #cv > 0 then tsort(cv) cons[#cons+1] = {v = cv, r = nc._cr, cur = 0, un = #cv} end
         end
-        totalCompVars = totalCompVars + #vars
-        for _, numCell in ipairs(numbered) do
-            for _, n in ipairs(numCell._csp_neigh) do
-                if degrees[n] then degrees[n] = degrees[n] + 1 end
+        if v._isGlobal then local gv = {} for j = 1, nV do gv[j] = j end cons[#cons+1] = {v = gv, r = v._rem, cur = 0, un = nV} end
+        local vT = {} for j = 1, nV do vT[j] = {} end
+        for j = 1, #cons do for _, vi in ipairs(cons[j].v) do tinsert(vT[vi], cons[j]) end end
+        local cur, solC, abrt = {}, 0, false
+        local function bt(idx)
+            if solC >= 100000 or abrt then return end
+            if (solC % 256 == 0) and (os.clock() - tS > 0.1) then abrt = true return end
+            if idx > nV then
+                solC = solC + 1 local ms = 0 for j = 1, nV do ms = ms + cur[j] end
+                cts[ms] = (cts[ms] or 0) + 1
+                for j = 1, nV do if cur[j] == 1 then cCts[j][ms] = (cCts[j][ms] or 0) + 1 end end
+                return
             end
-        end
-        table.sort(vars, function(a, b) return degrees[a] > degrees[b] end)
-        
-        local nVars = #vars
-        if nVars > 0 then
-            local solutions = {}
-            local solutionCount = 0
-            local MAX_SOLUTIONS = 100000 
-            local varMap = {}
-            for i, v in ipairs(vars) do varMap[v] = i end
-            
-            local constraints = {}
-            for _, numCell in ipairs(numbered) do
-                local relevant = false
-                for _, n in ipairs(numCell._csp_neigh) do
-                    if varMap[n] then relevant = true break end
+            for val = 0, 1 do
+                local ok = true
+                for j = 1, #vT[idx] do local c = vT[idx][j] local ns = c.cur + val if ns > c.r or (ns + c.un - 1) < c.r then ok = false break end end
+                if ok then
+                    cur[idx] = val for j = 1, #vT[idx] do local c = vT[idx][j] c.cur, c.un = c.cur + val, c.un - 1 end
+                    bt(idx + 1) if abrt then return end
+                    for j = 1, #vT[idx] do local c = vT[idx][j] c.cur, c.un = c.cur - val, c.un + 1 end
                 end
-                if relevant then
-                    local cVars = {}
-                    for _, n in ipairs(numCell._csp_neigh) do
-                        if varMap[n] then table.insert(cVars, varMap[n]) end
-                    end
-                    table.sort(cVars) 
-                    table.insert(constraints, { vars = cVars, rem = numCell._csp_rem })
-                end
-            end
-            
-            if vars._isGlobal then
-                local allVars = {}
-                for i = 1, nVars do table.insert(allVars, i) end
-                table.insert(constraints, { vars = allVars, rem = vars._remainingMines })
-            end
-            
-            local current = {}
-            local aborted = false
-            local counts = {} 
-            local cellCounts = {} 
-            for i=1, nVars do cellCounts[i] = {} end
-
-            local function backtrack(idx)
-                if solutionCount >= MAX_SOLUTIONS then return end
-                if (solutionCount % 100 == 0) and (os.clock() - tStart > 0.1) then aborted = true return end
-                
-                if idx > nVars then
-                    solutionCount = solutionCount + 1
-                    local mines = 0
-                    for i = 1, nVars do mines = mines + current[i] end
-                    
-                    counts[mines] = (counts[mines] or 0) + 1
-                    for i = 1, nVars do
-                        if current[i] == 1 then
-                            cellCounts[i][mines] = (cellCounts[i][mines] or 0) + 1
-                        end
-                    end
-                    
-                    if not vars._solutions then vars._solutions = {} end
-                    if #vars._solutions < 2000 then 
-                        local sol = {}
-                        for i = 1, nVars do sol[i] = current[i] end
-                        table.insert(vars._solutions, sol)
-                    end
-                    return
-                end
-                
-                for val = 0, 1 do
-                    current[idx] = val
-                    local consistent = true
-                    for _, c in ipairs(constraints) do
-                        local sum = 0
-                        local unassigned = 0
-                        for _, vIdx in ipairs(c.vars) do
-                            if vIdx <= idx then sum = sum + current[vIdx]
-                            else unassigned = unassigned + 1 end
-                        end
-                        if sum > c.rem then consistent = false break end
-                        if (sum + unassigned) < c.rem then consistent = false break end
-                    end
-                    if consistent then
-                        backtrack(idx + 1)
-                        if aborted or solutionCount >= MAX_SOLUTIONS then return end
-                    end
-                end
-            end
-            
-            backtrack(1)
-            
-            if not aborted and solutionCount > 0 then
-                table.insert(compData, {
-                    vars = vars,
-                    counts = counts,
-                    cellCounts = cellCounts,
-                    total = solutionCount
-                })
             end
         end
+        if nV <= 12 then
+            for m = 0, 2^nV - 1 do
+                local ok = true for j = 1, #cons do local s = 0 for _, vi in ipairs(cons[j].v) do if bit32.extract(m, vi-1) == 1 then s = s + 1 end end if s ~= cons[j].r then ok = false break end end
+                if ok then solC = solC + 1 local ms = 0 for j = 1, nV do if bit32.extract(m, j-1) == 1 then ms = ms + 1 cCts[j][ms] = (cCts[j][ms] or 0) + 1 end end cts[ms] = (cts[ms] or 0) + 1 end
+            end
+        else bt(1) end
+        if not abrt and solC > 0 then tinsert(cD, {v = v, cts = cts, ccts = cCts, total = solC}) end
     end
-
-    if #compData > 0 then
-        local validCounts = {}
-        for i, data in ipairs(compData) do
-             validCounts[i] = {}
-             for k in pairs(data.counts) do validCounts[i][k] = true end
-        end
-
+    if #cD > 0 then
+        local valC = {} for i = 1, #cD do local vc = {} for k in pairs(cD[i].cts) do vc[k] = true end valC[i] = vc end
         if config.TotalMines then
-            local knownFlags = 0
-            local totalUnknowns = 0
-            for x = 0, state.grid.w - 1 do
-                if state.cells.grid[x] then
-                    for z = 0, state.grid.h - 1 do
-                        local cell = state.cells.grid[x][z]
-                        if cell then
-                            if cell.state == "flagged" or flaggedSet[cell] then knownFlags = knownFlags + 1
-                            elseif isEligibleForClick(cell) and not safeSet[cell] then totalUnknowns = totalUnknowns + 1 end
-                        end
-                    end
-                end
+            local kF, tU, grid = 0, 0, state.cells.grid
+            for x = 0, state.grid.w - 1 do if grid[x] then for z = 0, state.grid.h - 1 do local c = grid[x][z] if c then if fS[c] then kF = kF + 1 elseif isE(c) and not sS[c] then tU = tU + 1 end end end end end
+            local tM, sl, dp = config.TotalMines - kF, max(0, tU - tCV), { [0] = true }
+            for i = 1, #cD do local nD, d = {}, cD[i] for s in pairs(dp) do for k in pairs(d.cts) do local ns = s + k if ns <= tM then nD[ns] = true end end end dp = nD end
+            local fVS = {} for s in pairs(dp) do if s + sl >= tM and s <= tM then fVS[s] = true end end
+            local pC = {} for i = 1, #cD do pC[i] = {} end
+            local function pr(idx, s)
+                if idx > #cD then return fVS[s] == true end
+                local d, ok = cD[idx], false for k in pairs(d.cts) do if pr(idx + 1, s + k) then pC[idx][k], ok = true, true end end return ok
             end
-            
-            local targetMines = config.TotalMines - knownFlags
-            local slack = totalUnknowns - totalCompVars
-            local minSlack, maxSlack = 0, slack
-            if slack < 0 then slack = 0 minSlack = 0 maxSlack = 0 end 
-            
-            local dp = { [0] = true } 
-            
-            for i, data in ipairs(compData) do
-                local newDp = {}
-                for currentSum, _ in pairs(dp) do
-                    for k in pairs(data.counts) do
-                        local nextSum = currentSum + k
-                        if nextSum <= targetMines then 
-                             newDp[nextSum] = true
-                        end
-                    end
-                end
-                dp = newDp
-            end
-            
-            local finalValidSums = {}
-            for s in pairs(dp) do
-                if s + maxSlack >= targetMines and s + minSlack <= targetMines then
-                    finalValidSums[s] = true
-                end
-            end
-            
-            local prunedCounts = {}
-            for i = 1, #compData do prunedCounts[i] = {} end
-
-            local function prune(idx, currentSum)
-                if idx > #compData then return finalValidSums[currentSum] == true end
-                
-                local data = compData[idx]
-                local isValid = false
-                for k in pairs(data.counts) do
-                    if prune(idx + 1, currentSum + k) then
-                        prunedCounts[idx][k] = true
-                        isValid = true
-                    end
-                end
-                return isValid
-            end
-            
-            if prune(1, 0) then
-                validCounts = prunedCounts
-            end
+            if pr(1, 0) then valC = pC end
         end
-
-        for i, data in ipairs(compData) do
-            local totalValidSolutions = 0
-            for k, count in pairs(data.counts) do
-                if validCounts[i][k] then totalValidSolutions = totalValidSolutions + count end
-            end
-            
-            if totalValidSolutions > 0 then
-                for vIdx, v in ipairs(data.vars) do
-                    local mineCount = 0
-                    for k, count in pairs(data.counts) do
-                        if validCounts[i][k] then
-                           mineCount = mineCount + (data.cellCounts[vIdx][k] or 0)
-                        end
-                    end
-                    
-                    if mineCount == totalValidSolutions then
-                        if not flaggedSet[v] then flaggedSet[v] = true end
-                    elseif mineCount == 0 then
-                        if not safeSet[v] then safeSet[v] = true end
-                        if v.state == "flagged" then v.isWrongFlag = true end
-                    end
-                    v._prob = mineCount / totalValidSolutions
+        for i = 1, #cD do
+            local d, tVS, vc = cD[i], 0, valC[i] for k, c in pairs(d.cts) do if vc[k] then tVS = tVS + c end end
+            if tVS > 0 then
+                for vi = 1, #d.v do
+                    local v, mC = d.v[vi], 0 for k in pairs(vc) do mC = mC + (d.ccts[vi][k] or 0) end
+                    if mC == tVS then if not fS[v] then fS[v] = true end
+                    elseif mC == 0 then if not sS[v] then sS[v] = true end if v.state == "flagged" then v.isWrongFlag = true end end
+                    v._prob = mC / tVS
                 end
             end
         end
     end
 end
-
-local function applySimpleDeductionRule(cellA, cellB, unknownsA, unknownsB, flaggedSet, safeSet)
-    local setA = {}
-    for _, u in ipairs(unknownsA) do setA[u] = true end
-    local onlyA, onlyB = {}, {}
-    local inter = {}
-    
-    for _, u in ipairs(unknownsB) do
-        if setA[u] then 
-            setA[u] = nil
-            table.insert(inter, u)
-        else 
-            table.insert(onlyB, u) 
-        end
-    end
-    for u in pairs(setA) do table.insert(onlyA, u) end
-
-    local minesA = countRemainingMines(cellA, flaggedSet)
-    local minesB = countRemainingMines(cellB, flaggedSet)
-
-    if #onlyA == 0 and #onlyB > 0 then
-        local diff = minesB - minesA
-        if diff == 0 then for _, u in ipairs(onlyB) do safeSet[u] = true end
-        elseif diff == #onlyB then for _, u in ipairs(onlyB) do flaggedSet[u] = true end end
-    elseif #onlyB == 0 and #onlyA > 0 then
-        local diff = minesA - minesB
-        if diff == 0 then for _, u in ipairs(onlyA) do safeSet[u] = true end
-        elseif diff == #onlyA then for _, u in ipairs(onlyA) do flaggedSet[u] = true end end
-    end
-    
-    if minesA == 1 and minesB == 1 then
-        if #onlyA == 1 and #inter == 2 and #onlyB == 0 then
-            safeSet[onlyA[1]] = true
-        elseif #onlyB == 1 and #inter == 2 and #onlyA == 0 then
-            safeSet[onlyB[1]] = true
-        end
+local function applyS(cA, cB, uA, uB, fS, sS)
+    local sA, sB, iS = {}, {}, 0 for _, u in ipairs(uA) do sA[u] = true end
+    for _, u in ipairs(uB) do if sA[u] then iS = iS + 1 sA[u] = false sB[u] = false else sB[u] = true end end
+    local oA, oB, iL = {}, {}, {} for _, u in ipairs(uA) do if sA[u] ~= false then oA[#oA+1] = u else iL[#iL+1] = u end end
+    for _, u in ipairs(uB) do if sB[u] then oB[#oB+1] = u end end
+    if #iL == 0 then return end
+    local rA, rB = countR(cA, fS), countR(cB, fS)
+    local minI, maxI = max(0, rA - #oA, rB - #oB), min(rA, rB, #iL)
+    if minI == maxI then
+        if rA - minI == 0 then for _, u in ipairs(oA) do sS[u] = true end elseif rA - minI == #oA then for _, u in ipairs(oA) do fS[u] = true end end
+        if rB - minI == 0 then for _, u in ipairs(oB) do sS[u] = true end elseif rB - minI == #oB then for _, u in ipairs(oB) do fS[u] = true end end
     end
 end
-
-local function checkAdjacentNumberedCells(flaggedSet, safeSet)
-    local numbered = state.cells.numbered
-    local grid = state.cells.grid
-    for _, cell in ipairs(numbered) do
-        for dz = -1, 1 do
-            for dx = -1, 1 do
-                if dx == 0 and dz == 0 then continue end
-                local nx, nz = cell.ix + dx, cell.iz + dz
-                if nx >= 0 and nx < state.grid.w and nz >= 0 and nz < state.grid.h then
-                    local adj = grid[nx][nz]
-                    if adj and adj.state == "number" then
-                        local unknownsThis = getUnknownNeighborsExcluding(cell, flaggedSet, safeSet)
-                        local unknownsAdj = getUnknownNeighborsExcluding(adj, flaggedSet, safeSet)
-                        if #unknownsThis > 0 and #unknownsAdj > 0 then
-                            applySimpleDeductionRule(cell, adj, unknownsThis, unknownsAdj, flaggedSet, safeSet)
-                        end
-                    end
-                end
-            end
+local function updateL()
+    if state.grid.w == 0 then state.cells.toFlag, state.cells.toClear = {}, {} return end
+    local num = state.cells.numbered if #num == 0 then return end
+    local fS, sS, ch, iter = {}, {}, true, 0
+    while ch and iter < 64 do
+        ch, iter = false, iter + 1
+        for _, c in ipairs(num) do
+            local unk, flg = {}, 0 for _, n in ipairs(c.neigh) do if fS[n] then flg = flg + 1 elseif not sS[n] and isE(n) then tinsert(unk, n) end end
+            local r = (c.number or 0) - flg
+            if r > 0 and r == #unk then for _, u in ipairs(unk) do if not fS[u] then fS[u] = true ch = true end end
+            elseif r == 0 and #unk > 0 then for _, u in ipairs(unk) do if not sS[u] then sS[u] = true ch = true end end end
         end
+        local pF, pC = 0, 0 for _ in pairs(fS) do pF = pF + 1 end for _ in pairs(sS) do pC = pC + 1 end
+        for _, c in ipairs(num) do for _, n in ipairs(c.neigh) do if n.state == "number" then local uT, uA = {}, {} for _, nn in ipairs(c.neigh) do if not fS[nn] and not sS[nn] and isE(nn) then tinsert(uT, nn) end end for _, nn in ipairs(n.neigh) do if not fS[nn] and not sS[nn] and isE(nn) then tinsert(uA, nn) end end if #uT > 0 and #uA > 0 then applyS(c, n, uT, uA, fS, sS) end end end end
+        local postF, postC = 0, 0 for _ in pairs(fS) do postF = postF + 1 end for _ in pairs(sS) do postC = postC + 1 end
+        if postF ~= pF or postC ~= pC then ch = true end
+        if not ch then solveCSP(fS, sS) local nF, nC = 0, 0 for _ in pairs(fS) do nF = nF + 1 end for _ in pairs(sS) do nC = nC + 1 end if nF ~= postF or nC ~= postC then ch = true end end
     end
+    state.cells.toFlag, state.cells.toClear = fS, sS
 end
-
-function getUnknownsForCell(cell, flaggedSet, safeSet) 
-    return getUnknownNeighborsExcluding(cell, flaggedSet, safeSet)
-end
-
-local function updateLogic()
-    if state.grid.w == 0 then
-        state.cells.toFlag = {}
-        state.cells.toClear = {}
-        return
-    end
-    local numbered = state.cells.numbered
-    if #numbered == 0 then return end
-    
-    local knownFlags = {}
+local function updateG()
+    state.bestGuessCell = nil if not config.GuessHelper or state.grid.w == 0 then return end
+    local kF, uK = 0, 0 for x = 0, state.grid.w - 1 do local col = state.cells.grid[x] if col then for z = 0, state.grid.h - 1 do local c = col[z] if c.state == "flagged" or state.cells.toFlag[c] then kF = kF + 1 elseif isE(c) and not state.cells.toClear[c] then uK = uK + 1 end end end end
+    local gD = uK > 0 and ((config.TotalMines - kF) / uK) or 0.15
+    local pP = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
+    local maxD = pP and sqrt((state.grid.w*5)^2 + (state.grid.h*5)^2) or 1
+    local bestC, bestS = nil, nil
     for x = 0, state.grid.w - 1 do
         local col = state.cells.grid[x]
-        if col then
-            for z = 0, state.grid.h - 1 do
-                local cell = col[z]
-                if cell and cell.state == "flagged" then knownFlags[cell] = true end
-            end
-        end
-    end
-
-    local changed, iterations = true, 0
-    while changed and iterations < 64 do
-        changed = false
-        iterations = iterations + 1
-
-        for _, cell in ipairs(numbered) do
-            local unknowns = {}
-            local flagCount = 0
-            for _, n in ipairs(cell.neigh) do
-                if knownFlags[n] or n.state == "flagged" then flagCount = flagCount + 1
-                elseif not state.cells.toClear[n] and isEligibleForClick(n) then table.insert(unknowns, n) end
-            end
-            local remaining = (cell.number or 0) - flagCount
-            if remaining > 0 and remaining == #unknowns then
-                for _, u in ipairs(unknowns) do
-                    if not knownFlags[u] then knownFlags[u] = true changed = true end
+        if col then for z = 0, state.grid.h - 1 do
+            local c = col[z] if c and c.part and isE(c) and not hasF(c.part) and not state.cells.toFlag[c] and not state.cells.toClear[c] then
+                local pb = c._prob
+                if not pb then
+                    local vC, pS, hasN = 0, 0, false
+                    for _, n in ipairs(c.neigh) do if n.state == "number" and n.number and n.number > 0 then hasN = true local fs, lu = 0, 0 for _, nn in ipairs(n.neigh) do if (nn.part and hasF(nn.part)) or state.cells.toFlag[nn] then fs = fs + 1 elseif isE(nn) and not state.cells.toFlag[nn] and not state.cells.toClear[nn] then lu = lu + 1 end end local r = n.number - fs if r <= 0 then vC = vC + 1 elseif lu > 0 then pS = pS + (r/lu) vC = vC + 1 end end end
+                    pb = (hasN and vC > 0) and (pS / vC) or gD
                 end
-            elseif remaining == 0 and #unknowns > 0 then
-                for _, u in ipairs(unknowns) do
-                    if not state.cells.toClear[u] then state.cells.toClear[u] = true changed = true end
-                end
+                local s = pb + ((x == 0 or x == state.grid.w-1 or z == 0 or z == state.grid.h-1) and config.EdgePenalty or 0)
+                local uN = 0 for _, n in ipairs(c.neigh) do if isE(n) and not state.cells.toFlag[n] and not state.cells.toClear[n] then uN = uN + 1 end end
+                s = s - (uN * 0.005) - ( (function() local cN=0 for _,n in ipairs(c.neigh) do if n.state=="number" then cN=cN+1 end end return cN end)() * 0.02 )
+                local dx, dz = x - state.grid.w/2, z - state.grid.h/2 s = s + (sqrt(dx*dx + dz*dz) / (state.grid.w + state.grid.h)) * 0.02
+                if pP then s = s + ((c.pos - pP).Magnitude / maxD) * config.DistanceWeight end
+                if not bestS or s < bestS then bestS, bestC = s, c end
             end
-        end
-
-        local preFlags = 0
-        local preClears = 0
-        for _ in pairs(knownFlags) do preFlags = preFlags + 1 end
-        for _ in pairs(state.cells.toClear) do preClears = preClears + 1 end
-
-        checkAdjacentNumberedCells(knownFlags, state.cells.toClear)
-        
-        local postFlags = 0
-        local postClears = 0
-        for _ in pairs(knownFlags) do postFlags = postFlags + 1 end
-        for _ in pairs(state.cells.toClear) do postClears = postClears + 1 end
-
-        if postFlags ~= preFlags or postClears ~= preClears then
-            changed = true
-        end
-
-        if not changed then
-            solveCSP(knownFlags, state.cells.toClear)
-            
-            local newFlags = 0
-            local newClears = 0
-            for _ in pairs(knownFlags) do newFlags = newFlags + 1 end
-            for _ in pairs(state.cells.toClear) do newClears = newClears + 1 end
-            
-            if newFlags ~= postFlags or newClears ~= postClears then
-                changed = true
-            end
-        end
+        end end
     end
-    state.cells.toFlag = knownFlags
+    state.bestGuessCell = bestC
 end
-
-local function updateGuess()
-    state.bestGuessCell = nil
-    state.bestGuessScore = nil
-    if not config.GuessHelper then return end
-    if state.grid.w == 0 then return end
-
-    local knownFlagsCount = 0
-    local unknownCount = 0
-    for x = 0, state.grid.w - 1 do
-        local col = state.cells.grid[x]
-        if col then
-            for z = 0, state.grid.h - 1 do
-                local cell = col[z]
-                if cell.state == "flagged" or state.cells.toFlag[cell] then knownFlagsCount = knownFlagsCount + 1
-                elseif isEligibleForClick(cell) and not state.cells.toClear[cell] then unknownCount = unknownCount + 1 end
-            end
+local function applyH(c, col)
+    if not c.borders then
+        local th, ins = 0.15, 0.02
+        local function np() local p=Instance.new("Part") p.Anchored,p.CanCollide,p.CanQuery,p.CanTouch,p.CastShadow,p.Transparency,p.Material,p.Size=true,false,false,false,false,1,Enum.Material.Neon,Vector3.new(1,1,1) return p end
+        c.borders = { top = np(), bottom = np(), left = np(), right = np() }
+        local f = workspace:FindFirstChild("MinesweeperHighlights") or Instance.new("Folder", workspace) f.Name = "MinesweeperHighlights"
+        for _, b in pairs(c.borders) do b.Parent = f end
+        if c.part then
+            local sz, hx, hz, yf = c.part.Size, c.part.Size.X/2 - ins, c.part.Size.Z/2 - ins, c.part.Size.Y/2 + 0.01
+            local t, b, l, r = c.borders.top, c.borders.bottom, c.borders.left, c.borders.right
+            t.Size, b.Size, l.Size, r.Size = Vector3.new(sz.X-ins*2, th, th), Vector3.new(sz.X-ins*2, th, th), Vector3.new(th, th, sz.Z-ins*2), Vector3.new(th, th, sz.Z-ins*2)
+            t.CFrame, b.CFrame, l.CFrame, r.CFrame = c.part.CFrame*CFrame.new(0, yf, -hz), c.part.CFrame*CFrame.new(0, yf, hz), c.part.CFrame*CFrame.new(-hx, yf, 0), c.part.CFrame*CFrame.new(hx, yf, 0)
         end
     end
-    
-    local remainingMines = config.TotalMines - knownFlagsCount
-    local globalDensity = unknownCount > 0 and (remainingMines / unknownCount) or 0.15
-    local playerPos = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
-    local maxDistance = playerPos and math.sqrt((state.grid.w * 5)^2 + (state.grid.h * 5)^2) or 1
-    
-    local bestCell, bestScore = nil, nil
-
-    for x = 0, state.grid.w - 1 do
-        local col = state.cells.grid[x]
-        if col then
-            for z = 0, state.grid.h - 1 do
-                local cell = col[z]
-                if cell and cell.part and isEligibleForClick(cell) and not hasFlagChild(cell.part) and not state.cells.toFlag[cell] and not state.cells.toClear[cell] then
-                    
-                    local probResult
-                    if cell._prob then
-                        probResult = cell._prob
-                    else
-                        local validCount, probSum = 0, 0
-                        local hasNumberedNeighbor = false
-                        
-                        for _, n in ipairs(cell.neigh) do
-                            if n.state == "number" and n.number and n.number > 0 then
-                                hasNumberedNeighbor = true
-                                local flaggedCount = 0 
-                                local unknownCountLocal = 0
-                                for _, nn in ipairs(n.neigh) do
-                                    if (nn.part and hasFlagChild(nn.part)) or state.cells.toFlag[nn] then flaggedCount = flaggedCount + 1
-                                    elseif isEligibleForClick(nn) and not state.cells.toFlag[nn] and not state.cells.toClear[nn] then unknownCountLocal = unknownCountLocal + 1 end
-                                end
-                                local remaining = n.number - flaggedCount
-                                if remaining <= 0 then validCount = validCount + 1 
-                                elseif unknownCountLocal > 0 then 
-                                    probSum = probSum + (remaining / unknownCountLocal) 
-                                    validCount = validCount + 1 
-                                end
-                            end
-                        end
-                         
-                        if hasNumberedNeighbor and validCount > 0 then
-                            probResult = probSum / validCount
-                        else
-                            probResult = globalDensity
-                        end
-                    end
-                    
-                    local score = probResult
-                    
-                    if (x == 0 or x == state.grid.w - 1 or z == 0 or z == state.grid.h - 1) then score = score + config.EdgePenalty end
-                    if playerPos then score = score + ((cell.pos - playerPos).Magnitude / maxDistance) * config.DistanceWeight end
-                    
-                    if not bestScore or score < bestScore then 
-                        bestScore = score 
-                        bestCell = cell 
-                    end
+    for _, b in pairs(c.borders) do b.Color, b.Transparency = col, 0 end
+end
+local function updateH()
+    local bG, en = state.bestGuessCell, Toggles.HighlightMines and Toggles.HighlightMines.Value
+    local grid = state.cells.grid if not grid then return end
+    for x = 0, state.grid.w - 1 do local col = grid[x] if col then for z = 0, state.grid.h - 1 do
+        local c = col[z] if c and c.part then
+            local vis = c.covered and c.state ~= "number"
+            if not vis then if c.isHighlightedMine or c.isHighlightedSafe or c.isHighlightedGuess or c.isWrongFlag then if c.borders then for _, b in pairs(c.borders) do b.Transparency = 1 end end c.isHighlightedMine, c.isHighlightedSafe, c.isHighlightedGuess, c.isWrongFlag = false, false, false, false end
+            else
+                local iM, iS, iG, iW = state.cells.toFlag[c] ~= nil, state.cells.toClear[c] ~= nil, c == bG and config.GuessHelper, c.isWrongFlag
+                if iM ~= c.isHighlightedMine or iS ~= c.isHighlightedSafe or iG ~= c.isHighlightedGuess or iW ~= c.isWrongFlag then
+                    c.isHighlightedMine, c.isHighlightedSafe, c.isHighlightedGuess, c.isWrongFlag = iM, iS, iG, iW
+                    if en and (iM or iS or iG or iW) then applyH(c, iW and COLOR_WRONG or (iM and COLOR_MINE) or (iS and COLOR_SAFE) or COLOR_GUESS)
+                    elseif c.borders then for _, b in pairs(c.borders) do b.Transparency = 1 end end
                 end
             end
         end
-    end
-    state.bestGuessCell = bestCell
-    state.bestGuessScore = bestScore
+    end end end
 end
-
-local function createBorders(cell)
-    local th = 0.15
-    local ins = 0.02
-    local function newPart()
-        local p = Instance.new("Part")
-        p.Anchored = true
-        p.CanCollide = false
-        p.CanQuery = false
-        p.CanTouch = false
-        p.CastShadow = false
-        p.Transparency = 1
-        p.Material = Enum.Material.Neon
-        p.Size = Vector3.new(1, 1, 1)
-        return p
-    end
-    local borders = { top = newPart(), bottom = newPart(), left = newPart(), right = newPart() }
-    cell.borders = borders
-    cell._borderThickness = th
-    cell._borderInset = ins
-    
-    local folder = workspace:FindFirstChild("MinesweeperHighlights")
-    if not folder then
-        folder = Instance.new("Folder")
-        folder.Name = "MinesweeperHighlights"
-        folder.Parent = workspace
-    end
-    for _, border in pairs(borders) do border.Parent = folder end
-    return borders
-end
-
-local function updateBorderPositions(cell)
-    if not cell.part or not cell.borders then return end
-    local sz = cell.part.Size
-    local th = cell._borderThickness or 0.15
-    local ins = cell._borderInset or 0.02
-    local hx, hz = sz.X / 2 - ins, sz.Z / 2 - ins
-    local yoff = sz.Y / 2 + 0.01
-    local t, b, l, r = cell.borders.top, cell.borders.bottom, cell.borders.left, cell.borders.right
-    
-    t.Size = Vector3.new(sz.X - ins*2, th, th)
-    b.Size = Vector3.new(sz.X - ins*2, th, th)
-    l.Size = Vector3.new(th, th, sz.Z - ins*2)
-    r.Size = Vector3.new(th, th, sz.Z - ins*2)
-    
-    t.CFrame = cell.part.CFrame * CFrame.new(0, yoff, -hz)
-    b.CFrame = cell.part.CFrame * CFrame.new(0, yoff, hz)
-    l.CFrame = cell.part.CFrame * CFrame.new(-hx, yoff, 0)
-    r.CFrame = cell.part.CFrame * CFrame.new(hx, yoff, 0)
-    
-    local folder = workspace:FindFirstChild("MinesweeperHighlights")
-    if not folder then
-        folder = Instance.new("Folder")
-        folder.Name = "MinesweeperHighlights"
-        folder.Parent = workspace
-    end
-    if t.Parent ~= folder then
-        for _, border in pairs(cell.borders) do border.Parent = folder end
-    end
-end
-
-local function removeAllHighlights(cell)
-    if not cell.borders then return end
-    for _, b in pairs(cell.borders) do b.Transparency = 1 end
-    cell.isHighlightedMine = false
-    cell.isHighlightedSafe = false
-    cell.isHighlightedGuess = false
-end
-
-local function applyHighlight(cell, color)
-    if not cell.borders then createBorders(cell) updateBorderPositions(cell) end
-    for _, b in pairs(cell.borders) do
-        b.Color = color
-        b.Transparency = 0
-    end
-end
-
-local function updateHighlights()
-    local now = tick()
-    local bestGuess = state.bestGuessCell
-    local en = Toggles.HighlightMines and Toggles.HighlightMines.Value
-
-    for x = 0, state.grid.w - 1 do
-        local col = state.cells.grid[x]
-        if col then
-            for z = 0, state.grid.h - 1 do
-                local cell = col[z]
-                if cell and cell.part then
-                    local isVisible = cell.covered and cell.state ~= "number"
-                    if not isVisible then
-                        if cell.isHighlightedMine or cell.isHighlightedSafe or cell.isHighlightedGuess or cell.isWrongFlag then
-                            removeAllHighlights(cell)
-                        end
-                    else
-                        local isMine = state.cells.toFlag[cell] ~= nil
-                        local isSafe = state.cells.toClear[cell] ~= nil
-                        local isGuess = bestGuess and cell == bestGuess and config.GuessHelper
-                        local isWrong = cell.isWrongFlag
-
-                        local changed = (isMine ~= cell.isHighlightedMine) or 
-                                      (isSafe ~= cell.isHighlightedSafe) or 
-                                      (isGuess ~= cell.isHighlightedGuess) or 
-                                      (isWrong ~= cell.isWrongFlag)
-
-                        if changed then
-                            cell.lastHighlightChange = now
-                            cell.isHighlightedMine = isMine
-                            cell.isHighlightedSafe = isSafe
-                            cell.isHighlightedGuess = isGuess
-                            cell.isWrongFlag = isWrong
-                        end
-
-                        if en and (isMine or isSafe or isGuess or isWrong) then
-                            local color
-                            if isWrong then color = COLOR_WRONG
-                            elseif isMine then color = COLOR_MINE
-                            elseif isSafe then color = COLOR_SAFE
-                            else color = COLOR_GUESS end
-                            applyHighlight(cell, color)
-                        else
-                            removeAllHighlights(cell)
-                        end
-                    end
-                end
-            end
-        end
-    end
-end
-
-theme.BuiltInThemes["Default"][2] = {
-    BackgroundColor = "16293a",
-    MainColor = "26445f",
-    AccentColor = "5983a0",
-    OutlineColor = "325573",
-    FontColor = "d2dae1"
-}
-
-local win = lib:CreateWindow({
-    Title = "Axis Hub -\nMinesweeper.lua",
-    Footer = "by RwalDev & Plow | 1.8.4 | Discord: .gg/UuyxhqgEVs",
-    NotifySide = "Right",
-    ShowCustomCursor = true,
-})
-
-local home = win:AddTab("Home", "house")
-local main = win:AddTab("Main", "target")
-local cfg = win:AddTab("Settings", "settings")
-
-local status = home:AddLeftGroupbox("Status")
-status:AddLabel(string.format("Welcome, %s\nGame: Minesweeper", lp.DisplayName), true)
+theme.BuiltInThemes["Default"][2] = { BackgroundColor = "16293a", MainColor = "26445f", AccentColor = "5983a0", OutlineColor = "325573", FontColor = "d2dae1" }
+local win = lib:CreateWindow({ Title = "Axis Hub -\nMinesweeper.lua", Footer = "by RwalDev & Plow | 1.8.6", NotifySide = "Right", ShowCustomCursor = true })
+local home, mainT, cfg = win:AddTab("Home", "house"), win:AddTab("Main", "target"), win:AddTab("Settings", "settings")
+local status = home:AddLeftGroupbox("Status") status:AddLabel(string.format("Welcome, %s\nGame: Minesweeper", lp.DisplayName), true)
 status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
-
-local performance = home:AddRightGroupbox("Performance")
-local fpsLbl = performance:AddLabel("FPS: ...", true)
-local pingLbl = performance:AddLabel("Ping: ...", true)
-
-local mainBox = main:AddLeftGroupbox("Main")
-mainBox:AddToggle("HighlightMines", { Text = "Highlight Mines", Default = false })
-mainBox:AddToggle("BypassAnticheat", { Text = "Bypass Anticheat", Default = true })
-
-local cfgBox = cfg:AddLeftGroupbox("Config")
-cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
-cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
-lib.ToggleKeybind = lib.Options.MenuKeybind
-
-Toggles = lib.Toggles
-Options = lib.Options
-
+local perf = home:AddRightGroupbox("Performance") local fpsL, pingL = perf:AddLabel("FPS: ...", true), perf:AddLabel("Ping: ...", true)
+local mainB = mainT:AddLeftGroupbox("Main") mainB:AddToggle("HighlightMines", { Text = "Highlight Mines", Default = false })
+mainB:AddToggle("BypassAnticheat", { Text = "Bypass Anticheat", Default = true })
+local cfgB = cfg:AddLeftGroupbox("Config") cfgB:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
+cfgB:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
+lib.ToggleKeybind = Options.MenuKeybind
 local function bypass()
     if not getrawmetatable or not hookmetamethod then return end
-    local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Patukka")
-    if remote then
-        local old
-        old = hookmetamethod(game, "__namecall", function(self, ...)
-            local m = getnamecallmethod()
-            if self == remote and (m == "InvokeServer" or m == "FireServer") then
-                if Toggles.BypassAnticheat and Toggles.BypassAnticheat.Value then return nil end
-            end
-            return old(self, ...)
-        end)
-    end
+    local r = game:GetService("ReplicatedStorage"):FindFirstChild("Patukka")
+    if r then local old old = hookmetamethod(game, "__namecall", function(self, ...) local m = getnamecallmethod() if self == r and (m == "InvokeServer" or m == "FireServer") then if Toggles.BypassAnticheat and Toggles.BypassAnticheat.Value then return nil end end return old(self, ...) end) end
 end
-
-local lastUpdate = 0
+local lastS, solveInt = 0, 0.15
 rs.Heartbeat:Connect(function()
-    local now = tick()
-    if now - lastUpdate < 0.1 then return end
-    lastUpdate = now
-
     config.Enabled = Toggles.HighlightMines and Toggles.HighlightMines.Value
-    
-    if not config.Enabled then
-        clearAllCellBorders()
-        state.cells.toFlag = {}
-        state.cells.toClear = {}
-        state.parts = -1
-        return
-    end
-
-    local folder = scanForBoard()
-    if not folder then return end
-
-    if state.parts == -1 or folder ~= state.lastFolder or #folder:GetChildren() ~= state.parts then
-        rebuildGridFromParts(folder)
-    end
-    updateHighlights()
+    if not config.Enabled then clearB() state.cells.toFlag, state.cells.toClear, state.lastPartCount = {}, {}, -1 return end
+    local f = scanB() if not f then return end
+    local pc, now = #f:GetChildren(), tick()
+    local neb = pc ~= state.lastPartCount if neb then clearB() state.lastPartCount = pc rebuildG(f) end
+    if state.grid.w == 0 then return end
+    if neb or (now - lastS) >= solveInt then lastS = now updateS(f) updateL() updateG() end
+    updateH()
 end)
-
 local elap, frames = 0, 0
-local perfConn = rs.RenderStepped:Connect(function(dt)
-    frames = frames + 1
-    elap = elap + dt
-    if elap >= 1 then
-        fpsLbl:SetText("FPS: " .. math.floor(frames / elap + 0.5))
-        local net = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]
-        pingLbl:SetText("Ping: " .. (net and math.floor(net:GetValue()) or 0) .. " ms")
-        frames, elap = 0, 0
-    end
+rs.RenderStepped:Connect(function(dt)
+    frames, elap = frames + 1, elap + dt
+    if elap >= 1 then fpsL:SetText("FPS: " .. floor(frames/elap+0.5)) local net = game:GetService("Stats").Network.ServerStatsItem["Data Ping"] pingL:SetText("Ping: " .. (net and floor(net:GetValue()) or 0) .. " ms") frames, elap = 0, 0 end
 end)
-
-
-theme:SetLibrary(lib)
-save:SetLibrary(lib)
-save:IgnoreThemeSettings()
-save:SetIgnoreIndexes({ "MenuKeybind" })
-theme:SetFolder("PlowsScriptHub")
-save:SetFolder("PlowsScriptHub/Minesweeper")
-save:BuildConfigSection(cfg)
-theme:ApplyToTab(cfg)
-save:LoadAutoloadConfig()
-
-lib:OnUnload(function()
-    if perfConn then perfConn:Disconnect() end
-    clearAllCellBorders()
-    local f = workspace:FindFirstChild("MinesweeperHighlights")
-    if f then f:Destroy() end
-end)
-
+theme:SetLibrary(lib) save:SetLibrary(lib) save:IgnoreThemeSettings() save:SetIgnoreIndexes({ "MenuKeybind" })
+theme:SetFolder("PlowsScriptHub") save:SetFolder("PlowsScriptHub/Minesweeper")
+save:BuildConfigSection(cfg) theme:ApplyToTab(cfg) save:LoadAutoloadConfig()
+lib:OnUnload(function() clearB() local f = workspace:FindFirstChild("MinesweeperHighlights") if f then f:Destroy() end end)
 pcall(bypass)
