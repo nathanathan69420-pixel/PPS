@@ -477,18 +477,43 @@ mainBox:AddToggle("BypassAnticheat", { Text = "Bypass Anticheat", Default = true
 Toggles = lib.Toggles
 Options = lib.Options
 
+local lastSolve = 0
+local solveInterval = 0.15
+
 rs.Heartbeat:Connect(function()
+    if not Toggles.HighlightMines or not Toggles.HighlightMines.Value then
+        for x = 0, state.w - 1 do
+            for z = 0, state.h - 1 do
+                local c = state.grid[x] and state.grid[x][z]
+                if c and c.borders then
+                    for _, b in pairs(c.borders) do b.Transparency = 1 end
+                end
+            end
+        end
+        return
+    end
+    
     local folder = workspace:FindFirstChild("Flag") and workspace.Flag:FindFirstChild("Parts")
     if not folder then return end
+    
     local pc = #folder:GetChildren()
-    if pc ~= state.parts then
+    local now = tick()
+    local needsRebuild = pc ~= state.parts
+    
+    if needsRebuild then
         state.parts = pc
         rebuild(folder)
     end
+    
     if state.w == 0 then return end
-    updateStates()
-    solve()
-    calcGuess()
+    
+    if needsRebuild or (now - lastSolve) >= solveInterval then
+        lastSolve = now
+        updateStates()
+        solve()
+        calcGuess()
+    end
+    
     highlight()
 end)
 
