@@ -439,24 +439,31 @@ local function solveCSP(flaggedSet, safeSet)
     local components = getBoundaryComponents(numbered, flaggedSet, safeSet)
     local tStart = os.clock()
     
-    for _, vars in ipairs(components) do
-        if os.clock() - tStart > 0.05 then break end
+    local compData = {}
+    local totalCompVars = 0
+    local allVarsSet = {}
 
+    for _, vars in ipairs(components) do
         local degrees = {}
-        for _, v in ipairs(vars) do degrees[v] = 0 end
+        for _, v in ipairs(vars) do 
+            degrees[v] = 0 
+            allVarsSet[v] = true
+        end
+        totalCompVars = totalCompVars + #vars
         for _, numCell in ipairs(numbered) do
             for _, n in ipairs(numCell._csp_neigh) do
                 if degrees[n] then degrees[n] = degrees[n] + 1 end
             end
         end
         table.sort(vars, function(a, b) return degrees[a] > degrees[b] end)
+        
+        if os.clock() - tStart > 0.05 then break end
 
         local nVars = #vars
         if nVars > 0 then
             local solutions = {}
             local solutionCount = 0
             local MAX_SOLUTIONS = 100000 
-            
             local varMap = {}
             for i, v in ipairs(vars) do varMap[v] = i end
             
@@ -466,62 +473,66 @@ local function solveCSP(flaggedSet, safeSet)
                 for _, n in ipairs(numCell._csp_neigh) do
                     if varMap[n] then relevant = true break end
                 end
-                
                 if relevant then
                     local cVars = {}
                     for _, n in ipairs(numCell._csp_neigh) do
                         if varMap[n] then table.insert(cVars, varMap[n]) end
                     end
                     table.sort(cVars) 
-                    table.insert(constraints, {
-                        vars = cVars,
-                        rem = numCell._csp_rem,
-                    })
+                    table.insert(constraints, { vars = cVars, rem = numCell._csp_rem })
                 end
             end
             
             if vars._isGlobal then
                 local allVars = {}
                 for i = 1, nVars do table.insert(allVars, i) end
-                table.insert(constraints, {
-                    vars = allVars,
-                    rem = vars._remainingMines,
-                })
+                table.insert(constraints, { vars = allVars, rem = vars._remainingMines })
             end
             
-            local current = {} 
+            local current = {}
             local aborted = false
-            
+            local counts = {} 
+            local cellCounts = {} 
+            for i=1, nVars do cellCounts[i] = {} end
+
             local function backtrack(idx)
                 if solutionCount >= MAX_SOLUTIONS then return end
                 if (solutionCount % 100 == 0) and (os.clock() - tStart > 0.05) then aborted = true return end
                 
                 if idx > nVars then
                     solutionCount = solutionCount + 1
-                    local sol = {}
-                    for i = 1, nVars do sol[i] = current[i] end
-                    table.insert(solutions, sol)
+                    local mines = 0
+                    for i = 1, nVars do mines = mines + current[i] end
+                    
+                    counts[mines] = (counts[mines] or 0) + 1
+                    for i = 1, nVars do
+                        if current[i] == 1 then
+                            cellCounts[i][mines] = (cellCounts[i][mines] or 0) + 1
+                        end
+                    end
+                    
+                    if not vars._solutions then vars._solutions = {} end
+                    if #vars._solutions < 2000 then 
+                        local sol = {}
+                        for i = 1, nVars do sol[i] = current[i] end
+                        table.insert(vars._solutions, sol)
+                    end
                     return
                 end
                 
                 for val = 0, 1 do
                     current[idx] = val
-                    
                     local consistent = true
                     for _, c in ipairs(constraints) do
                         local sum = 0
                         local unassigned = 0
                         for _, vIdx in ipairs(c.vars) do
-                            if vIdx <= idx then 
-                                sum = sum + current[vIdx]
-                            else 
-                                unassigned = unassigned + 1 
-                            end
+                            if vIdx <= idx then sum = sum + current[vIdx]
+                            else unassigned = unassigned + 1 end
                         end
                         if sum > c.rem then consistent = false break end
                         if (sum + unassigned) < c.rem then consistent = false break end
                     end
-                    
                     if consistent then
                         backtrack(idx + 1)
                         if aborted or solutionCount >= MAX_SOLUTIONS then return end
@@ -531,20 +542,113 @@ local function solveCSP(flaggedSet, safeSet)
             
             backtrack(1)
             
-            if not aborted and solutionCount > 0 and solutionCount < MAX_SOLUTIONS then
-                for i, v in ipairs(vars) do
+            if not aborted and solutionCount > 0 then
+                table.insert(compData, {
+                    vars = vars,
+                    counts = counts,
+                    cellCounts = cellCounts,
+                    total = solutionCount
+                })
+            end
+        end
+    end
+
+    if #compData > 0 and config.TotalMines then
+        local knownFlags = 0
+        local totalUnknowns = 0
+        for x = 0, state.grid.w - 1 do
+            if state.cells.grid[x] then
+                for z = 0, state.grid.h - 1 do
+                    local cell = state.cells.grid[x][z]
+                    if cell then
+                        if cell.state == "flagged" or flaggedSet[cell] then knownFlags = knownFlags + 1
+                        elseif isEligibleForClick(cell) and not safeSet[cell] then totalUnknowns = totalUnknowns + 1 end
+                    end
+                end
+            end
+        end
+        
+        local targetMines = config.TotalMines - knownFlags
+        local slack = totalUnknowns - totalCompVars
+        local minSlack, maxSlack = 0, slack
+        if slack < 0 then slack = 0 minSlack = 0 maxSlack = 0 end 
+        
+        local validCounts = {}
+        for i = 1, #compData do validCounts[i] = {} end
+        
+        local dp = { [0] = true } 
+        local minMines, maxMines = 0, 0
+        
+        for i, data in ipairs(compData) do
+            local newDp = {}
+            local minK, maxK = huge, -huge
+            for k in pairs(data.counts) do
+                if k < minK then minK = k end
+                if k > maxK then maxK = k end
+            end
+            
+            for currentSum, _ in pairs(dp) do
+                for k in pairs(data.counts) do
+                    local nextSum = currentSum + k
+                    if nextSum <= targetMines then 
+                         newDp[nextSum] = true
+                    end
+                end
+            end
+            dp = newDp
+            minMines = minMines + minK
+            maxMines = maxMines + maxK
+        end
+        
+        local finalValidSums = {}
+        for s in pairs(dp) do
+            if s + maxSlack >= targetMines and s + minSlack <= targetMines then
+                finalValidSums[s] = true
+            end
+        end
+        
+        local function prune(idx, currentSum)
+            if idx > #compData then return finalValidSums[currentSum] == true end
+            
+            local data = compData[idx]
+            local isValid = false
+            for k in pairs(data.counts) do
+                if prune(idx + 1, currentSum + k) then
+                    validCounts[idx][k] = true
+                    isValid = true
+                end
+            end
+            return isValid
+        end
+        prune(1, 0)
+        
+        for i, data in ipairs(compData) do
+            if not next(validCounts[i]) then 
+                -- fallback: all counts valid if global pruning failed logic
+                for k in pairs(data.counts) do validCounts[i][k] = true end
+            end
+            
+            local totalValidSolutions = 0
+            for k, count in pairs(data.counts) do
+                if validCounts[i][k] then totalValidSolutions = totalValidSolutions + count end
+            end
+            
+            if totalValidSolutions > 0 then
+                for vIdx, v in ipairs(data.vars) do
                     local mineCount = 0
-                    for _, sol in ipairs(solutions) do
-                        if sol[i] == 1 then mineCount = mineCount + 1 end
+                    for k, count in pairs(data.counts) do
+                        if validCounts[i][k] then
+                           mineCount = mineCount + (data.cellCounts[vIdx][k] or 0)
+                        end
                     end
                     
-                    if mineCount == solutionCount then
+                    if mineCount == totalValidSolutions then
                         if not flaggedSet[v] then flaggedSet[v] = true end
                     elseif mineCount == 0 then
                         if not safeSet[v] then safeSet[v] = true end
                         if v.state == "flagged" then v.isWrongFlag = true end
                     end
-                    v._prob = mineCount / solutionCount
+                    v._prob = mineCount / totalValidSolutions
                 end
             end
         end
