@@ -351,10 +351,10 @@ local function getBoundaryComponents(numbered, flaggedSet, safeSet)
                 local rem = (numCell.number or 0)
                 local neighbors = {}
                 for _, n in ipairs(numCell.neigh) do
-                    if flaggedSet[n] then
-                        rem = rem - 1
-                    elseif n.state == "flagged" then
+                    if n.state == "flagged" then
                         table.insert(neighbors, n)
+                    elseif flaggedSet[n] then
+                        rem = rem - 1
                     elseif not safeSet[n] and isEligibleForClick(n) then
                         table.insert(neighbors, n)
                     end
@@ -373,14 +373,14 @@ local function getBoundaryComponents(numbered, flaggedSet, safeSet)
         local rem = (numCell.number or 0)
         local neighbors = {}
         for _, n in ipairs(numCell.neigh) do
-            if flaggedSet[n] then
-                rem = rem - 1
-            elseif n.state == "flagged" then
+            if n.state == "flagged" then
                 table.insert(neighbors, n)
                 if not cellMap[n] then
                     cellMap[n] = true
                     table.insert(boundaryCells, n)
                 end
+            elseif flaggedSet[n] then
+                rem = rem - 1
             elseif not safeSet[n] and isEligibleForClick(n) then
                 table.insert(neighbors, n)
                 if not cellMap[n] then
