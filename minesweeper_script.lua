@@ -377,6 +377,13 @@ end
 local function createBorders(c)
     local th = 0.08
     local ins = 0.05
+    local folder = workspace:FindFirstChild("MinesweeperHighlights")
+    if not folder then
+        folder = Instance.new("Folder")
+        folder.Name = "MinesweeperHighlights"
+        folder.Parent = workspace
+    end
+
     local function newPart()
         local p = Instance.new("Part")
         p.Anchored = true
@@ -386,7 +393,7 @@ local function createBorders(c)
         p.CastShadow = false
         p.Material = Enum.Material.Neon
         p.Size = Vector3.new(1, 1, 1)
-        p.Parent = get("CoreGui")
+        p.Parent = folder
         return p
     end
     c.borders = {
@@ -402,21 +409,36 @@ end
 local function updateBorders(c, color, visible)
     if not c.part then return end
     if not c.borders then createBorders(c) end
+    
+    -- Ensure parent exists
+    if c.borders.top.Parent == nil then
+        local folder = workspace:FindFirstChild("MinesweeperHighlights")
+        if not folder then
+            folder = Instance.new("Folder")
+            folder.Name = "MinesweeperHighlights"
+            folder.Parent = workspace
+        end
+        for _, b in pairs(c.borders) do b.Parent = folder end
+    end
+
     local sz = c.part.Size
     local th = c.borderTh or 0.08
     local ins = c.borderIns or 0.05
     local hx = sz.X / 2 - ins
     local hz = sz.Z / 2 - ins
     local yoff = sz.Y / 2 + 0.01
+    
     local t, b, l, r = c.borders.top, c.borders.bottom, c.borders.left, c.borders.right
     t.Size = Vector3.new(sz.X - ins * 2, th, th)
     b.Size = Vector3.new(sz.X - ins * 2, th, th)
     l.Size = Vector3.new(th, th, sz.Z - ins * 2)
     r.Size = Vector3.new(th, th, sz.Z - ins * 2)
+    
     t.CFrame = c.part.CFrame * CFrame.new(0, yoff, -hz)
     b.CFrame = c.part.CFrame * CFrame.new(0, yoff, hz)
     l.CFrame = c.part.CFrame * CFrame.new(-hx, yoff, 0)
     r.CFrame = c.part.CFrame * CFrame.new(hx, yoff, 0)
+    
     for _, border in pairs(c.borders) do
         border.Color = color
         border.Transparency = visible and 0 or 1
