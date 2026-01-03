@@ -67,35 +67,13 @@ local function getC(num, fS, sS)
     local bds, map = {}, {}
     for _, nc in ipairs(num) do
         local r, ns = nc.number or 0, {}
-        for _, n in ipairs(nc.neigh) do
-            if fS[n] then r = r - 1 
-            elseif isE(n) and not sS[n] then tinsert(ns, n) if not map[n] then map[n] = true tinsert(bds, n) end end
-        end
+        for _, n in ipairs(nc.neigh) do if fS[n] then r = r - 1 elseif isE(n) and not sS[n] then tinsert(ns, n) if not map[n] then map[n] = true tinsert(bds, n) end end end
         nc._cr, nc._cn = r, ns
     end
     local adj = {} for _, u in ipairs(bds) do adj[u] = {} end
     for _, nc in ipairs(num) do local ns = nc._cn for i = 1, #ns do for j = i+1, #ns do local u, v = ns[i], ns[j] adj[u][v], adj[v][u] = true, true end end end
     local vis, comps = {}, {}
-    for _, u in ipairs(bds) do
-        if not vis[u] then
-            local comp, q = {}, {u} vis[u] = true
-            while #q > 0 do
-                local cur = tremove(q) tinsert(comp, cur)
-                for n in pairs(adj[cur] or {}) do if not vis[n] then vis[n] = true tinsert(q, n) end end
-            end
-            tinsert(comps, comp)
-        end
-    end
-    if config.TotalMines and config.TotalMines > 0 then
-        local unks, flags = {}, 0
-        for x = 0, state.grid.w - 1 do 
-            local col = state.cells.grid[x]
-            if col then for z = 0, state.grid.h - 1 do 
-                local c = col[z] if c then if fS[c] then flags = flags + 1 elseif isE(c) and not sS[c] then tinsert(unks, c) end end 
-            end end
-        end
-        if #unks <= 26 then unks._isGlobal, unks._rem = true, config.TotalMines - flags tinsert(comps, 1, unks) end
-    end
+    for _, u in ipairs(bds) do if not vis[u] then local comp, q = {}, {u} vis[u] = true while #q > 0 do local cur = tremove(q) tinsert(comp, cur) for n in pairs(adj[cur] or {}) do if not vis[n] then vis[n] = true tinsert(q, n) end end end tinsert(comps, comp) end end
     return comps
 end
 local function solveCSP(fS, sS)
@@ -114,7 +92,6 @@ local function solveCSP(fS, sS)
             local nc, cv = num[j], {} for k = 1, #nc._cn do local m = map[nc._cn[k]] if m then cv[#cv+1] = m end end
             if #cv > 0 then tsort(cv) cons[#cons+1] = {v = cv, r = nc._cr, cur = 0, un = #cv} end
         end
-        if v._isGlobal then local gv = {} for j = 1, nV do gv[j] = j end cons[#cons+1] = {v = gv, r = v._rem, cur = 0, un = nV} end
         local vT = {} for j = 1, nV do vT[j] = {} end
         for j = 1, #cons do for _, vi in ipairs(cons[j].v) do tinsert(vT[vi], cons[j]) end end
         local cur, solC, abrt = {}, 0, false
@@ -165,8 +142,7 @@ local function solveCSP(fS, sS)
             if tVS > 0 then
                 for vi = 1, #d.v do
                     local v, mC = d.v[vi], 0 for k in pairs(vc) do mC = mC + (d.ccts[vi][k] or 0) end
-                    if mC == tVS then if not fS[v] then fS[v] = true end
-                    elseif mC == 0 then if not sS[v] then sS[v] = true end if v.state == "flagged" then v.isWrongFlag = true end end
+                    if mC == tVS then fS[v] = true elseif mC == 0 then sS[v] = true if v.state == "flagged" then v.isWrongFlag = true end end
                     v._prob = mC / tVS
                 end
             end
@@ -178,9 +154,7 @@ local function applyS(cA, cB, uA, uB, fS, sS)
     for _, u in ipairs(uB) do if sA[u] then iS = iS + 1 sA[u] = false sB[u] = false else sB[u] = true end end
     local oA, oB, iL = {}, {}, {} for _, u in ipairs(uA) do if sA[u] ~= false then oA[#oA+1] = u else iL[#iL+1] = u end end
     for _, u in ipairs(uB) do if sB[u] then oB[#oB+1] = u end end
-    if #iL == 0 then return end
-    local rA, rB = countR(cA, fS), countR(cB, fS)
-    local minI, maxI = max(0, rA - #oA, rB - #oB), min(rA, rB, #iL)
+    if #iL == 0 then return end local rA, rB = countR(cA, fS), countR(cB, fS) local minI, maxI = max(0, rA - #oA, rB - #oB), min(rA, rB, #iL)
     if minI == maxI then
         if rA - minI == 0 then for _, u in ipairs(oA) do sS[u] = true end elseif rA - minI == #oA then for _, u in ipairs(oA) do fS[u] = true end end
         if rB - minI == 0 then for _, u in ipairs(oB) do sS[u] = true end elseif rB - minI == #oB then for _, u in ipairs(oB) do fS[u] = true end end
@@ -189,9 +163,10 @@ end
 local function updateL()
     if state.grid.w == 0 then state.cells.toFlag, state.cells.toClear = {}, {} return end
     local num = state.cells.numbered if #num == 0 then return end
-    local fS, sS, ch, iter = {}, {}, true, 0
-    while ch and iter < 64 do
-        ch, iter = false, iter + 1
+    local fS, sS, ch, it = {}, {}, true, 0
+    for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do local c=col[z] if c then c._prob = nil end end end end
+    while ch and it < 64 do
+        ch, it = false, it + 1
         for _, c in ipairs(num) do
             local unk, flg = {}, 0 for _, n in ipairs(c.neigh) do if fS[n] then flg = flg + 1 elseif not sS[n] and isE(n) then tinsert(unk, n) end end
             local r = (c.number or 0) - flg
@@ -208,30 +183,27 @@ local function updateL()
 end
 local function updateG()
     state.bestGuessCell = nil if not config.GuessHelper or state.grid.w == 0 then return end
-    local kF, uK = 0, 0 for x = 0, state.grid.w - 1 do local col = state.cells.grid[x] if col then for z = 0, state.grid.h - 1 do local c = col[z] if c.state == "flagged" or state.cells.toFlag[c] then kF = kF + 1 elseif isE(c) and not state.cells.toClear[c] then uK = uK + 1 end end end end
+    local kF, uK = 0, 0 for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do local c=col[z] if c.state == "flagged" or state.cells.toFlag[c] then kF=kF+1 elseif isE(c) and not state.cells.toClear[c] then uK=uK+1 end end end end
     local gD = uK > 0 and ((config.TotalMines - kF) / uK) or 0.15
     local pP = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
     local maxD = pP and sqrt((state.grid.w*5)^2 + (state.grid.h*5)^2) or 1
     local bestC, bestS = nil, nil
-    for x = 0, state.grid.w - 1 do
-        local col = state.cells.grid[x]
-        if col then for z = 0, state.grid.h - 1 do
-            local c = col[z] if c and c.part and isE(c) and not hasF(c.part) and not state.cells.toFlag[c] and not state.cells.toClear[c] then
-                local pb = c._prob
-                if not pb then
-                    local vC, pS, hasN = 0, 0, false
-                    for _, n in ipairs(c.neigh) do if n.state == "number" and n.number and n.number > 0 then hasN = true local fs, lu = 0, 0 for _, nn in ipairs(n.neigh) do if (nn.part and hasF(nn.part)) or state.cells.toFlag[nn] then fs = fs + 1 elseif isE(nn) and not state.cells.toFlag[nn] and not state.cells.toClear[nn] then lu = lu + 1 end end local r = n.number - fs if r <= 0 then vC = vC + 1 elseif lu > 0 then pS = pS + (r/lu) vC = vC + 1 end end end
-                    pb = (hasN and vC > 0) and (pS / vC) or gD
-                end
-                local s = pb + ((x == 0 or x == state.grid.w-1 or z == 0 or z == state.grid.h-1) and config.EdgePenalty or 0)
-                local uN = 0 for _, n in ipairs(c.neigh) do if isE(n) and not state.cells.toFlag[n] and not state.cells.toClear[n] then uN = uN + 1 end end
-                s = s - (uN * 0.005) - ( (function() local cN=0 for _,n in ipairs(c.neigh) do if n.state=="number" then cN=cN+1 end end return cN end)() * 0.02 )
-                local dx, dz = x - state.grid.w/2, z - state.grid.h/2 s = s + (sqrt(dx*dx + dz*dz) / (state.grid.w + state.grid.h)) * 0.02
-                if pP then s = s + ((c.pos - pP).Magnitude / maxD) * config.DistanceWeight end
-                if not bestS or s < bestS then bestS, bestC = s, c end
+    for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do
+        local c = col[z] if c and c.part and isE(c) and not hasF(c.part) and not state.cells.toFlag[c] and not state.cells.toClear[c] then
+            local pb = c._prob
+            if not pb then
+                local vC, pS, hasN = 0, 0, false
+                for _, n in ipairs(c.neigh) do if n.state == "number" and n.number and n.number > 0 then hasN = true local fs, lu = 0, 0 for _, nn in ipairs(n.neigh) do if (nn.part and hasF(nn.part)) or state.cells.toFlag[nn] then fs = fs + 1 elseif isE(nn) and not state.cells.toFlag[nn] and not state.cells.toClear[nn] then lu = lu + 1 end end local r = n.number - fs if r <= 0 then vC = vC + 1 elseif lu > 0 then pS = pS + (r/lu) vC = vC + 1 end end end
+                pb = (hasN and vC > 0) and (pS / vC) or gD
             end
-        end end
-    end
+            local s = pb + ((x == 0 or x == state.grid.w-1 or z == 0 or z == state.grid.h-1) and config.EdgePenalty or 0)
+            local uN = 0 for _, n in ipairs(c.neigh) do if isE(n) and not state.cells.toFlag[n] and not state.cells.toClear[n] then uN = uN + 1 end end
+            s = s - (uN * 0.005) - ( (function() local cN=0 for _,n in ipairs(c.neigh) do if n.state=="number" then cN=cN+1 end end return cN end)() * 0.02 )
+            local dx, dz = x - state.grid.w/2, z - state.grid.h/2 s = s + (sqrt(dx*dx + dz*dz) / (state.grid.w + state.grid.h)) * 0.02
+            if pP then s = s + ((c.pos - pP).Magnitude / maxD) * config.DistanceWeight end
+            if not bestS or s < bestS then bestS, bestC = s, c end
+        end
+    end end end
     state.bestGuessCell = bestC
 end
 local function applyH(c, col)
@@ -269,22 +241,19 @@ local function updateH()
     end end end
 end
 theme.BuiltInThemes["Default"][2] = { BackgroundColor = "16293a", MainColor = "26445f", AccentColor = "5983a0", OutlineColor = "325573", FontColor = "d2dae1" }
-local win = lib:CreateWindow({ Title = "Axis Hub -\nMinesweeper.lua", Footer = "by RwalDev & Plow | 1.8.6", NotifySide = "Right", ShowCustomCursor = true })
-local home, mainT, cfg = win:AddTab("Home", "house"), win:AddTab("Main", "target"), win:AddTab("Settings", "settings")
-local status = home:AddLeftGroupbox("Status") status:AddLabel(string.format("Welcome, %s\nGame: Minesweeper", lp.DisplayName), true)
-status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
-local perf = home:AddRightGroupbox("Performance") local fpsL, pingL = perf:AddLabel("FPS: ...", true), perf:AddLabel("Ping: ...", true)
-local mainB = mainT:AddLeftGroupbox("Main") mainB:AddToggle("HighlightMines", { Text = "Highlight Mines", Default = false })
-mainB:AddToggle("BypassAnticheat", { Text = "Bypass Anticheat", Default = true })
-local cfgB = cfg:AddLeftGroupbox("Config") cfgB:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
-cfgB:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
+local win = lib:CreateWindow({ Title = "Axis Hub -\nMinesweeper.lua", Footer = "by RwalDev & Plow | 1.8.7", NotifySide = "Right", ShowCustomCursor = true })
+local h, m, s = win:AddTab("Home", "house"), win:AddTab("Main", "target"), win:AddTab("Settings", "settings")
+local status = h:AddLeftGroupbox("Status") status:AddLabel(string.format("Welcome, %s\nGame: Minesweeper", lp.DisplayName), true) status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
+local perf = h:AddRightGroupbox("Performance") local fpsL, pingL = perf:AddLabel("FPS: ...", true), perf:AddLabel("Ping: ...", true)
+local mainB = m:AddLeftGroupbox("Main") mainB:AddToggle("HighlightMines", { Text = "Highlight Mines", Default = false }) mainB:AddToggle("BypassAnticheat", { Text = "Bypass Anticheat", Default = true })
+local cfgB = s:AddLeftGroupbox("Config") cfgB:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end }) cfgB:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
 lib.ToggleKeybind = Options.MenuKeybind
 local function bypass()
     if not getrawmetatable or not hookmetamethod then return end
     local r = game:GetService("ReplicatedStorage"):FindFirstChild("Patukka")
     if r then local old old = hookmetamethod(game, "__namecall", function(self, ...) local m = getnamecallmethod() if self == r and (m == "InvokeServer" or m == "FireServer") then if Toggles.BypassAnticheat and Toggles.BypassAnticheat.Value then return nil end end return old(self, ...) end) end
 end
-local lastS, solveInt = 0, 0.15
+local lastS, solveInt = 0, 0.05
 rs.Heartbeat:Connect(function()
     config.Enabled = Toggles.HighlightMines and Toggles.HighlightMines.Value
     if not config.Enabled then clearB() state.cells.toFlag, state.cells.toClear, state.lastPartCount = {}, {}, -1 return end
@@ -295,13 +264,12 @@ rs.Heartbeat:Connect(function()
     if neb or (now - lastS) >= solveInt then lastS = now updateS(f) updateL() updateG() end
     updateH()
 end)
-local elap, frames = 0, 0
 rs.RenderStepped:Connect(function(dt)
-    frames, elap = frames + 1, elap + dt
+    elap, frames = elap + dt, frames + 1
     if elap >= 1 then fpsL:SetText("FPS: " .. floor(frames/elap+0.5)) local net = game:GetService("Stats").Network.ServerStatsItem["Data Ping"] pingL:SetText("Ping: " .. (net and floor(net:GetValue()) or 0) .. " ms") frames, elap = 0, 0 end
 end)
 theme:SetLibrary(lib) save:SetLibrary(lib) save:IgnoreThemeSettings() save:SetIgnoreIndexes({ "MenuKeybind" })
 theme:SetFolder("PlowsScriptHub") save:SetFolder("PlowsScriptHub/Minesweeper")
-save:BuildConfigSection(cfg) theme:ApplyToTab(cfg) save:LoadAutoloadConfig()
+save:BuildConfigSection(s) theme:ApplyToTab(s) save:LoadAutoloadConfig()
 lib:OnUnload(function() clearB() local f = workspace:FindFirstChild("MinesweeperHighlights") if f then f:Destroy() end end)
 pcall(bypass)
