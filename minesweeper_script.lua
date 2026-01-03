@@ -264,14 +264,21 @@ local function updateCellStates(folder)
                     cell.state = "unknown"
                     cell.number = nil
                     cell.covered = true
-                    cell.color = nil
+                    local partColor = cell.part.Color
+                    cell.color = {R = partColor.R, G = partColor.G, B = partColor.B}
+                    
+                    if not cell.part.Parent or cell.part.Transparency > 0.9 then
+                        cell.covered = false
+                    end
 
-                    local numberGui = cell.part:FindFirstChild("NumberGui", true)
-                    if numberGui then
-                        local label = numberGui:FindFirstChild("TextLabel")
-                        if label and tonumber(label.Text) then
-                            cell.number = tonumber(label.Text)
-                            cell.covered = false
+                    if cell.covered then
+                        local numberGui = cell.part:FindFirstChild("NumberGui", true)
+                        if numberGui then
+                            local label = numberGui:FindFirstChild("TextLabel")
+                            if label and tonumber(label.Text) then
+                                cell.number = tonumber(label.Text)
+                                cell.covered = false
+                            end
                         end
                     end
 
@@ -1045,10 +1052,12 @@ local function bypass()
     end
 end
 
-local lastSolve = 0
-local solveInterval = 0.15
-
+local lastUpdate = 0
 rs.Heartbeat:Connect(function()
+    local now = tick()
+    if now - lastUpdate < 0.1 then return end
+    lastUpdate = now
+
     config.Enabled = Toggles.HighlightMines and Toggles.HighlightMines.Value
     
     if not config.Enabled then
@@ -1062,23 +1071,8 @@ rs.Heartbeat:Connect(function()
     local folder = scanForBoard()
     if not folder then return end
 
-    local pc = #folder:GetChildren()
-    local now = tick()
-    local needsRebuild = pc ~= state.parts
-
-    if needsRebuild then
-        clearAllCellBorders()
-        state.parts = pc
+    if state.parts == -1 or folder ~= state.lastFolder or #folder:GetChildren() ~= state.parts then
         rebuildGridFromParts(folder)
-    end
-
-    if state.grid.w == 0 then return end
-    
-    if needsRebuild or (now - lastSolve) >= solveInterval then
-        lastSolve = now
-        updateCellStates(folder)
-        updateLogic()
-        updateGuess()
     end
     updateHighlights()
 end)
