@@ -127,23 +127,30 @@ local function scanForBoard()
     local d = workspace:FindFirstChild("Flag")
     if d and d:FindFirstChild("Parts") then
         local f = d.Parts
-        if #f:GetChildren() > bestCount then
+        local c = 0
+        for _, ch in ipairs(f:GetChildren()) do if ch:IsA("BasePart") then c = c + 1 end end
+        if c > bestCount then
             bestFolder = f
-            bestCount = #f:GetChildren()
+            bestCount = c
         end
     end
     
     local p = workspace:FindFirstChild("Parts")
-    if p and #p:GetChildren() > bestCount then
-        bestFolder = p
-        bestCount = #p:GetChildren()
+    if p then
+        local c = 0
+        for _, ch in ipairs(p:GetChildren()) do if ch:IsA("BasePart") then c = c + 1 end end
+        if c > bestCount then
+            bestFolder = p
+            bestCount = c
+        end
     end
 
     if bestFolder then return bestFolder end
 
     for _, desc in ipairs(workspace:GetDescendants()) do
         if desc:IsA("Folder") and desc.Name == "Parts" then
-            local c = #desc:GetChildren()
+            local c = 0
+            for _, ch in ipairs(desc:GetChildren()) do if ch:IsA("BasePart") then c = c + 1 end end
             if c > bestCount then
                 bestCount = c
                 bestFolder = desc
@@ -182,36 +189,71 @@ local function rebuildGridFromParts(folder)
     state.grid.w = 0
     state.grid.h = 0
 
-    local parts = folder:GetChildren()
-    if #parts == 0 then return end
+    local children = folder:GetChildren()
+    local parts = {}
+    local xs, zs = {}, {}
     
-    local allPositions = {}
+    for _, part in ipairs(children) do
+        if part:IsA("BasePart") then
+            table.insert(parts, part)
+            table.insert(xs, part.Position.X)
+            table.insert(zs, part.Position.Z)
+        end
+    end
+    
+    if #parts < 10 then return end -- Minimum parts to consider a grid
+    
+    local spacing = estimateSpacing(xs)
+    if spacing < 1 then spacing = 1 end
+    
+    local minX = xs[1] -- Initialize with first sorted value
+    local minZ = zs[1] -- Initialize with first sorted value
+    
+    for _, x in ipairs(xs) do if x < minX then minX = x end end
+    for _, z in ipairs(zs) do if z < minZ then minZ = z end end
+    
     local sumY = 0
+    local partCount = 0
 
     for _, part in ipairs(parts) do
-        if part:IsA("BasePart") then
-            local pos = part.Position
-            table.insert(allPositions, {part = part, pos = pos})
-            sumY = sumY + pos.Y
+        local pos = part.Position
+        local x = math.floor((pos.X - minX) / spacing + 0.5)
+        local z = math.floor((pos.Z - minZ) / spacing + 0.5)
+        
+        if x >= 0 and z >= 0 then
+            state.cells.grid[x] = state.cells.grid[x] or {}
+            
+            local area = part.Size.X * part.Size.Z
+            local existing = state.cells.grid[x][z]
+            
+            if not existing or area > existing._area then
+                state.cells.grid[x][z] = {
+                    part = part,
+                    ix = x,
+                    iz = z,
+                    pos = pos, -- Store actual part position for now, will average later
+                    state = "unknown",
+                    number = nil,
+                    covered = true,
+                    color = nil,
+                    neigh = {},
+                    borders = nil,
+                    isHighlightedMine = false,
+                    isHighlightedSafe = false,
+                    isHighlightedGuess = false,
+                    isWrongFlag = false,
+                    lastHighlightChange = 0,
+                    _area = area -- Store area for "largest part wins" logic
+                }
+                sumY = sumY + pos.Y
+                partCount = partCount + 1
+            end
+            
+            if x >= state.grid.w then state.grid.w = x + 1 end
+            if z >= state.grid.h then state.grid.h = z + 1 end
         end
     end
 
-    local xs, zs = {}, {}
-    for _, data in ipairs(allPositions) do
-        xs[#xs + 1] = data.pos.X
-        zs[#zs + 1] = data.pos.Z
-    end
-
-    tsort(xs)
-    tsort(zs)
-
-    local cellWidth = estimateSpacing(xs) * 0.6
-    local cellHeight = estimateSpacing(zs) * 0.6
-    local uniqueX = clusterAndAverage(xs, cellWidth)
-    local uniqueZ = clusterAndAverage(zs, cellHeight)
-
-    state.grid.w = #uniqueX
-    state.grid.h = #uniqueZ
     if state.grid.w == 0 or state.grid.h == 0 then return end
 
     local avgY = sumY / #allPositions
