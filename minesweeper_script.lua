@@ -469,19 +469,20 @@ local function solveCSP(flaggedSet, safeSet)
             -- Analyze solutions
             if solutionCount > 0 and solutionCount < MAX_SOLUTIONS then
                 for i, v in ipairs(vars) do
-                    local isAllMines = true
-                    local isAllSafe = true
+                    local mineCount = 0
                     
                     for _, sol in ipairs(solutions) do
-                        if sol[i] == 0 then isAllMines = false end
-                        if sol[i] == 1 then isAllSafe = false end
+                        if sol[i] == 1 then mineCount = mineCount + 1 end
                     end
                     
-                    if isAllMines then
+                    if mineCount == solutionCount then
                         if not flaggedSet[v] then flaggedSet[v] = true end
-                    elseif isAllSafe then
+                    elseif mineCount == 0 then
                         if not safeSet[v] then safeSet[v] = true end
                     end
+                    
+                    -- Store precise probability for guessing (Gold Standard)
+                    v._prob = mineCount / solutionCount
                 end
             end
         end
@@ -705,9 +706,11 @@ local function updateGuess()
     end
     
     local remainingMines = config.TotalMines - knownFlagsCount
-    local globalDensity = unknownCount > 0 and (remainingMines / unknownCount) or 0
+    -- Base probability for disconnected cells (off-frontier)
+    local globalDensity = unknownCount > 0 and (remainingMines / unknownCount) or 0.15
     local playerPos = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
     local maxDistance = playerPos and math.sqrt((state.grid.w * 5)^2 + (state.grid.h * 5)^2) or 1
+    
     local bestCell, bestScore = nil, nil
 
     for x = 0, state.grid.w - 1 do
@@ -716,24 +719,51 @@ local function updateGuess()
             for z = 0, state.grid.h - 1 do
                 local cell = col[z]
                 if cell and cell.part and isEligibleForClick(cell) and not hasFlagChild(cell.part) and not state.cells.toFlag[cell] and not state.cells.toClear[cell] then
-                    local validCount, probSum = 0, 0
-                    for _, n in ipairs(cell.neigh) do
-                        if n.state == "number" and n.number and n.number > 0 then
-                            local flaggedCount, unknownCountLocal = 0, 0
-                            for _, nn in ipairs(n.neigh) do
-                                if (nn.part and hasFlagChild(nn.part)) or state.cells.toFlag[nn] then flaggedCount = flaggedCount + 1
-                                elseif isEligibleForClick(nn) and not state.cells.toFlag[nn] and not state.cells.toClear[nn] then unknownCountLocal = unknownCountLocal + 1 end
+                    
+                    -- Use CSP probability if available (most accurate)
+                    local probResult
+                    if cell._prob then
+                        probResult = cell._prob
+                    else
+                        -- Fallback to simple heuristic if not on frontier or CSP didn't run
+                        local validCount, probSum = 0, 0
+                        local hasNumberedNeighbor = false
+                        
+                        for _, n in ipairs(cell.neigh) do
+                            if n.state == "number" and n.number and n.number > 0 then
+                                hasNumberedNeighbor = true
+                                local flaggedCount = 0 
+                                local unknownCountLocal = 0
+                                for _, nn in ipairs(n.neigh) do
+                                    if (nn.part and hasFlagChild(nn.part)) or state.cells.toFlag[nn] then flaggedCount = flaggedCount + 1
+                                    elseif isEligibleForClick(nn) and not state.cells.toFlag[nn] and not state.cells.toClear[nn] then unknownCountLocal = unknownCountLocal + 1 end
+                                end
+                                local remaining = n.number - flaggedCount
+                                if remaining <= 0 then validCount = validCount + 1 
+                                elseif unknownCountLocal > 0 then 
+                                    probSum = probSum + (remaining / unknownCountLocal) 
+                                    validCount = validCount + 1 
+                                end
                             end
-                            local remaining = n.number - flaggedCount
-                            if remaining <= 0 then validCount = validCount + 1
-                            elseif unknownCountLocal > 0 then probSum = probSum + (remaining / unknownCountLocal) validCount = validCount + 1 end
+                        end
+                         
+                        if hasNumberedNeighbor and validCount > 0 then
+                            probResult = probSum / validCount
+                        else
+                            probResult = globalDensity
                         end
                     end
-                    local localScore = validCount > 0 and (probSum / validCount) or globalDensity
-                    local score = 0.5 * localScore + 0.5 * globalDensity
+                    
+                    local score = probResult
+                    
+                    -- Apply penalties/weights to finding distinct best guess
                     if (x == 0 or x == state.grid.w - 1 or z == 0 or z == state.grid.h - 1) then score = score + config.EdgePenalty end
                     if playerPos then score = score + ((cell.pos - playerPos).Magnitude / maxDistance) * config.DistanceWeight end
-                    if not bestScore or score < bestScore then bestScore = score bestCell = cell end
+                    
+                    if not bestScore or score < bestScore then 
+                        bestScore = score 
+                        bestCell = cell 
+                    end
                 end
             end
         end
