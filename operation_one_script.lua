@@ -66,7 +66,7 @@ theme.BuiltInThemes["Default"][2] = {
 }
 
 local win = lib:CreateWindow({
-    Title = "Axis Hub - Operation One.lua",
+    Title = "Axis Hub -\nOperation One.lua",
     Footer = "by RwalDev & Plow | 1.8.4 | Discord: .gg/UuyxhqgEVs",
     NotifySide = "Right",
     ShowCustomCursor = true,
