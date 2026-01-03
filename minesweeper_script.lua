@@ -426,8 +426,11 @@ end
 local function solveCSP(flaggedSet, safeSet)
     local numbered = state.cells.numbered
     local components = getBoundaryComponents(numbered, flaggedSet, safeSet)
+    local tStart = os.clock()
     
     for _, vars in ipairs(components) do
+        if os.clock() - tStart > 0.05 then break end
+
         local degrees = {}
         for _, v in ipairs(vars) do degrees[v] = 0 end
         for _, numCell in ipairs(numbered) do
@@ -438,12 +441,10 @@ local function solveCSP(flaggedSet, safeSet)
         table.sort(vars, function(a, b) return degrees[a] > degrees[b] end)
 
         local nVars = #vars
-        local limit = vars._isGlobal and 26 or 23
-
-        if nVars > 0 and nVars <= limit then
+        if nVars > 0 then
             local solutions = {}
             local solutionCount = 0
-            local MAX_SOLUTIONS = 50000 
+            local MAX_SOLUTIONS = 100000 
             
             local varMap = {}
             for i, v in ipairs(vars) do varMap[v] = i end
@@ -478,9 +479,11 @@ local function solveCSP(flaggedSet, safeSet)
             end
             
             local current = {} 
+            local aborted = false
             
             local function backtrack(idx)
                 if solutionCount >= MAX_SOLUTIONS then return end
+                if (solutionCount % 100 == 0) and (os.clock() - tStart > 0.05) then aborted = true return end
                 
                 if idx > nVars then
                     solutionCount = solutionCount + 1
@@ -497,7 +500,6 @@ local function solveCSP(flaggedSet, safeSet)
                     for _, c in ipairs(constraints) do
                         local sum = 0
                         local unassigned = 0
-                        local broken = false
                         for _, vIdx in ipairs(c.vars) do
                             if vIdx <= idx then 
                                 sum = sum + current[vIdx]
@@ -511,14 +513,14 @@ local function solveCSP(flaggedSet, safeSet)
                     
                     if consistent then
                         backtrack(idx + 1)
-                        if solutionCount >= MAX_SOLUTIONS then return end
+                        if aborted or solutionCount >= MAX_SOLUTIONS then return end
                     end
                 end
             end
             
             backtrack(1)
             
-            if solutionCount > 0 and solutionCount < MAX_SOLUTIONS then
+            if not aborted and solutionCount > 0 and solutionCount < MAX_SOLUTIONS then
                 for i, v in ipairs(vars) do
                     local mineCount = 0
                     for _, sol in ipairs(solutions) do
