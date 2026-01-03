@@ -388,10 +388,10 @@ local function solveCSP(flaggedSet, safeSet)
     local components = getBoundaryComponents(numbered, flaggedSet, safeSet)
     
     for _, vars in ipairs(components) do
-        if #vars > 0 and #vars <= 14 then
+        if #vars > 0 and #vars <= 18 then
             local solutions = {}
             local solutionCount = 0
-            local MAX_SOLUTIONS = 500 
+            local MAX_SOLUTIONS = 25000 
             
             local varMap = {}
             for i, v in ipairs(vars) do varMap[v] = i end
@@ -584,14 +584,25 @@ local function updateLogic()
                 end
             end
         end
+
+
+        local preFlags = 0
+        local preClears = 0
+        for _ in pairs(knownFlags) do preFlags = preFlags + 1 end
+        for _ in pairs(state.cells.toClear) do preClears = preClears + 1 end
+
         checkAdjacentNumberedCells(knownFlags, state.cells.toClear)
         
+        local postFlags = 0
+        local postClears = 0
+        for _ in pairs(knownFlags) do postFlags = postFlags + 1 end
+        for _ in pairs(state.cells.toClear) do postClears = postClears + 1 end
+
+        if postFlags ~= preFlags or postClears ~= preClears then
+            changed = true
+        end
+
         if not changed then
-            local oldFlags = 0
-            local oldClears = 0
-            for _ in pairs(knownFlags) do oldFlags = oldFlags + 1 end
-            for _ in pairs(state.cells.toClear) do oldClears = oldClears + 1 end
-            
             solveCSP(knownFlags, state.cells.toClear)
             
             local newFlags = 0
@@ -599,7 +610,7 @@ local function updateLogic()
             for _ in pairs(knownFlags) do newFlags = newFlags + 1 end
             for _ in pairs(state.cells.toClear) do newClears = newClears + 1 end
             
-            if newFlags ~= oldFlags or newClears ~= oldClears then
+            if newFlags ~= postFlags or newClears ~= postClears then
                 changed = true
             end
         end
