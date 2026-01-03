@@ -321,6 +321,46 @@ local function countRemainingMines(cell, flaggedSet)
 end
 
 local function getBoundaryComponents(numbered, flaggedSet, safeSet)
+    local allUnknowns = {}
+    local totalFlags = 0
+    if config.TotalMines and config.TotalMines > 0 then
+        local count = 0
+        for x = 0, state.grid.w - 1 do
+            if state.cells.grid[x] then
+                for z = 0, state.grid.h - 1 do
+                    local cell = state.cells.grid[x][z]
+                    if cell then
+                        if cell.state == "flagged" or flaggedSet[cell] then
+                            totalFlags = totalFlags + 1
+                        elseif isEligibleForClick(cell) and not safeSet[cell] then
+                            table.insert(allUnknowns, cell)
+                        end
+                    end
+                end
+            end
+        end
+        
+        if #allUnknowns <= 26 then
+            allUnknowns._isGlobal = true
+            allUnknowns._remainingMines = config.TotalMines - totalFlags
+            local comp = { allUnknowns }
+            for _, numCell in ipairs(numbered) do
+                local rem = (numCell.number or 0)
+                local neighbors = {}
+                for _, n in ipairs(numCell.neigh) do
+                    if flaggedSet[n] or n.state == "flagged" then
+                        rem = rem - 1
+                    elseif not safeSet[n] and isEligibleForClick(n) then
+                        table.insert(neighbors, n)
+                    end
+                end
+                numCell._csp_rem = rem
+                numCell._csp_neigh = neighbors
+            end
+            return comp
+        end
+    end
+
     local boundaryCells = {}
     local cellMap = {}
     
@@ -388,7 +428,6 @@ local function solveCSP(flaggedSet, safeSet)
     local components = getBoundaryComponents(numbered, flaggedSet, safeSet)
     
     for _, vars in ipairs(components) do
-        -- Calculate degrees (number of constraints/numbered neighbors) for sorting
         local degrees = {}
         for _, v in ipairs(vars) do degrees[v] = 0 end
         for _, numCell in ipairs(numbered) do
@@ -396,13 +435,12 @@ local function solveCSP(flaggedSet, safeSet)
                 if degrees[n] then degrees[n] = degrees[n] + 1 end
             end
         end
-        -- Sort variables: Most constrained first -> Early Pruning
         table.sort(vars, function(a, b) return degrees[a] > degrees[b] end)
 
         local nVars = #vars
+        local limit = vars._isGlobal and 26 or 23
 
-        -- EXACT SOLVER for small/medium clusters
-        if nVars > 0 and nVars <= 23 then
+        if nVars > 0 and nVars <= limit then
             local solutions = {}
             local solutionCount = 0
             local MAX_SOLUTIONS = 50000 
@@ -421,20 +459,23 @@ local function solveCSP(flaggedSet, safeSet)
                     local cVars = {}
                     for _, n in ipairs(numCell._csp_neigh) do
                         if varMap[n] then table.insert(cVars, varMap[n]) end
-                        -- Optimization: Sort constraint vars by their index in 'vars' to allow early checking
-                        -- (Since we backtrack by index, checking lowest indices first is good)
                     end
                     table.sort(cVars) 
                     table.insert(constraints, {
                         vars = cVars,
                         rem = numCell._csp_rem,
-                        total_vars = #numCell._csp_neigh 
                     })
                 end
             end
             
-            -- Sort constraints? Smallest (tightest) first?
-            -- Actually, just checking them all is fast enough if vars are ordered.
+            if vars._isGlobal then
+                local allVars = {}
+                for i = 1, nVars do table.insert(allVars, i) end
+                table.insert(constraints, {
+                    vars = allVars,
+                    rem = vars._remainingMines,
+                })
+            end
             
             local current = {} 
             
@@ -449,8 +490,6 @@ local function solveCSP(flaggedSet, safeSet)
                     return
                 end
                 
-                -- Try 0 (Safe) and 1 (Mine)
-                -- Optimization: Heuristic? Try 0 first (mines are rare ~20%)?
                 for val = 0, 1 do
                     current[idx] = val
                     
@@ -466,10 +505,7 @@ local function solveCSP(flaggedSet, safeSet)
                                 unassigned = unassigned + 1 
                             end
                         end
-                        -- Constraint Check:
-                        -- 1. Too many mines already?
                         if sum > c.rem then consistent = false break end
-                        -- 2. Not enough space left to satisfy?
                         if (sum + unassigned) < c.rem then consistent = false break end
                     end
                     
@@ -497,14 +533,6 @@ local function solveCSP(flaggedSet, safeSet)
                     v._prob = mineCount / solutionCount
                 end
             end
-
-        -- MONTE CARLO FALLBACK for huge clusters
-        elseif nVars > 23 then
-            -- Attempt to find approximate probabilities by random sampling
-            -- This is very hard to do correctly for heavy constraints, but better than nothing?
-            -- Actually, standard heuristic is safer than broken MC.
-            -- Instead, we can try to split the component?
-            -- For now, let's just leave it to the heuristic in updateGuess, which handles density.
         end
     end
 end
@@ -617,7 +645,6 @@ local function updateLogic()
                 end
             end
         end
-
 
         local preFlags = 0
         local preClears = 0
