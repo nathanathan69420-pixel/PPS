@@ -189,57 +189,61 @@ local function solve()
     state.safe = {}
     if state.w == 0 or #state.numbered == 0 then return end
     local f, s = {}, {}
+    
+    local function getUnknowns(cell)
+        local r = {}
+        for _, nb in ipairs(cell.neigh) do
+            if not f[nb] and not s[nb] and isUnknown(nb) then
+                table.insert(r, nb)
+            end
+        end
+        return r
+    end
+    
+    local function getRemaining(cell)
+        local rem = cell.num or 0
+        for _, nb in ipairs(cell.neigh) do
+            if f[nb] or nb.st == "flagged" then rem = rem - 1 end
+        end
+        return rem
+    end
+    
+    local function setIntersection(a, b)
+        local setA = {}
+        for _, v in ipairs(a) do setA[v] = true end
+        local inter, onlyA, onlyB = {}, {}, {}
+        for _, v in ipairs(b) do
+            if setA[v] then table.insert(inter, v) setA[v] = nil
+            else table.insert(onlyB, v) end
+        end
+        for v in pairs(setA) do table.insert(onlyA, v) end
+        return inter, onlyA, onlyB
+    end
+    
     local changed, iter = true, 0
     while changed and iter < 64 do
         changed = false
         iter = iter + 1
+        
         for _, c in ipairs(state.numbered) do
-            local u = {}
-            local fc = 0
-            for _, n in ipairs(c.neigh) do
-                if f[n] or n.st == "flagged" then
-                    fc = fc + 1
-                elseif not s[n] and isUnknown(n) then
-                    table.insert(u, n)
-                end
-            end
-            local rem = (c.num or 0) - fc
+            local u = getUnknowns(c)
+            local rem = getRemaining(c)
             if rem > 0 and rem == #u then
-                for _, v in ipairs(u) do
-                    if not f[v] then f[v] = true changed = true end
-                end
+                for _, v in ipairs(u) do if not f[v] then f[v] = true changed = true end end
             elseif rem == 0 and #u > 0 then
-                for _, v in ipairs(u) do
-                    if not s[v] then s[v] = true changed = true end
-                end
+                for _, v in ipairs(u) do if not s[v] then s[v] = true changed = true end end
             end
         end
+        
         for _, c in ipairs(state.numbered) do
             for _, n in ipairs(c.neigh) do
                 if n.st == "number" then
-                    local function getU(cell)
-                        local r = {}
-                        for _, nb in ipairs(cell.neigh) do
-                            if not f[nb] and not s[nb] and isUnknown(nb) then
-                                table.insert(r, nb)
-                            end
-                        end
-                        return r
-                    end
-                    local u1 = getU(c)
-                    local u2 = getU(n)
+                    local u1 = getUnknowns(c)
+                    local u2 = getUnknowns(n)
                     if #u1 > 0 and #u2 > 0 then
-                        local m1 = {}
-                        for _, v in ipairs(u1) do m1[v] = true end
-                        local o1, o2 = {}, {}
-                        for _, v in ipairs(u2) do
-                            if m1[v] then m1[v] = nil else table.insert(o2, v) end
-                        end
-                        for v in pairs(m1) do table.insert(o1, v) end
-                        local r1 = (c.num or 0)
-                        local r2 = (n.num or 0)
-                        for _, nb in ipairs(c.neigh) do if f[nb] or nb.st == "flagged" then r1 = r1 - 1 end end
-                        for _, nb in ipairs(n.neigh) do if f[nb] or nb.st == "flagged" then r2 = r2 - 1 end end
+                        local _, o1, o2 = setIntersection(u1, u2)
+                        local r1 = getRemaining(c)
+                        local r2 = getRemaining(n)
                         if #o1 == 0 and #o2 > 0 then
                             local d = r2 - r1
                             if d == 0 then
@@ -256,6 +260,69 @@ local function solve()
                             end
                         end
                     end
+                end
+            end
+        end
+        
+        for _, c in ipairs(state.numbered) do
+            if (c.num or 0) == 1 then
+                for _, n in ipairs(c.neigh) do
+                    if n.st == "number" and (n.num or 0) == 1 then
+                        local u1 = getUnknowns(c)
+                        local u2 = getUnknowns(n)
+                        local inter, o1, o2 = setIntersection(u1, u2)
+                        if #inter == 1 and #o1 == 1 and #o2 == 1 then
+                            if not s[inter[1]] then s[inter[1]] = true changed = true end
+                        end
+                    end
+                end
+            end
+        end
+        
+        for _, c in ipairs(state.numbered) do
+            if (c.num or 0) == 1 then
+                for _, n in ipairs(c.neigh) do
+                    if n.st == "number" and (n.num or 0) == 2 then
+                        local u1 = getUnknowns(c)
+                        local u2 = getUnknowns(n)
+                        local inter, o1, o2 = setIntersection(u1, u2)
+                        if #inter >= 1 and #o1 == 0 and #o2 == 1 then
+                            if not f[o2[1]] then f[o2[1]] = true changed = true end
+                        end
+                    end
+                end
+            end
+        end
+        
+        for _, c in ipairs(state.numbered) do
+            local isEdge = c.ix == 0 or c.ix == state.w - 1 or c.iz == 0 or c.iz == state.h - 1
+            if isEdge then
+                local u = getUnknowns(c)
+                local rem = getRemaining(c)
+                local edgeU = {}
+                for _, v in ipairs(u) do
+                    if v.ix == 0 or v.ix == state.w - 1 or v.iz == 0 or v.iz == state.h - 1 then
+                        table.insert(edgeU, v)
+                    end
+                end
+                if rem == #edgeU and #edgeU > 0 then
+                    for _, v in ipairs(edgeU) do if not f[v] then f[v] = true changed = true end end
+                    for _, v in ipairs(u) do
+                        local found = false
+                        for _, ev in ipairs(edgeU) do if v == ev then found = true break end end
+                        if not found and not s[v] then s[v] = true changed = true end
+                    end
+                end
+            end
+        end
+        
+        for _, c in ipairs(state.numbered) do
+            local isCorner = (c.ix == 0 or c.ix == state.w - 1) and (c.iz == 0 or c.iz == state.h - 1)
+            if isCorner then
+                local u = getUnknowns(c)
+                local rem = getRemaining(c)
+                if rem == #u and #u > 0 then
+                    for _, v in ipairs(u) do if not f[v] then f[v] = true changed = true end end
                 end
             end
         end
