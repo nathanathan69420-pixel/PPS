@@ -10,6 +10,7 @@ local scripts = {
     ["72920620366355"] = "operation_one_script.lua",
     ["129866685202296"] = "last_letter_script.lua",
     ["6298476159"] = "violence_district_script.lua",
+    ["7871169780"] = "minesweeper_script.lua",
 }
 
 local function notify(title, msg, dur)
