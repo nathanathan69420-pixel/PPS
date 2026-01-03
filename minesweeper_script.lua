@@ -215,9 +215,12 @@ local function autoFlag()
     if not h then return end
     for c in pairs(state.cells.toFlag) do
         if c.part and not hasF(c.part) and (c.pos - h.Position).Magnitude <= r then
-            game:GetService("ReplicatedStorage").Events.FlagEvents.PlaceFlag:FireServer(c.part)
-            lastF = tick()
-            break
+            local cd = c.part:FindFirstChildWhichIsA("ClickDetector")
+            if cd and fireclickdetector then
+                fireclickdetector(cd)
+                lastF = tick()
+                break
+            end
         end
     end
 end
