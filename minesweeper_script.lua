@@ -167,7 +167,8 @@ local function updateStates()
                 end
                 if not gui then
                     local col = c.part.Color
-                    if col.R > 0.7 and col.G > 0.7 and col.B > 0.7 then
+                    -- Check for revealed empty cells (light gray/white)
+                    if col.R > 0.8 and col.G > 0.8 and col.B > 0.8 then
                         c.cov = false
                         c.st = "empty"
                     end
@@ -181,7 +182,24 @@ local function updateStates()
 end
 
 local function isUnknown(c)
-    return c.cov and c.st ~= "flagged" and c.st ~= "number"
+    -- STRICT CHECK: Must be covered, not flagged, not a number, and not empty
+    return c.cov and c.st ~= "flagged" and c.st ~= "number" and c.st ~= "empty"
+end
+
+local function scanForBoard()
+    local folder = workspace:FindFirstChild("Flag") and workspace.Flag:FindFirstChild("Parts")
+    if folder then return folder end
+    
+    -- Fallback: Search for a folder containing many similar parts
+    for _, f in ipairs(workspace:GetChildren()) do
+        if f:IsA("Folder") and #f:GetChildren() > 50 then
+            local child = f:GetChildren()[1]
+            if child:IsA("BasePart") and child.Name == "Part" then
+                return f
+            end
+        end
+    end
+    return nil
 end
 
 local function solve()
@@ -454,7 +472,11 @@ local function highlight()
             local isM = state.mines[c]
             local isS = state.safe[c]
             local isG = (state.guess == c)
-            if en and (isM or isS or isG) then
+            
+            -- SAFETY CHECK: Never highlight revealed cells
+            local isHidden = c.cov and c.st ~= "number" and c.st ~= "empty" and c.st ~= "flagged"
+
+            if en and isHidden and (isM or isS or isG) then
                 local color
                 if isM then
                     color = Color3.new(1, 0, 0)
@@ -521,7 +543,7 @@ rs.Heartbeat:Connect(function()
         return
     end
     
-    local folder = workspace:FindFirstChild("Flag") and workspace.Flag:FindFirstChild("Parts")
+    local folder = scanForBoard()
     if not folder then return end
     
     local pc = #folder:GetChildren()
