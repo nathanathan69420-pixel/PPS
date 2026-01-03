@@ -580,8 +580,8 @@ local function updateHighlights()
 
                         if en and (isMine or isSafe or isGuess) then
                             local color
-                            if isSafe then color = COLOR_SAFE
-                            elseif isMine then color = COLOR_MINE
+                            if isMine then color = COLOR_MINE
+                            elseif isSafe then color = COLOR_SAFE
                             else color = COLOR_GUESS end
                             applyHighlight(cell, color)
                         else
