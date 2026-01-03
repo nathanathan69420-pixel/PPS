@@ -318,6 +318,176 @@ local function countRemainingMines(cell, flaggedSet)
     return remaining
 end
 
+-- CSP Solver Logic
+local function getBoundaryComponents(numbered, flaggedSet, safeSet)
+    local boundaryCells = {}
+    local cellMap = {}
+    
+    -- 1. Identify all boundary variables (unknowns neighbors of numbered cells)
+    for _, numCell in ipairs(numbered) do
+        local rem = (numCell.number or 0)
+        local neighbors = {}
+        for _, n in ipairs(numCell.neigh) do
+            if flaggedSet[n] or n.state == "flagged" then
+                rem = rem - 1
+            elseif not safeSet[n] and isEligibleForClick(n) then
+                table.insert(neighbors, n)
+                if not cellMap[n] then
+                    cellMap[n] = true
+                    table.insert(boundaryCells, n)
+                end
+            end
+        end
+        numCell._csp_rem = rem
+        numCell._csp_neigh = neighbors
+    end
+    
+    -- 2. Build adjacency for variables
+    local adj = {}
+    for _, u in ipairs(boundaryCells) do adj[u] = {} end
+    
+    for _, numCell in ipairs(numbered) do
+        local ns = numCell._csp_neigh
+        if #ns > 0 then
+            for i = 1, #ns do
+                for j = i+1, #ns do
+                    local u, v = ns[i], ns[j]
+                    adj[u][v] = true
+                    adj[v][u] = true
+                end
+            end
+        end
+    end
+    
+    -- 3. Find connected components (clusters)
+    local visited = {}
+    local components = {}
+    
+    for _, u in ipairs(boundaryCells) do
+        if not visited[u] then
+            local comp = {}
+            local q = {u}
+            visited[u] = true
+            while #q > 0 do
+                local curr = table.remove(q)
+                table.insert(comp, curr)
+                for neighbor in pairs(adj[curr] or {}) do
+                    if not visited[neighbor] then
+                        visited[neighbor] = true
+                        table.insert(q, neighbor)
+                    end
+                end
+            end
+            table.insert(components, comp)
+        end
+    end
+    
+    return components
+end
+
+local function solveCSP(flaggedSet, safeSet)
+    local numbered = state.cells.numbered
+    local components = getBoundaryComponents(numbered, flaggedSet, safeSet)
+    
+    for _, vars in ipairs(components) do
+        -- Only solve small/medium clusters to prevent lag (max 14 vars is safe for strict realtime, maybe 16)
+        if #vars > 0 and #vars <= 14 then
+            local solutions = {}
+            local solutionCount = 0
+            local MAX_SOLUTIONS = 500 -- bail out if too ambiguous
+            
+            -- Map variables to 1..N indices
+            local varMap = {}
+            for i, v in ipairs(vars) do varMap[v] = i end
+            
+            -- Find relevant constraints (numbered cells touching this component)
+            local constraints = {}
+            for _, numCell in ipairs(numbered) do
+                local relevant = false
+                for _, n in ipairs(numCell._csp_neigh) do
+                    if varMap[n] then relevant = true break end
+                end
+                
+                if relevant then
+                    local cVars = {}
+                    for _, n in ipairs(numCell._csp_neigh) do
+                        if varMap[n] then table.insert(cVars, varMap[n]) end
+                    end
+                    table.insert(constraints, {
+                        vars = cVars,
+                        rem = numCell._csp_rem,
+                        total_vars = #numCell._csp_neigh -- used to check if constraint is already busted
+                    })
+                end
+            end
+            
+            -- Backtracking
+            local current = {} -- current assignment (0 or 1)
+            
+            local function backtrack(idx)
+                if solutionCount >= MAX_SOLUTIONS then return end
+                
+                if idx > #vars then
+                    solutionCount = solutionCount + 1
+                    local sol = {}
+                    for i = 1, #vars do sol[i] = current[i] end
+                    table.insert(solutions, sol)
+                    return
+                end
+                
+                -- Try 0 (Safe) and 1 (Mine)
+                for val = 0, 1 do
+                    current[idx] = val
+                    
+                    -- Check consistency
+                    local consistent = true
+                    for _, c in ipairs(constraints) do
+                        local sum = 0
+                        local unassigned = 0
+                        for _, vIdx in ipairs(c.vars) do
+                            if vIdx <= idx then sum = sum + current[vIdx]
+                            else unassigned = unassigned + 1 end
+                        end
+                        
+                        -- Pruning:
+                        -- If sum > rem, effective mines exceed number -> invalid
+                        -- If sum + unassigned < rem, not enough space for mines -> invalid
+                        if sum > c.rem or (sum + unassigned) < c.rem then
+                            consistent = false
+                            break
+                        end
+                    end
+                    
+                    if consistent then
+                        backtrack(idx + 1)
+                    end
+                end
+            end
+            
+            backtrack(1)
+            
+            -- Analyze solutions
+            if solutionCount > 0 and solutionCount < MAX_SOLUTIONS then
+                for i, v in ipairs(vars) do
+                    local isAllMines = true
+                    local isAllSafe = true
+                    
+                    for _, sol in ipairs(solutions) do
+                        if sol[i] == 0 then isAllMines = false end
+                        if sol[i] == 1 then isAllSafe = false end
+                    end
+                    
+                    if isAllMines then
+                        if not flaggedSet[v] then flaggedSet[v] = true end
+                    elseif isAllSafe then
+                        if not safeSet[v] then safeSet[v] = true end
+                    end
+                end
+            end
+        end
+    end
+end
+
 local function applySimpleDeductionRule(cellA, cellB, unknownsA, unknownsB, flaggedSet, safeSet)
     local setA = {}
     for _, u in ipairs(unknownsA) do setA[u] = true end
@@ -490,6 +660,27 @@ local function updateLogic()
             end
         end
         checkAdjacentNumberedCells(knownFlags, state.cells.toClear)
+        
+        -- Run CSP if simple logic stalled but we might solve more complex stuff
+        if not changed then
+            -- We only run CSP once when stalled to try and kickstart progress
+            -- To avoid infinite loops, we check if CSP actually made changes
+            local oldFlags = 0
+            local oldClears = 0
+            for _ in pairs(knownFlags) do oldFlags = oldFlags + 1 end
+            for _ in pairs(state.cells.toClear) do oldClears = oldClears + 1 end
+            
+            solveCSP(knownFlags, state.cells.toClear)
+            
+            local newFlags = 0
+            local newClears = 0
+            for _ in pairs(knownFlags) do newFlags = newFlags + 1 end
+            for _ in pairs(state.cells.toClear) do newClears = newClears + 1 end
+            
+            if newFlags ~= oldFlags or newClears ~= oldClears then
+                changed = true
+            end
+        end
     end
     state.cells.toFlag = knownFlags
 end
