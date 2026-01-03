@@ -255,40 +255,6 @@ local function updateCellStates(folder)
     state.cells.numbered = {}
     if state.grid.w == 0 then return end
 
-    local colorCounts = {}
-    local distinctColors = {}
-    
-    -- Pass 1: Identify "Covered" color (most common color)
-    for x = 0, state.grid.w - 1 do
-        local column = state.cells.grid[x]
-        if column then
-            for z = 0, state.grid.h - 1 do
-                local cell = column[z]
-                if cell and cell.part then
-                    local c = cell.part.Color
-                    -- quantization to handle slight precision errors
-                    local r, g, b = floor(c.R*20), floor(c.G*20), floor(c.B*20)
-                    local key = r.."_"..g.."_"..b
-                    if not colorCounts[key] then 
-                        colorCounts[key] = 0 
-                        distinctColors[key] = c
-                    end
-                    colorCounts[key] = colorCounts[key] + 1
-                end
-            end
-        end
-    end
-    
-    local maxCount = -1
-    local coveredColor = nil
-    for key, count in pairs(colorCounts) do
-        if count > maxCount then
-            maxCount = count
-            coveredColor = distinctColors[key]
-        end
-    end
-
-    -- Pass 2: Update states
     for x = 0, state.grid.w - 1 do
         local column = state.cells.grid[x]
         if column then
@@ -300,9 +266,6 @@ local function updateCellStates(folder)
                     cell.covered = true
                     cell.color = nil
 
-                    local partColor = cell.part.Color
-                    cell.color = {R = partColor.R, G = partColor.G, B = partColor.B}
-
                     local numberGui = cell.part:FindFirstChild("NumberGui", true)
                     if numberGui then
                         local label = numberGui:FindFirstChild("TextLabel")
@@ -312,18 +275,12 @@ local function updateCellStates(folder)
                         end
                     end
 
-                    local isRevealed = (cell.number ~= nil)
-                    
-                    if not isRevealed and coveredColor then
-                        local r1, g1, b1 = partColor.R, partColor.G, partColor.B
-                        local r2, g2, b2 = coveredColor.R, coveredColor.G, coveredColor.B
-                        local dist = abs(r1-r2) + abs(g1-g2) + abs(b1-b2)
-                        if dist > 0.05 then
-                             isRevealed = true
-                        end
+                    if cell.number then 
+                        cell.covered = false 
+                    else
+                        cell.covered = true -- Default to covered if no number
                     end
-
-                    if isRevealed then cell.covered = false end
+                    
                     if hasFlagChild(cell.part) then cell.state = "flagged" end
 
                     if cell.number and not cell.covered then
