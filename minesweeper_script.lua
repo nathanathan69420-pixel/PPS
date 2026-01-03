@@ -217,7 +217,7 @@ local function autoFlag()
         if c.part and not hasF(c.part) and (c.pos - h.Position).Magnitude <= r then
             local cd = c.part:FindFirstChildWhichIsA("ClickDetector")
             if cd and fireclickdetector then
-                fireclickdetector(cd)
+                fireclickdetector(cd, 0)
                 lastF = tick()
                 break
             end
