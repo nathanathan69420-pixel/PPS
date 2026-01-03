@@ -253,6 +253,40 @@ local function updateCellStates(folder)
     state.cells.numbered = {}
     if state.grid.w == 0 then return end
 
+    local colorCounts = {}
+    local distinctColors = {}
+    
+    -- Pass 1: Identify "Covered" color (most common color)
+    for x = 0, state.grid.w - 1 do
+        local column = state.cells.grid[x]
+        if column then
+            for z = 0, state.grid.h - 1 do
+                local cell = column[z]
+                if cell and cell.part then
+                    local c = cell.part.Color
+                    -- quantization to handle slight precision errors
+                    local r, g, b = floor(c.R*20), floor(c.G*20), floor(c.B*20)
+                    local key = r.."_"..g.."_"..b
+                    if not colorCounts[key] then 
+                        colorCounts[key] = 0 
+                        distinctColors[key] = c
+                    end
+                    colorCounts[key] = colorCounts[key] + 1
+                end
+            end
+        end
+    end
+    
+    local maxCount = -1
+    local coveredColor = nil
+    for key, count in pairs(colorCounts) do
+        if count > maxCount then
+            maxCount = count
+            coveredColor = distinctColors[key]
+        end
+    end
+
+    -- Pass 2: Update states
     for x = 0, state.grid.w - 1 do
         local column = state.cells.grid[x]
         if column then
@@ -265,12 +299,7 @@ local function updateCellStates(folder)
                     cell.color = nil
 
                     local partColor = cell.part.Color
-                    if partColor then
-                        local r = (partColor.R <= 1) and floor(partColor.R * 255 + 0.5) or partColor.R
-                        local g = (partColor.G <= 1) and floor(partColor.G * 255 + 0.5) or partColor.G
-                        local b = (partColor.B <= 1) and floor(partColor.B * 255 + 0.5) or partColor.B
-                        cell.color = {R = r, G = g, B = b}
-                    end
+                    cell.color = {R = partColor.R, G = partColor.G, B = partColor.B}
 
                     local numberGui = cell.part:FindFirstChild("NumberGui")
                     if numberGui then
@@ -281,12 +310,14 @@ local function updateCellStates(folder)
                         end
                     end
 
-                    local color = cell.color
                     local isRevealed = (cell.number ~= nil)
-                    if color and not isRevealed then
-                        local r, g, b = floor(color.R*255+0.5), floor(color.G*255+0.5), floor(color.B*255+0.5)
-                        if r >= 180 and g >= 180 and b >= 180 and abs(r-g) <= 50 and abs(g-b) <= 50 and abs(r-b) <= 50 then
-                            isRevealed = true
+                    
+                    if not isRevealed and coveredColor then
+                        local r1, g1, b1 = partColor.R, partColor.G, partColor.B
+                        local r2, g2, b2 = coveredColor.R, coveredColor.G, coveredColor.B
+                        local dist = abs(r1-r2) + abs(g1-g2) + abs(b1-b2)
+                        if dist > 0.05 then
+                             isRevealed = true
                         end
                     end
 
