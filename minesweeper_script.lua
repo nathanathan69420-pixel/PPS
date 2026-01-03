@@ -163,6 +163,8 @@ end
 local function updateL()
     if state.grid.w == 0 then state.cells.toFlag, state.cells.toClear = {}, {} return end
     local num = state.cells.numbered if #num == 0 then return end
+    local h = "" for i=1,#num do local c=num[i] h = h .. c.part.Name .. (c.number or 0) end
+    if state.lastH == h then return end
     local fS, sS, ch, it = {}, {}, true, 0
     for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do local c=col[z] if c then c._prob = nil end end end end
     while ch and it < 64 do
@@ -179,7 +181,7 @@ local function updateL()
         if postF ~= pF or postC ~= pC then ch = true end
         if not ch then solveCSP(fS, sS) local nF, nC = 0, 0 for _ in pairs(fS) do nF = nF + 1 end for _ in pairs(sS) do nC = nC + 1 end if nF ~= postF or nC ~= postC then ch = true end end
     end
-    state.cells.toFlag, state.cells.toClear = fS, sS
+    state.lastH, state.cells.toFlag, state.cells.toClear = h, fS, sS
 end
 local function updateG()
     state.bestGuessCell = nil if not config.GuessHelper or state.grid.w == 0 then return end
@@ -271,7 +273,7 @@ local function bypass()
     local r = game:GetService("ReplicatedStorage"):FindFirstChild("Patukka")
     if r then local old old = hookmetamethod(game, "__namecall", function(self, ...) local m = getnamecallmethod() if self == r and (m == "InvokeServer" or m == "FireServer") then if Toggles.BypassAnticheat and Toggles.BypassAnticheat.Value then return nil end end return old(self, ...) end) end
 end
-local lastS, solveInt = 0, 0.05
+local lastS, solveInt = 0, 0.1
 rs.Heartbeat:Connect(function()
     config.Enabled = Toggles.HighlightMines and Toggles.HighlightMines.Value
     if not config.Enabled then clearB() state.cells.toFlag, state.cells.toClear, state.lastPartCount = {}, {}, -1 return end
