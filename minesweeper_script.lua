@@ -551,81 +551,78 @@ local function solveCSP(flaggedSet, safeSet)
         end
     end
 
-    if #compData > 0 and config.TotalMines then
-        local knownFlags = 0
-        local totalUnknowns = 0
-        for x = 0, state.grid.w - 1 do
-            if state.cells.grid[x] then
-                for z = 0, state.grid.h - 1 do
-                    local cell = state.cells.grid[x][z]
-                    if cell then
-                        if cell.state == "flagged" or flaggedSet[cell] then knownFlags = knownFlags + 1
-                        elseif isEligibleForClick(cell) and not safeSet[cell] then totalUnknowns = totalUnknowns + 1 end
-                    end
-                end
-            end
-        end
-        
-        local targetMines = config.TotalMines - knownFlags
-        local slack = totalUnknowns - totalCompVars
-        local minSlack, maxSlack = 0, slack
-        if slack < 0 then slack = 0 minSlack = 0 maxSlack = 0 end 
-        
+    if #compData > 0 then
         local validCounts = {}
-        for i = 1, #compData do validCounts[i] = {} end
-        
-        local dp = { [0] = true } 
-        local minMines, maxMines = 0, 0
-        
         for i, data in ipairs(compData) do
-            local newDp = {}
-            local minK, maxK = huge, -huge
-            for k in pairs(data.counts) do
-                if k < minK then minK = k end
-                if k > maxK then maxK = k end
-            end
-            
-            for currentSum, _ in pairs(dp) do
-                for k in pairs(data.counts) do
-                    local nextSum = currentSum + k
-                    if nextSum <= targetMines then 
-                         newDp[nextSum] = true
+             validCounts[i] = {}
+             for k in pairs(data.counts) do validCounts[i][k] = true end
+        end
+
+        if config.TotalMines then
+            local knownFlags = 0
+            local totalUnknowns = 0
+            for x = 0, state.grid.w - 1 do
+                if state.cells.grid[x] then
+                    for z = 0, state.grid.h - 1 do
+                        local cell = state.cells.grid[x][z]
+                        if cell then
+                            if cell.state == "flagged" or flaggedSet[cell] then knownFlags = knownFlags + 1
+                            elseif isEligibleForClick(cell) and not safeSet[cell] then totalUnknowns = totalUnknowns + 1 end
+                        end
                     end
                 end
             end
-            dp = newDp
-            minMines = minMines + minK
-            maxMines = maxMines + maxK
-        end
-        
-        local finalValidSums = {}
-        for s in pairs(dp) do
-            if s + maxSlack >= targetMines and s + minSlack <= targetMines then
-                finalValidSums[s] = true
-            end
-        end
-        
-        local function prune(idx, currentSum)
-            if idx > #compData then return finalValidSums[currentSum] == true end
             
-            local data = compData[idx]
-            local isValid = false
-            for k in pairs(data.counts) do
-                if prune(idx + 1, currentSum + k) then
-                    validCounts[idx][k] = true
-                    isValid = true
+            local targetMines = config.TotalMines - knownFlags
+            local slack = totalUnknowns - totalCompVars
+            local minSlack, maxSlack = 0, slack
+            if slack < 0 then slack = 0 minSlack = 0 maxSlack = 0 end 
+            
+            local dp = { [0] = true } 
+            
+            for i, data in ipairs(compData) do
+                local newDp = {}
+                for currentSum, _ in pairs(dp) do
+                    for k in pairs(data.counts) do
+                        local nextSum = currentSum + k
+                        if nextSum <= targetMines then 
+                             newDp[nextSum] = true
+                        end
+                    end
+                end
+                dp = newDp
+            end
+            
+            local finalValidSums = {}
+            for s in pairs(dp) do
+                if s + maxSlack >= targetMines and s + minSlack <= targetMines then
+                    finalValidSums[s] = true
                 end
             end
-            return isValid
-        end
-        prune(1, 0)
-        
-        for i, data in ipairs(compData) do
-            if not next(validCounts[i]) then 
-                -- fallback: all counts valid if global pruning failed logic
-                for k in pairs(data.counts) do validCounts[i][k] = true end
+            
+            local prunedCounts = {}
+            for i = 1, #compData do prunedCounts[i] = {} end
+
+            local function prune(idx, currentSum)
+                if idx > #compData then return finalValidSums[currentSum] == true end
+                
+                local data = compData[idx]
+                local isValid = false
+                for k in pairs(data.counts) do
+                    if prune(idx + 1, currentSum + k) then
+                        prunedCounts[idx][k] = true
+                        isValid = true
+                    end
+                end
+                return isValid
             end
             
+            if prune(1, 0) then
+                validCounts = prunedCounts
+            end
+        end
+
+        for i, data in ipairs(compData) do
             local totalValidSolutions = 0
             for k, count in pairs(data.counts) do
                 if validCounts[i][k] then totalValidSolutions = totalValidSolutions + count end
