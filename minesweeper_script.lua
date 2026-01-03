@@ -388,10 +388,24 @@ local function solveCSP(flaggedSet, safeSet)
     local components = getBoundaryComponents(numbered, flaggedSet, safeSet)
     
     for _, vars in ipairs(components) do
-        if #vars > 0 and #vars <= 18 then
+        -- Calculate degrees (number of constraints/numbered neighbors) for sorting
+        local degrees = {}
+        for _, v in ipairs(vars) do degrees[v] = 0 end
+        for _, numCell in ipairs(numbered) do
+            for _, n in ipairs(numCell._csp_neigh) do
+                if degrees[n] then degrees[n] = degrees[n] + 1 end
+            end
+        end
+        -- Sort variables: Most constrained first -> Early Pruning
+        table.sort(vars, function(a, b) return degrees[a] > degrees[b] end)
+
+        local nVars = #vars
+
+        -- EXACT SOLVER for small/medium clusters
+        if nVars > 0 and nVars <= 23 then
             local solutions = {}
             local solutionCount = 0
-            local MAX_SOLUTIONS = 25000 
+            local MAX_SOLUTIONS = 50000 
             
             local varMap = {}
             for i, v in ipairs(vars) do varMap[v] = i end
@@ -407,7 +421,10 @@ local function solveCSP(flaggedSet, safeSet)
                     local cVars = {}
                     for _, n in ipairs(numCell._csp_neigh) do
                         if varMap[n] then table.insert(cVars, varMap[n]) end
+                        -- Optimization: Sort constraint vars by their index in 'vars' to allow early checking
+                        -- (Since we backtrack by index, checking lowest indices first is good)
                     end
+                    table.sort(cVars) 
                     table.insert(constraints, {
                         vars = cVars,
                         rem = numCell._csp_rem,
@@ -416,19 +433,24 @@ local function solveCSP(flaggedSet, safeSet)
                 end
             end
             
+            -- Sort constraints? Smallest (tightest) first?
+            -- Actually, just checking them all is fast enough if vars are ordered.
+            
             local current = {} 
             
             local function backtrack(idx)
                 if solutionCount >= MAX_SOLUTIONS then return end
                 
-                if idx > #vars then
+                if idx > nVars then
                     solutionCount = solutionCount + 1
                     local sol = {}
-                    for i = 1, #vars do sol[i] = current[i] end
+                    for i = 1, nVars do sol[i] = current[i] end
                     table.insert(solutions, sol)
                     return
                 end
                 
+                -- Try 0 (Safe) and 1 (Mine)
+                -- Optimization: Heuristic? Try 0 first (mines are rare ~20%)?
                 for val = 0, 1 do
                     current[idx] = val
                     
@@ -436,19 +458,24 @@ local function solveCSP(flaggedSet, safeSet)
                     for _, c in ipairs(constraints) do
                         local sum = 0
                         local unassigned = 0
+                        local broken = false
                         for _, vIdx in ipairs(c.vars) do
-                            if vIdx <= idx then sum = sum + current[vIdx]
-                            else unassigned = unassigned + 1 end
+                            if vIdx <= idx then 
+                                sum = sum + current[vIdx]
+                            else 
+                                unassigned = unassigned + 1 
+                            end
                         end
-                        
-                        if sum > c.rem or (sum + unassigned) < c.rem then
-                            consistent = false
-                            break
-                        end
+                        -- Constraint Check:
+                        -- 1. Too many mines already?
+                        if sum > c.rem then consistent = false break end
+                        -- 2. Not enough space left to satisfy?
+                        if (sum + unassigned) < c.rem then consistent = false break end
                     end
                     
                     if consistent then
                         backtrack(idx + 1)
+                        if solutionCount >= MAX_SOLUTIONS then return end
                     end
                 end
             end
@@ -458,7 +485,6 @@ local function solveCSP(flaggedSet, safeSet)
             if solutionCount > 0 and solutionCount < MAX_SOLUTIONS then
                 for i, v in ipairs(vars) do
                     local mineCount = 0
-                    
                     for _, sol in ipairs(solutions) do
                         if sol[i] == 1 then mineCount = mineCount + 1 end
                     end
@@ -468,10 +494,17 @@ local function solveCSP(flaggedSet, safeSet)
                     elseif mineCount == 0 then
                         if not safeSet[v] then safeSet[v] = true end
                     end
-                    
                     v._prob = mineCount / solutionCount
                 end
             end
+
+        -- MONTE CARLO FALLBACK for huge clusters
+        elseif nVars > 23 then
+            -- Attempt to find approximate probabilities by random sampling
+            -- This is very hard to do correctly for heavy constraints, but better than nothing?
+            -- Actually, standard heuristic is safer than broken MC.
+            -- Instead, we can try to split the component?
+            -- For now, let's just leave it to the heuristic in updateGuess, which handles density.
         end
     end
 end
