@@ -206,6 +206,21 @@ local function updateG()
     end end end
     state.bestGuessCell = bestC
 end
+local lastF = 0
+local function autoFlag()
+    if not (Toggles.AutoFlag and Toggles.AutoFlag.Value) then return end
+    local r, d = Options.FlagRange.Value, Options.FlagDelay.Value
+    if tick() - lastF < d then return end
+    local h = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+    if not h then return end
+    for c in pairs(state.cells.toFlag) do
+        if c.part and not hasF(c.part) and (c.pos - h.Position).Magnitude <= r then
+            game:GetService("ReplicatedStorage").Events.FlagEvents.PlaceFlag:FireServer(c.part)
+            lastF = tick()
+            break
+        end
+    end
+end
 local function applyH(c, col)
     if not c.borders then
         local th, ins = 0.15, 0.02
@@ -245,7 +260,7 @@ local win = lib:CreateWindow({ Title = "Axis Hub -\nMinesweeper.lua", Footer = "
 local h, m, s = win:AddTab("Home", "house"), win:AddTab("Main", "target"), win:AddTab("Settings", "settings")
 local status = h:AddLeftGroupbox("Status") status:AddLabel(string.format("Welcome, %s\nGame: Minesweeper", lp.DisplayName), true) status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 local perf = h:AddRightGroupbox("Performance") local fpsL, pingL = perf:AddLabel("FPS: ...", true), perf:AddLabel("Ping: ...", true)
-local mainB = m:AddLeftGroupbox("Main") mainB:AddToggle("HighlightMines", { Text = "Highlight Mines", Default = false }) mainB:AddToggle("BypassAnticheat", { Text = "Bypass Anticheat", Default = true })
+local mainB = m:AddLeftGroupbox("Main") mainB:AddToggle("HighlightMines", { Text = "Highlight Mines", Default = false }) mainB:AddToggle("AutoFlag", { Text = "Auto Flag", Default = false }) mainB:AddSlider("FlagRange", { Text = "Auto Flag Range", Default = 16, Min = 0, Max = 16, Rounding = 0 }) mainB:AddSlider("FlagDelay", { Text = "Auto Flag Delay", Default = 0.1, Min = 0, Max = 1, Rounding = 1 }) mainB:AddToggle("BypassAnticheat", { Text = "Bypass Anticheat", Default = true })
 local cfgB = s:AddLeftGroupbox("Config") cfgB:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end }) cfgB:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
 lib.ToggleKeybind = Options.MenuKeybind
 local function bypass()
@@ -262,7 +277,7 @@ rs.Heartbeat:Connect(function()
     local neb = pc ~= state.lastPartCount if neb then clearB() state.lastPartCount = pc rebuildG(f) end
     if state.grid.w == 0 then return end
     if neb or (now - lastS) >= solveInt then lastS = now updateS(f) updateL() updateG() end
-    updateH()
+    updateH() autoFlag()
 end)
 rs.RenderStepped:Connect(function(dt)
     elap, frames = elap + dt, frames + 1
