@@ -301,37 +301,76 @@ local function calcGuess()
     state.guess = bC
 end
 
+local function createBorders(c)
+    local th = 0.08
+    local ins = 0.05
+    local function newPart()
+        local p = Instance.new("Part")
+        p.Anchored = true
+        p.CanCollide = false
+        p.CanQuery = false
+        p.CanTouch = false
+        p.CastShadow = false
+        p.Material = Enum.Material.Neon
+        p.Size = Vector3.new(1, 1, 1)
+        p.Parent = get("CoreGui")
+        return p
+    end
+    c.borders = {
+        top = newPart(),
+        bottom = newPart(),
+        left = newPart(),
+        right = newPart()
+    }
+    c.borderTh = th
+    c.borderIns = ins
+end
+
+local function updateBorders(c, color, visible)
+    if not c.part then return end
+    if not c.borders then createBorders(c) end
+    local sz = c.part.Size
+    local th = c.borderTh or 0.08
+    local ins = c.borderIns or 0.05
+    local hx = sz.X / 2 - ins
+    local hz = sz.Z / 2 - ins
+    local yoff = sz.Y / 2 + 0.01
+    local t, b, l, r = c.borders.top, c.borders.bottom, c.borders.left, c.borders.right
+    t.Size = Vector3.new(sz.X - ins * 2, th, th)
+    b.Size = Vector3.new(sz.X - ins * 2, th, th)
+    l.Size = Vector3.new(th, th, sz.Z - ins * 2)
+    r.Size = Vector3.new(th, th, sz.Z - ins * 2)
+    t.CFrame = c.part.CFrame * CFrame.new(0, yoff, -hz)
+    b.CFrame = c.part.CFrame * CFrame.new(0, yoff, hz)
+    l.CFrame = c.part.CFrame * CFrame.new(-hx, yoff, 0)
+    r.CFrame = c.part.CFrame * CFrame.new(hx, yoff, 0)
+    for _, border in pairs(c.borders) do
+        border.Color = color
+        border.Transparency = visible and 0 or 1
+    end
+end
+
 local function highlight()
     local en = Toggles.HighlightMines and Toggles.HighlightMines.Value
     for x = 0, state.w - 1 do
         for z = 0, state.h - 1 do
             local c = state.grid[x][z]
             if not c or not c.part then continue end
-            local h = state.highlights[c]
             local isM = state.mines[c]
             local isS = state.safe[c]
             local isG = (state.guess == c)
             if en and (isM or isS or isG) then
-                if not h then
-                    h = Instance.new("Highlight")
-                    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                    h.FillTransparency = 0.5
-                    h.OutlineTransparency = 0
-                    h.Parent = get("CoreGui")
-                    state.highlights[c] = h
-                end
-                h.Adornee = c.part
+                local color
                 if isM then
-                    h.FillColor = Color3.new(1, 0, 0)
+                    color = Color3.new(1, 0, 0)
                 elseif isS then
-                    h.FillColor = Color3.new(0, 1, 0)
+                    color = Color3.new(0, 1, 0)
                 else
-                    h.FillColor = Color3.new(0, 0.7, 1)
+                    color = Color3.new(0, 0.7, 1)
                 end
-                h.OutlineColor = Color3.new(1, 1, 1)
-                h.Enabled = true
-            elseif h then
-                h.Enabled = false
+                updateBorders(c, color, true)
+            elseif c.borders then
+                updateBorders(c, Color3.new(1, 1, 1), false)
             end
         end
     end
@@ -415,7 +454,14 @@ save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
     if perfConn then perfConn:Disconnect() end
-    for _, h in pairs(state.highlights) do h:Destroy() end
+    for x = 0, state.w - 1 do
+        for z = 0, state.h - 1 do
+            local c = state.grid[x] and state.grid[x][z]
+            if c and c.borders then
+                for _, b in pairs(c.borders) do b:Destroy() end
+            end
+        end
+    end
 end)
 
 pcall(bypass)
