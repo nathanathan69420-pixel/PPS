@@ -265,27 +265,20 @@ local function updateCellStates(folder)
                     cell.number = nil
                     cell.covered = true
                     local partColor = cell.part.Color
+                    local partColor = cell.part.Color
                     cell.color = {R = partColor.R, G = partColor.G, B = partColor.B}
                     
                     if not cell.part.Parent or cell.part.Transparency > 0.9 then
                         cell.covered = false
                     end
 
-                    if cell.covered then
-                        local numberGui = cell.part:FindFirstChild("NumberGui", true)
-                        if numberGui then
-                            local label = numberGui:FindFirstChild("TextLabel")
-                            if label and tonumber(label.Text) then
-                                cell.number = tonumber(label.Text)
-                                cell.covered = false
-                            end
+                    local numberGui = cell.part:FindFirstChild("NumberGui", true)
+                    if numberGui then
+                        local label = numberGui:FindFirstChild("TextLabel")
+                        if label and tonumber(label.Text) then
+                            cell.number = tonumber(label.Text)
+                            cell.covered = false
                         end
-                    end
-
-                    if cell.number then 
-                        cell.covered = false 
-                    else
-                        cell.covered = true -- Default to covered if no number
                     end
                     
                     if hasFlagChild(cell.part) then cell.state = "flagged" end
