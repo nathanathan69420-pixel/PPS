@@ -264,11 +264,10 @@ local function updateCellStates(folder)
                     cell.state = "unknown"
                     cell.number = nil
                     cell.covered = true
-                    local partColor = cell.part.Color
-                    local partColor = cell.part.Color
-                    cell.color = {R = partColor.R, G = partColor.G, B = partColor.B}
                     
-                    if not cell.part.Parent or cell.part.Transparency > 0.9 then
+                    if not cell.part.Parent then
+                        cell.covered = false
+                    elseif cell.part.Transparency > 0.9 then
                         cell.covered = false
                     end
 
