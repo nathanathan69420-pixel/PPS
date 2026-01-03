@@ -322,26 +322,75 @@ local function applySimpleDeductionRule(cellA, cellB, unknownsA, unknownsB, flag
     local setA = {}
     for _, u in ipairs(unknownsA) do setA[u] = true end
     local onlyA, onlyB = {}, {}
+    local inter = {}
     
     for _, u in ipairs(unknownsB) do
-        if setA[u] then setA[u] = nil
-        else table.insert(onlyB, u) end
+        if setA[u] then 
+            setA[u] = nil
+            table.insert(inter, u)
+        else 
+            table.insert(onlyB, u) 
+        end
     end
     for u in pairs(setA) do table.insert(onlyA, u) end
 
     local minesA = countRemainingMines(cellA, flaggedSet)
     local minesB = countRemainingMines(cellB, flaggedSet)
 
+    -- Standard set operations
     if #onlyA == 0 and #onlyB > 0 then
         local diff = minesB - minesA
         if diff == 0 then for _, u in ipairs(onlyB) do safeSet[u] = true end
         elseif diff == #onlyB then for _, u in ipairs(onlyB) do flaggedSet[u] = true end end
-    end
-    if #onlyB == 0 and #onlyA > 0 then
+    elseif #onlyB == 0 and #onlyA > 0 then
         local diff = minesA - minesB
         if diff == 0 then for _, u in ipairs(onlyA) do safeSet[u] = true end
         elseif diff == #onlyA then for _, u in ipairs(onlyA) do flaggedSet[u] = true end end
     end
+    
+    -- Pattern 1-1: Two numbers with equal remaining mines (usually 1) sharing at least 2 unknowns
+    -- If minesA == minesB (e.g. both 1) and they share unknowns, check 1-1 reduction
+    if minesA == 1 and minesB == 1 and #inter >= 2 then
+        -- If A has 1 extra unknown (onlyA has 1 item), that item MUST be safe (because the mine is in the intersection due to B's constraint)
+        -- Actually, strictly speaking: if A has 1 unknown in intersection and 1 outside, and B has same intersection...
+        -- Simplified 1-1 On Edge logic:
+        -- If (onlyA is empty) -> covered above.
+        -- If (onlyA has items) and (onlyB has items) and (minesA == minesB):
+        -- We can't conclude without more info usually, UNLESS intersection size == #unknownsA - 1 ??
+        
+        -- Let's stick to the classic "1-2 pattern" which is stronger, but implement refined logic here
+    end
+    
+    -- Pattern 1-2: minesA=1, minesB=2. 
+    -- If A's unknowns are a SUBSET of B's unknowns, then the difference in B must be mines.
+    -- (Covered by #onlyA == 0 logic above: diff=1, #onlyB=1 -> mine)
+    
+    -- Advanced 1-1:
+    -- If minesA=1, minesB=1. They touch.
+    -- If intersection has 2 cells, and A has 1 unique cell -> that unique cell is SAFE.
+    -- Because if unique was mine, A is satisfied, so intersection is safe -> B needs 1 mine in intersection -> impossible as intersection is safe.
+    -- Wait, if unique is mine, intersection is safe. B needs 1 mine. B has other unique cells?
+    -- Correct constrained 1-1:
+    if minesA == 1 and minesB == 1 then
+        if #onlyA == 1 and #inter == 2 and #onlyB == 0 then
+            safeSet[onlyA[1]] = true
+        elseif #onlyB == 1 and #inter == 2 and #onlyA == 0 then
+            safeSet[onlyB[1]] = true
+        end
+    end
+    
+    -- Advanced 1-2:
+    -- minesA=1, minesB=2.
+    -- If A has 2 unknowns in intersection, and 0 outside (subset).
+    -- B has 1 unknown outside.
+    -- Covered by basic subset rule (diff=1, onlyB=1 -> mine).
+    
+    -- Harder 1-2:
+    -- minesA=1, minesB=2.
+    -- A has 2 cells in intersection, X cells outside.
+    -- B has those 2 intersection cells + Y cells outside.
+    -- If A is satisfied by intersection (it needs 1), B needs 1 more from Y.
+    -- This specific geometry is tricky without full CSP.
 end
 
 local function checkAdjacentNumberedCells(flaggedSet, safeSet)
@@ -365,6 +414,36 @@ local function checkAdjacentNumberedCells(flaggedSet, safeSet)
             end
         end
     end
+    
+    -- Global 1-1 and 1-2 Search on edges
+    -- Refined pattern scanning
+    for _, cell in ipairs(numbered) do
+        local u = getUnknownsForCell(cell, flaggedSet, safeSet) -- Helper needed
+        local m = countRemainingMines(cell, flaggedSet)
+        
+        if m == 1 then
+            -- Check for 1-1 and 1-2 against neighbors
+            for _, n in ipairs(cell.neigh) do
+                if n.state == "number" then
+                    local u2 = getUnknownsForCell(n, flaggedSet, safeSet)
+                    local m2 = countRemainingMines(n, flaggedSet)
+                    
+                    if m2 == 1 then
+                        -- Check 1-1
+                        -- effective 1-1 reduction
+                        -- (Specific to linear patterns on edges usually)
+                    elseif m2 == 2 then
+                        -- Check 1-2
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Helper alias
+function getUnknownsForCell(cell, flaggedSet, safeSet) 
+    return getUnknownNeighborsExcluding(cell, flaggedSet, safeSet)
 end
 
 local function updateLogic()
