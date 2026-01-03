@@ -700,6 +700,17 @@ local perfConn = rs.RenderStepped:Connect(function(dt)
     end
 end)
 
+
+theme:SetLibrary(lib)
+save:SetLibrary(lib)
+save:IgnoreThemeSettings()
+save:SetIgnoreIndexes({ "MenuKeybind" })
+theme:SetFolder("PlowsScriptHub")
+save:SetFolder("PlowsScriptHub/Minesweeper")
+save:BuildConfigSection(cfg)
+theme:ApplyToTab(cfg)
+save:LoadAutoloadConfig()
+
 lib:OnUnload(function()
     if perfConn then perfConn:Disconnect() end
     clearAllCellBorders()
