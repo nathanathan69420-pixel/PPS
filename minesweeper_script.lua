@@ -457,8 +457,6 @@ local function solveCSP(flaggedSet, safeSet)
         end
         table.sort(vars, function(a, b) return degrees[a] > degrees[b] end)
         
-        if os.clock() - tStart > 0.05 then break end
-
         local nVars = #vars
         if nVars > 0 then
             local solutions = {}
@@ -497,7 +495,7 @@ local function solveCSP(flaggedSet, safeSet)
 
             local function backtrack(idx)
                 if solutionCount >= MAX_SOLUTIONS then return end
-                if (solutionCount % 100 == 0) and (os.clock() - tStart > 0.05) then aborted = true return end
+                if (solutionCount % 100 == 0) and (os.clock() - tStart > 0.1) then aborted = true return end
                 
                 if idx > nVars then
                     solutionCount = solutionCount + 1
