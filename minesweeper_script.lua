@@ -53,6 +53,7 @@ end
 local COLOR_SAFE = Color3.fromRGB(0, 255, 0)
 local COLOR_MINE = Color3.fromRGB(255, 0, 0)
 local COLOR_GUESS = Color3.fromRGB(0, 170, 255)
+local COLOR_WRONG = Color3.fromRGB(255, 0, 255)
 
 local abs, floor, huge = math.abs, math.floor, math.huge
 local tsort = table.sort
@@ -113,7 +114,7 @@ local function hasFlagChild(parent)
 end
 
 local function isEligibleForClick(cell)
-    return not (cell.state == "number" or cell.state == "flagged") and cell.covered ~= false
+    return not (cell.state == "number") and cell.covered ~= false
 end
 
 local function scanForBoard()
@@ -143,6 +144,7 @@ local function clearAllCellBorders()
                     cell.isHighlightedMine = false
                     cell.isHighlightedSafe = false
                     cell.isHighlightedGuess = false
+                    cell.isWrongFlag = false
                 end
             end
         end
@@ -205,6 +207,7 @@ local function rebuildGridFromParts(folder)
                 isHighlightedMine = false,
                 isHighlightedSafe = false,
                 isHighlightedGuess = false,
+                isWrongFlag = false,
                 lastHighlightChange = 0
             }
         end
@@ -348,8 +351,10 @@ local function getBoundaryComponents(numbered, flaggedSet, safeSet)
                 local rem = (numCell.number or 0)
                 local neighbors = {}
                 for _, n in ipairs(numCell.neigh) do
-                    if flaggedSet[n] or n.state == "flagged" then
+                    if flaggedSet[n] then
                         rem = rem - 1
+                    elseif n.state == "flagged" then
+                        table.insert(neighbors, n)
                     elseif not safeSet[n] and isEligibleForClick(n) then
                         table.insert(neighbors, n)
                     end
@@ -368,8 +373,14 @@ local function getBoundaryComponents(numbered, flaggedSet, safeSet)
         local rem = (numCell.number or 0)
         local neighbors = {}
         for _, n in ipairs(numCell.neigh) do
-            if flaggedSet[n] or n.state == "flagged" then
+            if flaggedSet[n] then
                 rem = rem - 1
+            elseif n.state == "flagged" then
+                table.insert(neighbors, n)
+                if not cellMap[n] then
+                    cellMap[n] = true
+                    table.insert(boundaryCells, n)
+                end
             elseif not safeSet[n] and isEligibleForClick(n) then
                 table.insert(neighbors, n)
                 if not cellMap[n] then
@@ -531,6 +542,7 @@ local function solveCSP(flaggedSet, safeSet)
                         if not flaggedSet[v] then flaggedSet[v] = true end
                     elseif mineCount == 0 then
                         if not safeSet[v] then safeSet[v] = true end
+                        if v.state == "flagged" then v.isWrongFlag = true end
                     end
                     v._prob = mineCount / solutionCount
                 end
@@ -849,27 +861,34 @@ local function updateHighlights()
             for z = 0, state.grid.h - 1 do
                 local cell = col[z]
                 if cell and cell.part then
-                    local isVisible = cell.covered and cell.state ~= "number" and cell.state ~= "flagged"
-                    if not isEligibleForClick(cell) or cell.state == "flagged" or not isVisible then
-                        if cell.isHighlightedMine or cell.isHighlightedSafe or cell.isHighlightedGuess then
+                    local isVisible = cell.covered and cell.state ~= "number"
+                    if not isVisible then
+                        if cell.isHighlightedMine or cell.isHighlightedSafe or cell.isHighlightedGuess or cell.isWrongFlag then
                             removeAllHighlights(cell)
                         end
                     else
                         local isMine = state.cells.toFlag[cell] ~= nil
                         local isSafe = state.cells.toClear[cell] ~= nil
                         local isGuess = bestGuess and cell == bestGuess and config.GuessHelper
+                        local isWrong = cell.isWrongFlag
 
-                        local changed = (isMine ~= cell.isHighlightedMine) or (isSafe ~= cell.isHighlightedSafe) or (isGuess ~= cell.isHighlightedGuess)
+                        local changed = (isMine ~= cell.isHighlightedMine) or 
+                                      (isSafe ~= cell.isHighlightedSafe) or 
+                                      (isGuess ~= cell.isHighlightedGuess) or 
+                                      (isWrong ~= cell.isWrongFlag)
+
                         if changed then
                             cell.lastHighlightChange = now
                             cell.isHighlightedMine = isMine
                             cell.isHighlightedSafe = isSafe
                             cell.isHighlightedGuess = isGuess
+                            cell.isWrongFlag = isWrong
                         end
 
-                        if en and (isMine or isSafe or isGuess) then
+                        if en and (isMine or isSafe or isGuess or isWrong) then
                             local color
-                            if isMine then color = COLOR_MINE
+                            if isWrong then color = COLOR_WRONG
+                            elseif isMine then color = COLOR_MINE
                             elseif isSafe then color = COLOR_SAFE
                             else color = COLOR_GUESS end
                             applyHighlight(cell, color)
