@@ -334,36 +334,42 @@ local function calcGuess()
     state.guess = nil
     if state.w == 0 then return end
     local fC, uC = 0, 0
+    local allUnknown = {}
     for x = 0, state.w - 1 do
         for z = 0, state.h - 1 do
             local c = state.grid[x][z]
-            if c.st == "flagged" or state.mines[c] then fC = fC + 1
-            elseif not state.safe[c] and isUnknown(c) then uC = uC + 1 end
-        end
-    end
-    local dens = uC > 0 and ((40 - fC) / uC) or 0
-    local bC, bS = nil, 2
-    for x = 0, state.w - 1 do
-        for z = 0, state.h - 1 do
-            local c = state.grid[x][z]
-            if c.part and isUnknown(c) and not state.mines[c] and not state.safe[c] then
-                local vC, pS = 0, 0
-                for _, n in ipairs(c.neigh) do
-                    if n.st == "number" then
-                        local fl, un = 0, 0
-                        for _, nn in ipairs(n.neigh) do
-                            if nn.st == "flagged" or state.mines[nn] then fl = fl+1
-                            elseif isUnknown(nn) and not state.mines[nn] and not state.safe[nn] then un = un+1 end
-                        end
-                        local rem = (n.num or 0) - fl
-                        if rem <= 0 then vC = vC + 1 elseif un > 0 then pS = pS + (rem/un) vC = vC + 1 end
-                    end
-                end
-                local score = 0.5 * (vC > 0 and (pS/vC) or dens) + 0.5 * dens
-                if x == 0 or x == state.w-1 or z == 0 or z == state.h-1 then score = score + 0.05 end
-                if not bS or score < bS then bS = score bC = c end
+            if c.st == "flagged" or state.mines[c] then
+                fC = fC + 1
+            elseif not state.safe[c] and isUnknown(c) then
+                uC = uC + 1
+                table.insert(allUnknown, c)
             end
         end
+    end
+    if uC == 0 then return end
+    local dens = uC > 0 and ((40 - fC) / uC) or 0
+    local bC, bS = nil, 2
+    for _, c in ipairs(allUnknown) do
+        if c.part and not state.mines[c] and not state.safe[c] then
+            local vC, pS = 0, 0
+            for _, n in ipairs(c.neigh) do
+                if n.st == "number" then
+                    local fl, un = 0, 0
+                    for _, nn in ipairs(n.neigh) do
+                        if nn.st == "flagged" or state.mines[nn] then fl = fl+1
+                        elseif isUnknown(nn) and not state.mines[nn] and not state.safe[nn] then un = un+1 end
+                    end
+                    local rem = (n.num or 0) - fl
+                    if rem <= 0 then vC = vC + 1 elseif un > 0 then pS = pS + (rem/un) vC = vC + 1 end
+                end
+            end
+            local score = 0.5 * (vC > 0 and (pS/vC) or dens) + 0.5 * dens
+            if c.ix == 0 or c.ix == state.w-1 or c.iz == 0 or c.iz == state.h-1 then score = score + 0.05 end
+            if not bS or score < bS then bS = score bC = c end
+        end
+    end
+    if not bC and #allUnknown > 0 then
+        bC = allUnknown[math.random(1, #allUnknown)]
     end
     state.guess = bC
 end
