@@ -265,6 +265,8 @@ local status = h:AddLeftGroupbox("Status") status:AddLabel(string.format("Welcom
 local perf = h:AddRightGroupbox("Performance") local fpsL, pingL = perf:AddLabel("FPS: ...", true), perf:AddLabel("Ping: ...", true)
 local mainB = m:AddLeftGroupbox("Main") mainB:AddToggle("HighlightMines", { Text = "Highlight Mines", Default = false }) mainB:AddToggle("BypassAnticheat", { Text = "Bypass Anticheat", Default = true })
 mainB:AddSlider("TotalMines", { Text = "Total Mines", Default = 25, Min = 0, Max = 200, Rounding = 0, Suffix = "mines" })
+local cfgB = s:AddLeftGroupbox("Config") cfgB:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end }) cfgB:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
+lib.ToggleKeybind = Options.MenuKeybind
 local lastS, solveInt, el, fr = 0, 0.1, 0, 0
 rs.Heartbeat:Connect(function()
     config.Enabled = Toggles.HighlightMines and Toggles.HighlightMines.Value
