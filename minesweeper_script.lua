@@ -57,7 +57,12 @@ local function updateS(folder)
             c.state, c.number, c.covered = "unknown", nil, true
             local ng = c._ng or p:FindFirstChild("NumberGui")
             if ng then c._ng = ng local lbl = c._tl or ng:FindFirstChild("TextLabel") if lbl then c._tl = lbl local t = lbl.Text if t ~= "" then local n = tonumber(t) if n then c.number, c.covered, c.state = n, false, "number" tinsert(state.cells.numbered, c) end end end end
-            if c.covered then local cl = p.Color local r, g, b = cl.R*255, cl.G*255, cl.B*255 if r >= 170 and g >= 170 and b >= 170 and abs(r-g) <= 60 and abs(g-b) <= 60 and abs(r-b) <= 60 then c.covered = false end end
+            if c.covered then 
+                local cl = p.Color 
+                local r, g, b = cl.R*255, cl.G*255, cl.B*255 
+                local avg = (r + g + b) / 3
+                if avg > 165 and abs(r-avg) < 20 and abs(g-avg) < 20 and abs(b-avg) < 20 then c.covered = false end
+            end
             if c.covered and hasF(p) then c.state = "flagged" end
             c.isWrongFlag = false
         end
@@ -121,10 +126,11 @@ local function solveCSP(fS, sS)
                 end
             end
         end
-        if nV <= 12 then
+        if nV <= 24 then
             for m = 0, 2^nV - 1 do
                 local ok = true for j = 1, #cons do local s = 0 for _, vi in ipairs(cons[j].v) do if bit32.extract(m, vi-1) == 1 then s = s + 1 end end if s ~= cons[j].r then ok = false break end end
                 if ok then solC = solC + 1 local ms = 0 for j = 1, nV do if bit32.extract(m, j-1) == 1 then ms = ms + 1 cCts[j][ms] = (cCts[j][ms] or 0) + 1 end end cts[ms] = (cts[ms] or 0) + 1 end
+                if solC >= 1000000 then break end
             end
         else bt(1) end
         if not abrt and solC > 0 then tinsert(cD, {v = v, cts = cts, ccts = cCts, total = solC}) end
@@ -151,12 +157,10 @@ local function solveCSP(fS, sS)
             local fW = {}
             for s, ways in pairs(dp) do
                 local rem = tM - s
-                if rem >= 0 and rem <= sl then
-                    fW[s] = ways * nCr(sl, rem)
-                end
+                if rem >= 0 and rem <= sl then fW[s] = ways * nCr(sl, rem) end
             end
             local totW = 0 for _, w in pairs(fW) do totW = totW + w end
-            if totW > 0 then
+            if totW > 1e-300 then
                 local pr, sf = { [0] = { [0] = 1 } }, { [#cD + 1] = { [0] = 1 } }
                 for i = 1, #cD do
                     local nD, d = {}, cD[i]
@@ -185,9 +189,10 @@ local function solveCSP(fS, sS)
                         end
                         v._prob = mP / totW
                         local p = v._prob
-                        v._ent = (p > 0 and p < 1) and -(p * math.log(p) + (1-p) * math.log(1-p)) or 0
+                        v._ent = (p > 1e-6 and p < (1 - 1e-6)) and -(p * math.log(p) + (1-p) * math.log(1-p)) or 0
                         if not d.abrt and d.total < 1000000 then
-                            if v._prob > 0.9999 then fS[v] = true elseif v._prob < 0.0001 then sS[v] = true if v.state == "flagged" then v.isWrongFlag = true end end
+                            if abs(mP - totW) < (totW * 1e-12) then fS[v] = true 
+                            elseif mP < (totW * 1e-12) then sS[v] = true if v.state == "flagged" then v.isWrongFlag = true end end
                         end
                     end
                 end
@@ -195,7 +200,7 @@ local function solveCSP(fS, sS)
                 for fs, fw in pairs(fW) do if tM > fs then slP = slP + fw * (tM - fs) / sl end end
                 state._slProb = sl == 0 and 0 or (slP / totW)
                 local sp = state._slProb
-                state._slEnt = (sp > 0 and sp < 1) and -(sp * math.log(sp) + (1-sp) * math.log(1-sp)) or 0
+                state._slEnt = (sp > 1e-6 and sp < (1 - 1e-6)) and -(sp * math.log(sp) + (1-sp) * math.log(1-sp)) or 0
             end
         else
             for i = 1, #cD do
@@ -205,9 +210,9 @@ local function solveCSP(fS, sS)
                     local mC = 0 for k, c in pairs(d.cts) do mC = mC + (d.ccts[vi][k] or 0) end
                     v._prob = mC / d.total
                     local p = v._prob
-                    v._ent = (p > 0 and p < 1) and -(p * math.log(p) + (1-p) * math.log(1-p)) or 0
+                    v._ent = (p > 1e-6 and p < (1 - 1e-6)) and -(p * math.log(p) + (1-p) * math.log(1-p)) or 0
                     if not d.abrt and d.total < 1000000 then
-                        if v._prob > 0.9999 then fS[v] = true elseif v._prob < 0.0001 then sS[v] = true end
+                        if abs(mC - d.total) < 1e-6 then fS[v] = true elseif mC < 1e-6 then sS[v] = true end
                     end
                 end
             end
