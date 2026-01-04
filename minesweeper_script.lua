@@ -8,7 +8,7 @@ local Toggles, Options = lib.Toggles, lib.Options
 local config = { Enabled = false, GuessHelper = true, TotalMines = 25, DistanceWeight = 0.1, EdgePenalty = 0.05 }
 local state = { cells = { grid = {}, numbered = {}, toFlag = {}, toClear = {} }, grid = { w = 0, h = 0 }, lastPartCount = -1, bestGuessCell = nil, clicked = {} }
 local elap, frames = 0, 0
-local COLOR_SAFE, COLOR_MINE, COLOR_GUESS, COLOR_WRONG = Color3.fromRGB(0, 255, 0), Color3.fromRGB(255, 0, 0), Color3.fromRGB(0, 170, 255), Color3.fromRGB(255, 0, 255)
+local cS, cM, cG, cW = Color3.fromRGB(0,255,0), Color3.fromRGB(255,0,0), Color3.fromRGB(0,170,255), Color3.fromRGB(255,0,255)
 local abs, floor, huge, sqrt, max, min = math.abs, math.floor, math.huge, math.sqrt, math.max, math.min
 local tsort, tinsert, tremove = table.sort, table.insert, table.remove
 local function cluster(vals, d) 
