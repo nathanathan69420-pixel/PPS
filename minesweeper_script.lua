@@ -32,6 +32,7 @@ end
 local function clearB()
     if not state.cells.grid then return end
     for x = 0, (state.grid.w or 0) - 1 do local col = state.cells.grid[x] if col then for z = 0, (state.grid.h or 0) - 1 do local c = col[z] if c then if c.borders then for _, b in pairs(c.borders) do b:Destroy() end c.borders = nil end c.isHighlightedMine, c.isHighlightedSafe, c.isHighlightedGuess, c.isWrongFlag = false, false, false, false end end end end
+    state.cells.toFlag, state.cells.toClear, state.lastF, state.lastS = {}, {}, {}, {}
 end
 local function rebuildG(folder)
     clearB() state.cells.grid, state.grid.w, state.grid.h = {}, 0, 0
@@ -72,9 +73,8 @@ local function getC(num, fS, sS)
         for k = 1, #n do local t = n[k] if not fS[t] and t.state ~= "number" and t.covered ~= false and not sS[t] then tinsert(ns, t) if not map[t] then map[t] = true tinsert(bds, t) end end end
         nc._cn = ns
     end
-    local adj = {} for j = 1, #bds do adj[bds[j]] = {} end
+    local adj, vis, comps = {}, {}, {} for j = 1, #bds do adj[bds[j]] = {} end
     for j = 1, #num do local ns = num[j]._cn for i = 1, #ns do for k = i+1, #ns do local u, v = ns[i], ns[k] adj[u][v], adj[v][u] = true, true end end end
-    local vis, comps = {}, {}
     for j = 1, #bds do
         local u = bds[j] if not vis[u] then
             local comp, q = {}, {u} vis[u] = true
@@ -88,9 +88,9 @@ local function solveCSP(fS, sS)
     local num, tS = state.cells.numbered, clock()
     for j = 1, #num do local nc = num[j] local r, n = nc.number or 0, nc.neigh for k = 1, #n do if fS[n[k]] then r = r - 1 end end nc._cr = r end
     local comps = getC(num, fS, sS) if #comps == 0 then return end
-    local budget = 0.05
+    local bgt = 0.04
     for i = 1, #comps do
-        if clock() - tS > budget then break end
+        if clock() - tS > bgt then break end
         local v = comps[i] local nV = #v if nV == 0 then continue end
         local deg = {} for j = 1, nV do deg[v[j]] = 0 end
         for j = 1, #num do local n = num[j]._cn for k = 1, #n do if deg[n[k]] then deg[n[k]] = deg[n[k]] + 1 end end end
@@ -103,7 +103,7 @@ local function solveCSP(fS, sS)
         local cur, solC, abrt = {}, 0, false
         local function bt(idx)
             if solC >= 50000 or abrt then return end
-            if (solC % 512 == 0) and (clock() - tS > budget) then abrt = true return end
+            if (solC % 512 == 0) and (clock() - tS > bgt) then abrt = true return end
             if idx > nV then solC = solC + 1 for j = 1, nV do if cur[j] == 1 then cCts[j][1] = (cCts[j][1] or 0) + 1 end end return end
             local t = vT[idx]
             for val = 0, 1 do
@@ -112,15 +112,13 @@ local function solveCSP(fS, sS)
                 if ok then cur[idx] = val for j = 1, #t do local c = t[j] c.cur, c.un = c.cur + val, c.un - 1 end bt(idx + 1) if abrt then return end for j = 1, #t do local c = t[j] c.cur, c.un = c.cur - val, c.un + 1 end end
             end
         end
-        if nV <= 16 then
+        if nV <= 14 then
             for m = 0, 2^nV - 1 do
                 local ok = true for j = 1, #cons do local s = 0 local cV = cons[j].v for k = 1, #cV do if bit_extract(m, cV[k]-1) == 1 then s = s + 1 end end if s ~= cons[j].r then ok = false break end end
                 if ok then solC = solC + 1 for j = 1, nV do if bit_extract(m, j-1) == 1 then cCts[j][1] = (cCts[j][1] or 0) + 1 end end end
             end
         else bt(1) end
-        if solC > 0 then
-            for vi = 1, #v do local mC = cCts[vi][1] or 0 if mC == solC then fS[v[vi]] = true elseif mC == 0 then sS[v[vi]] = true end v[vi]._prob = mC / solC end
-        end
+        if solC > 0 then for vi = 1, #v do local mC = cCts[vi][1] or 0 if mC == solC then fS[v[vi]] = true elseif mC == 0 then sS[v[vi]] = true end v[vi]._prob = mC / solC end end
     end
 end
 local function applyS(cA, cB, uA, uB, fS, sS)
@@ -132,14 +130,15 @@ local function applyS(cA, cB, uA, uB, fS, sS)
     if minI == maxI then
         if rA - minI == 0 then for _, u in ipairs(oA) do sS[u] = true end elseif rA - minI == #oA then for _, u in ipairs(oA) do fS[u] = true end end
         if rB - minI == 0 then for _, u in ipairs(oB) do sS[u] = true end elseif rB - minI == #oB then for _, u in ipairs(oB) do fS[u] = true end end
-    end
+        return true
+    end return false
 end
 local function updateL()
     if state.grid.w == 0 then state.cells.toFlag, state.cells.toClear = {}, {} return end
     local num = state.cells.numbered if #num == 0 then return end
     local fS, sS, ch, it, tS = {}, {}, true, 0, clock()
     for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do local c=col[z] if c then c._prob=nil end end end end
-    while ch and it < 32 and (clock() - tS < Budget or 0.08) do
+    while ch and it < 32 and (clock() - tS < 0.05) do
         ch, it = false, it + 1
         for j = 1, #num do
             local c = num[j] local unk, flg, n = {}, 0, c.neigh
@@ -148,12 +147,16 @@ local function updateL()
             if r > 0 and r == #unk then for k = 1, #unk do local u = unk[k] if not fS[u] then fS[u], ch = true, true end end
             elseif r == 0 and #unk > 0 then for k = 1, #unk do local u = unk[k] if not sS[u] then sS[u], ch = true, true end end end
         end
-        for i = 1, #num do for j = i + 1, #num do
-            local a, b = num[i], num[j] local n1, n2, uA, uB = a.neigh, b.neigh, {}, {}
-            for k = 1, #n1 do local t = n1[k] if not fS[t] and not sS[t] and t.state ~= "number" and t.covered ~= false then uA[#uA+1] = t end end
-            for k = 1, #n2 do local t = n2[k] if not fS[t] and not sS[t] and t.state ~= "number" and t.covered ~= false then uB[#uB+1] = t end end
-            if #uA > 0 and #uB > 0 then applyS(a, b, uA, uB, fS, sS) end
-        end end
+        if it % 2 == 0 then
+            for i = 1, #num do local a = num[i] local uA, n1 = {}, a.neigh for k = 1, #n1 do local t = n1[k] if not fS[t] and not sS[t] and t.state ~= "number" and t.covered ~= false then uA[#uA+1] = t end end
+                if #uA > 0 then
+                    local checked = {} for k = 1, #n1 do local n = n1[k] if n.state == "number" and n ~= a and not checked[n] then
+                        checked[n] = true local uB, n2 = {}, n.neigh for m = 1, #n2 do local t = n2[m] if not fS[t] and not sS[t] and t.state ~= "number" and t.covered ~= false then uB[#uB+1] = t end end
+                        if #uB > 0 and applyS(a, n, uA, uB, fS, sS) then ch = true end
+                    end end
+                end
+            end
+        end
         if not ch then local oldF, oldS = 0, 0 for _ in pairs(fS) do oldF = oldF + 1 end for _ in pairs(sS) do oldS = oldS + 1 end solveCSP(fS, sS) local newF, newS = 0, 0 for _ in pairs(fS) do newF = newF + 1 end for _ in pairs(sS) do newS = newS + 1 end if newF ~= oldF or newS ~= oldS then ch = true end end
     end
     local changed = false
@@ -229,7 +232,7 @@ local function updateH()
     end end end
 end
 theme.BuiltInThemes["Default"][2] = { BackgroundColor = "16293a", MainColor = "26445f", AccentColor = "5983a0", OutlineColor = "325573", FontColor = "d2dae1" }
-local win = lib:CreateWindow({ Title = "Axis Hub -\nMinesweeper.lua", Footer = "by RwalDev & Plow | 1.9.6", NotifySide = "Right", ShowCustomCursor = true })
+local win = lib:CreateWindow({ Title = "Axis Hub -\nMinesweeper.lua", Footer = "by RwalDev & Plow | 1.9.7", NotifySide = "Right", ShowCustomCursor = true })
 local h, m, s = win:AddTab("Home", "house"), win:AddTab("Main", "target"), win:AddTab("Settings", "settings")
 local status = h:AddLeftGroupbox("Status") status:AddLabel(string.format("Welcome, %s\nGame: Minesweeper", lp.DisplayName), true) status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 local perf = h:AddRightGroupbox("Performance") local fpsL, pingL = perf:AddLabel("FPS: ...", true), perf:AddLabel("Ping: ...", true)
