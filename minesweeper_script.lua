@@ -148,28 +148,31 @@ local function solveCSP(fS, sS)
             end
             local totW = 0 for _, w in pairs(fW) do totW = totW + w end
             if totW > 0 then
+                local pre, suf = { [0] = { [0] = 1 } }, { [#cD + 1] = { [0] = 1 } }
+                for i = 1, #cD do
+                    local nD, d = {}, cD[i]
+                    for s, w in pairs(pre[i-1]) do for k, c in pairs(d.cts) do local ns = s + k if ns <= tM then nD[ns] = (nD[ns] or 0) + w * c end end end
+                    pre[i] = nD
+                end
+                for i = #cD, 1, -1 do
+                    local nD, d = {}, cD[i]
+                    for s, w in pairs(suf[i+1]) do for k, c in pairs(d.cts) do local ns = s + k if ns <= tM then nD[ns] = (nD[ns] or 0) + w * c end end end
+                    suf[i] = nD
+                end
                 for i = 1, #cD do
                     local d = cD[i]
+                    local p1, s1 = pre[i-1], suf[i+1]
+                    local comb = {}
+                    for s, w in pairs(p1) do for ks, kw in pairs(s1) do local ns = s + ks if ns <= tM then comb[ns] = (comb[ns] or 0) + w * kw end end end
                     for vi = 1, #d.v do
                         local v, mP = d.v[vi], 0
-                        for k, lWays in pairs(d.cts) do
-                            local sSum = 0
-                            for fs, fWays in pairs(fW) do
-                                local nDP = { [0] = 1 }
-                                for j = 1, #cD do
-                                    if i ~= j then
-                                        local tD, nD2 = cD[j], {}
-                                        for ts, tw in pairs(nDP) do for tk, tc in pairs(tD.cts) do local ns = ts + tk if ns <= tM then nD2[ns] = (nD2[ns] or 0) + tw * tc end end end
-                                        nDP = nD2
-                                    end
-                                end
-                                local rem = tM - k
-                                local oW = nDP[fs - k] or 0
-                                if oW > 0 then
-                                    local gW = oW * nCr(sl, tM - fs)
-                                    if gW > 0 then mP = mP + (d.ccts[vi][k] or 0) * gW end
-                                end
+                        for k, c in pairs(d.ccts[vi]) do
+                            local sK = 0
+                            for cs, cw in pairs(comb) do
+                                local rem = tM - (cs + k)
+                                if rem >= 0 and rem <= sl then sK = sK + cw * nCr(sl, rem) end
                             end
+                            mP = mP + c * sK
                         end
                         v._prob = mP / totW
                         if v._prob > 0.9999 then fS[v] = true elseif v._prob < 0.0001 then sS[v] = true if v.state == "flagged" then v.isWrongFlag = true end end
@@ -244,12 +247,13 @@ local function updateG()
                     for _, n in ipairs(c.neigh) do if n.state == "number" and n.number and n.number > 0 then hasN = true local fs, lu = 0, 0 for _, nn in ipairs(n.neigh) do if (nn.part and hasF(nn.part)) or state.cells.toFlag[nn] then fs = fs + 1 elseif isE(nn) and not state.cells.toFlag[nn] and not state.cells.toClear[nn] then lu = lu + 1 end end local r = n.number - fs if r <= 0 then vC = vC + 1 elseif lu > 0 then pS = pS + (r/lu) vC = vC + 1 end end end
                     pb = (hasN and vC > 0) and (pS / vC) or gD
                 end
-            local s = pb + ((x == 0 or x == state.grid.w-1 or z == 0 or z == state.grid.h-1) and config.EdgePenalty or 0)
-            local uN = 0 for _, n in ipairs(c.neigh) do if isE(n) and not state.cells.toFlag[n] and not state.cells.toClear[n] then uN = uN + 1 end end
-            s = s - (uN * 0.005) - ( (function() local cN=0 for _,n in ipairs(c.neigh) do if n.state=="number" then cN=cN+1 end end return cN end)() * 0.02 )
-            local dx, dz = x - state.grid.w/2, z - state.grid.h/2 s = s + (sqrt(dx*dx + dz*dz) / (state.grid.w + state.grid.h)) * 0.02
-            if pP then s = s + ((c.pos - pP).Magnitude / maxD) * config.DistanceWeight end
-            if not bestS or s < bestS then bestS, bestC = s, c end
+                local s = pb + ((x == 0 or x == state.grid.w-1 or z == 0 or z == state.grid.h-1) and config.EdgePenalty or 0)
+                local uN = 0 for _, n in ipairs(c.neigh) do if isE(n) and not state.cells.toFlag[n] and not state.cells.toClear[n] then uN = uN + 1 end end
+                local nC = 0 for _, n in ipairs(c.neigh) do if n.state == "number" then nC = nC + 1 end end
+                s = s - (uN * 0.01) - (nC * 0.05)
+                local dx, dz = x - state.grid.w/2, z - state.grid.h/2 s = s + (sqrt(dx*dx + dz*dz) / (state.grid.w + state.grid.h)) * 0.02
+                if pP then s = s + ((c.pos - pP).Magnitude / maxD) * config.DistanceWeight end
+                if not bestS or s < bestS then bestS, bestC = s, c end
         end
     end end end
     state.bestGuessCell = bestC
