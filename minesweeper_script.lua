@@ -38,6 +38,7 @@ local function clearB()
 end
 local function rebuildG(folder)
     clearB() state.cells.grid, state.grid.w, state.grid.h = {}, 0, 0
+    state.clicked = {}
     local pts = folder:GetChildren() if #pts == 0 then return end
     local pD, sY = {}, 0
     for _, p in ipairs(pts) do if p:IsA("BasePart") then tinsert(pD, {p = p, pos = p.Position}) sY = sY + p.Position.Y end end
@@ -248,7 +249,8 @@ local function updateL()
     local ch, it, tO = true, 0, os.clock()
     for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do local c=col[z] if c then 
         c._prob = nil 
-        if not c.covered or c.state == "number" then fS[c], sS[c] = nil, nil end
+        if c.state == "flagged" then fS[c] = true end
+        if not c.covered or c.state == "number" or c.state == "empty" then fS[c], sS[c] = nil, nil end
     end end end end
     while ch and it < 64 do
         ch, it = false, it + 1
@@ -298,13 +300,13 @@ end
 local lastF = 0
 local function autoFlag()
     if not (Toggles.AutoFlag and Toggles.AutoFlag.Value) then return end
-    local r, d = Options.FlagRange.Value, Options.FlagDelay.Value
-    if tick() - lastF < d then return end
+    local r, d, now = Options.FlagRange.Value, Options.FlagDelay.Value, tick()
+    if now - lastF < d then return end
     local h = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
     if not h then return end
     for c, _ in pairs(state.cells.toFlag) do
         local p = c.part
-        if p and c.state ~= "flagged" and not (state.clicked[p] and (now - state.clicked[p]) < 3) and not hasF(p) and (c.pos - h.Position).Magnitude <= r then
+        if p and not hasF(p) and not (state.clicked[p] and (now - state.clicked[p]) < 3) and (c.pos - h.Position).Magnitude <= r then
             local sp, on = workspace.CurrentCamera:WorldToViewportPoint(c.pos)
             if on then
                 local vim = game:GetService("VirtualInputManager")
