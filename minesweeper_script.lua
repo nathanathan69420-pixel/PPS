@@ -23,7 +23,7 @@ end
 local function median(vals) if #vals == 0 then return nil end tsort(vals) return vals[floor((#vals + 1) / 2)] end
 local function estS(coords) if #coords < 3 then return 4 end local d = {} for i = 2, #coords do d[#d+1] = abs(coords[i] - coords[i-1]) end return median(d) or 4 end
 local function findI(t, s) local bI, bD = 1, huge for i = 1, #s do local d = abs(t - s[i]) if d < bD then bD, bI = d, i end end return bI - 1 end
-local function hasF(p) for _,v in ipairs(p:GetChildren()) do local n = v.Name:lower() if n:find("flag") or n:find("mark") or v:IsA("Texture") or v:IsA("Decal") or (v:IsA("Model") and #v:GetChildren()>0) then return true end end return false end
+local function hasF(p) return p:FindFirstChild("Flag", true) or p:FindFirstChild("Model", true) or p:FindFirstChildWhichIsA("BasePart", true) ~= p end
 local function isE(c) return c.state ~= "number" and c.covered ~= false end
 local cachedB = nil
 local function scanB()
@@ -102,7 +102,7 @@ local function solveCSP(fS, sS)
         local deg = {} for j = 1, nV do deg[v[j]] = 0 end tCV = tCV + nV
         for j = 1, #num do local nc = num[j] for k = 1, #nc._cn do local n = nc._cn[k] if deg[n] then deg[n] = deg[n] + 1 end end end
         tsort(v, function(a, b) return deg[a] > deg[b] end)
-        if os.clock() - tS > 0.1 then break end
+        if os.clock() - tS > 0.5 then break end
         local map, cts, cCts = {}, {}, {} for j = 1, nV do map[v[j]], cCts[j] = j, {} end
         local cons = {}
         for j = 1, #num do
@@ -114,7 +114,7 @@ local function solveCSP(fS, sS)
         local cur, solC, abrt = {}, 0, false
         local function bt(idx)
             if solC >= 1000000 or abrt then return end
-            if (solC % 512 == 0) and (os.clock() - tS > 0.1) then abrt = true return end
+            if (solC % 512 == 0) and (os.clock() - tS > 0.5) then abrt = true return end
             if idx > nV then
                 solC = solC + 1 local ms = 0 for j = 1, nV do ms = ms + cur[j] end
                 cts[ms] = (cts[ms] or 0) + 1
@@ -137,11 +137,11 @@ local function solveCSP(fS, sS)
                 end
             end
         end
-        if nV <= 24 then
+        if nV <= 20 then
             for m = 0, 2^nV - 1 do
                 local ok = true for j = 1, #cons do local s = 0 for _, vi in ipairs(cons[j].v) do if bit32.extract(m, vi-1) == 1 then s = s + 1 end end if s ~= cons[j].r then ok = false break end end
                 if ok then solC = solC + 1 local ms = 0 for j = 1, nV do if bit32.extract(m, j-1) == 1 then ms = ms + 1 cCts[j][ms] = (cCts[j][ms] or 0) + 1 end end cts[ms] = (cts[ms] or 0) + 1 end
-                if solC >= 1000000 then break end
+                if solC >= 1000000 or os.clock() - tS > 0.5 then break end
             end
         else bt(1) end
         if not abrt and solC > 0 then tinsert(cD, {v = v, cts = cts, ccts = cCts, total = solC}) end
@@ -312,19 +312,23 @@ local function autoFlag()
             if count >= 3 then break end
         end
     end
-    for i = 1, count do
-        local c = targets[i] local p = c.part
-        local sp, on = workspace.CurrentCamera:WorldToViewportPoint(c.pos)
-        if on then
-            local vim = game:GetService("VirtualInputManager")
-            state.clicked[p] = now
-            vim:SendMouseMoveEvent(sp.X, sp.Y, game)
-            vim:SendMouseButtonEvent(sp.X, sp.Y, 0, true, game, 0)
-            task.wait(0.04)
-            vim:SendMouseButtonEvent(sp.X, sp.Y, 0, false, game, 0)
-        end
+    if count > 0 then
+        lastF = now
+        task.spawn(function()
+            for i = 1, count do
+                local c = targets[i] local p = c.part
+                local sp, on = workspace.CurrentCamera:WorldToViewportPoint(c.pos)
+                if on then
+                    local vim = game:GetService("VirtualInputManager")
+                    state.clicked[p] = tick()
+                    vim:SendMouseMoveEvent(sp.X, sp.Y, game)
+                    vim:SendMouseButtonEvent(sp.X, sp.Y, 0, true, game, 0)
+                    task.wait(0.04)
+                    vim:SendMouseButtonEvent(sp.X, sp.Y, 0, false, game, 0)
+                end
+            end
+        end)
     end
-    if count > 0 then lastF = now end
 end
 local function applyH(c, col)
     if not c.borders then
@@ -373,13 +377,20 @@ local function bypass()
     local r = game:GetService("ReplicatedStorage"):FindFirstChild("Patukka")
     if r then local old old = hookmetamethod(game, "__namecall", function(self, ...) local m = getnamecallmethod() if self == r and (m == "InvokeServer" or m == "FireServer") then if Toggles.BypassAnticheat and Toggles.BypassAnticheat.Value then return nil end end return old(self, ...) end) end
 end
-local lastS, solveInt = 0, 0.1
+local lastS, solveInt, lastUnc = 0, 0.1, 0
 rs.Heartbeat:Connect(function()
     config.Enabled = Toggles.HighlightMines and Toggles.HighlightMines.Value
     if not config.Enabled then clearB() state.cells.toFlag, state.cells.toClear, state.lastPartCount = {}, {}, -1 return end
     local f = scanB() if not f then return end
-    local pc, now = #f:GetChildren(), tick()
-    local neb = pc ~= state.lastPartCount if neb then clearB() state.lastPartCount = pc rebuildG(f) end
+    local pL, now = f:GetChildren(), tick()
+    local pc = #pL
+    local neb = pc ~= state.lastPartCount
+    if not neb then
+        local curUnc = 0 for i=1,pc do if not pL[i]:FindFirstChildWhichIsA("SurfaceGui") and not pL[i]:FindFirstChildWhichIsA("BillboardGui") then curUnc = curUnc + 1 end end
+        if curUnc < lastUnc then neb = true end
+        lastUnc = curUnc
+    end
+    if neb then clearB() state.lastPartCount = pc rebuildG(f) end
     if state.grid.w == 0 then return end
     if neb or (now - lastS) >= solveInt then 
         lastS = now 
