@@ -24,7 +24,7 @@ end
 local function median(vals) if #vals == 0 then return nil end tsort(vals) return vals[floor((#vals + 1) / 2)] end
 local function estS(coords) if #coords < 3 then return 4 end local d = {} for i = 2, #coords do d[#d+1] = abs(coords[i] - coords[i-1]) end return median(d) or 4 end
 local function findI(t, s) local bI, bD = 1, huge for i = 1, #s do local d = abs(t - s[i]) if d < bD then bD, bI = d, i end end return bI - 1 end
-local function hasF(p) return p:FindFirstChild("Flag", true) or p:FindFirstChild("Mark", true) or p:FindFirstChild("Model", true) or p:FindFirstChildWhichIsA("Texture", true) or p:FindFirstChildWhichIsA("Decal", true) end
+local function hasF(p) for _,v in ipairs(p:GetChildren()) do local n = v.Name:lower() if n:find("flag") or n:find("mark") or (v:IsA("Model") and v.Name ~= "Part") then return true end end return false end
 local function isE(c) return c.state ~= "number" and c.covered ~= false end
 local cachedB = nil
 local function scanB()
@@ -385,7 +385,7 @@ rs.Heartbeat:Connect(function()
     local f = scanB() if not f then return end
     local pL, now = f:GetChildren(), tick()
     local pc = #pL
-    local neb = (f ~= lastFld) or (pc > state.lastPartCount + 5)
+    local neb = (f ~= lastFld) or (pc > state.lastPartCount + 10)
     if neb then 
         clearB() 
         state.lastPartCount = pc 
