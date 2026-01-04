@@ -59,6 +59,7 @@ local function updateS(folder)
             if ng then c._ng = ng local lbl = c._tl or ng:FindFirstChild("TextLabel") if lbl then c._tl = lbl local t = lbl.Text if t ~= "" then local n = tonumber(t) if n then c.number, c.covered, c.state = n, false, "number" tinsert(state.cells.numbered, c) end end end end
             if c.covered then local cl = p.Color local r, g, b = cl.R*255, cl.G*255, cl.B*255 if r >= 170 and g >= 170 and b >= 170 and abs(r-g) <= 60 and abs(g-b) <= 60 and abs(r-b) <= 60 then c.covered = false end end
             if c.covered and hasF(p) then c.state = "flagged" end
+            c.isWrongFlag = false
         end
     end end end
 end
@@ -231,6 +232,7 @@ local function updateL()
         if not ch then solveCSP(fS, sS) local nF, nC = 0, 0 for _ in pairs(fS) do nF = nF + 1 end for _ in pairs(sS) do nC = nC + 1 end if nF ~= postF or nC ~= postC then ch = true end end
     end
     state.cells.toFlag, state.cells.toClear = fS, sS
+    for c in pairs(sS) do if c.state == "flagged" then c.isWrongFlag = true end end
 end
 local function updateG()
     state.bestGuessCell = nil if not config.GuessHelper or state.grid.w == 0 then return end
