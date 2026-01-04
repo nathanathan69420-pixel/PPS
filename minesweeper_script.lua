@@ -23,7 +23,7 @@ end
 local function median(vals) if #vals == 0 then return nil end tsort(vals) return vals[floor((#vals + 1) / 2)] end
 local function estS(coords) if #coords < 3 then return 4 end local d = {} for i = 2, #coords do d[#d+1] = abs(coords[i] - coords[i-1]) end return median(d) or 4 end
 local function findI(t, s) local bI, bD = 1, huge for i = 1, #s do local d = abs(t - s[i]) if d < bD then bD, bI = d, i end end return bI - 1 end
-local function hasF(p) for _, v in ipairs(p:GetChildren()) do if v.Name:lower():find("flag") or (v:IsA("Model") and #v:GetChildren() > 0) then return true end end return false end
+local function hasF(p) for _,v in ipairs(p:GetChildren()) do local n = v.Name:lower() if n:find("flag") or n:find("mark") or v:IsA("Texture") or v:IsA("Decal") or (v:IsA("Model") and #v:GetChildren()>0) then return true end end return false end
 local function isE(c) return c.state ~= "number" and c.covered ~= false end
 local cachedB = nil
 local function scanB()
@@ -135,7 +135,7 @@ local function solveCSP(fS, sS)
                 end
             end
         end
-        if nV <= 22 then
+        if nV <= 24 then
             for m = 0, 2^nV - 1 do
                 local ok = true for j = 1, #cons do local s = 0 for _, vi in ipairs(cons[j].v) do if bit32.extract(m, vi-1) == 1 then s = s + 1 end end if s ~= cons[j].r then ok = false break end end
                 if ok then solC = solC + 1 local ms = 0 for j = 1, nV do if bit32.extract(m, j-1) == 1 then ms = ms + 1 cCts[j][ms] = (cCts[j][ms] or 0) + 1 end end cts[ms] = (cts[ms] or 0) + 1 end
@@ -252,7 +252,7 @@ local function updateL()
     end end end end
     while ch and it < 64 do
         ch, it = false, it + 1
-        if os.clock() - tO > 0.1 then break end
+        if os.clock() - tO > 0.5 then break end
         for _, c in ipairs(num) do
             local unk, flg = {}, 0 for _, n in ipairs(c.neigh) do if fS[n] then flg = flg + 1 elseif not sS[n] and isE(n) then tinsert(unk, n) end end
             local r = (c.number or 0) - flg
@@ -304,14 +304,14 @@ local function autoFlag()
     if not h then return end
     for c, _ in pairs(state.cells.toFlag) do
         local p = c.part
-        if p and c.state ~= "flagged" and not (state.clicked[p] and (now - state.clicked[p]) < 2) and not hasF(p) and (c.pos - h.Position).Magnitude <= r then
+        if p and c.state ~= "flagged" and not (state.clicked[p] and (now - state.clicked[p]) < 3) and not hasF(p) and (c.pos - h.Position).Magnitude <= r then
             local sp, on = workspace.CurrentCamera:WorldToViewportPoint(c.pos)
             if on then
                 local vim = game:GetService("VirtualInputManager")
                 state.clicked[p] = now
                 vim:SendMouseMoveEvent(sp.X, sp.Y, game)
                 vim:SendMouseButtonEvent(sp.X, sp.Y, 0, true, game, 0)
-                task.wait()
+                task.wait(0.05)
                 vim:SendMouseButtonEvent(sp.X, sp.Y, 0, false, game, 0)
                 lastF = now
                 break
