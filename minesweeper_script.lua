@@ -12,7 +12,7 @@ local state = { cells = { grid = {}, numbered = {}, toFlag = {}, toClear = {} },
 local COLOR_SAFE, COLOR_MINE, COLOR_GUESS, COLOR_WRONG = Color3.fromRGB(0, 255, 0), Color3.fromRGB(255, 0, 0), Color3.fromRGB(0, 170, 255), Color3.fromRGB(255, 0, 255)
 
 local abs, floor, huge = math.abs, math.floor, math.huge
-local tinsert = table.insert
+local tinsert, tremove, tsort = table.insert, table.remove, table.sort
 
 local cachedB = nil
 
@@ -157,21 +157,6 @@ local function updateS()
                 local c = col[z]
                 local p = c.part
                 if p then
-                    local ng = c._ng or p:FindFirstChild("NumberGui")
-                    if ng then
-                        c._ng = ng
-                        local lbl = c._tl or ng:FindFirstChild("TextLabel")
-                        if lbl then
-                            c._tl = lbl
-                            local t = lbl.Text
-                            if t ~= "" then
-                                local n = tonumber(t)
-                                if n then 
-                                    c.number, c.covered, c.state = n, false, "number"
-                                end
-                            end
-                        end
-                    end
                     if c.covered then
                         local cl = p.Color
                         local r, g, b = math.floor(cl.R*255), math.floor(cl.G*255), math.floor(cl.B*255)
@@ -179,7 +164,26 @@ local function updateS()
                             c.covered = false
                         end
                     end
-                    if c.covered and hasF(p) then c.state = "flagged" elseif not c.covered and not c.number then c.state = "empty" end
+                    if c.covered then
+                        c.state = hasF(p) and "flagged" or "unknown"
+                    else
+                        local ng = c._ng or p:FindFirstChild("NumberGui")
+                        if ng then
+                            c._ng = ng
+                            local lbl = c._tl or ng:FindFirstChild("TextLabel")
+                            if lbl then
+                                c._tl = lbl
+                                local t = lbl.Text
+                                if t ~= "" then
+                                    local n = tonumber(t)
+                                    if n then 
+                                        c.number, c.state = n, "number"
+                                    end
+                                end
+                            end
+                        end
+                        if not c.number then c.state = "empty" end
+                    end
                     if c.state == "number" then tinsert(state.cells.numbered, c) end
                 end
             end
@@ -328,14 +332,15 @@ local function updateL()
     for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do local c=col[z] if c then c._prob = nil c.isWrongFlag = false end end end end
     while changed and it < 64 do
         changed, it = false, it + 1
-        for _, c in num do
-            local unk, flg = {}, 0 for _, n in c.neigh do if fS[n] or hasF(n.part) then flg += 1 elseif not sS[n] and isE(n) then tinsert(unk, n) end end
+        for i=1,#num do
+            local c = num[i]
+            local unk, flg = {}, 0 for _, n in ipairs(c.neigh) do if fS[n] or hasF(n.part) then flg += 1 elseif not sS[n] and isE(n) then tinsert(unk, n) end end
             local r = (c.number or 0) - flg
-            if r == #unk and #unk > 0 then for _, u in unk do if not fS[u] then fS[u] = true changed = true end end
-            elseif r == 0 and #unk > 0 then for _, u in unk do if not sS[u] then sS[u] = true changed = true end end end
+            if r == #unk and #unk > 0 then for j=1,#unk do local u = unk[j] if not fS[u] then fS[u] = true changed = true end end
+            elseif r == 0 and #unk > 0 then for j=1,#unk do local u = unk[j] if not sS[u] then sS[u] = true changed = true end end end
         end
         local pF, pC = 0, 0 for _ in pairs(fS) do pF += 1 end for _ in pairs(sS) do pC += 1 end
-        for _, c in ipairs(num) do for _, n in ipairs(c.neigh) do if n.state == "number" then local uT, uA = {}, {} for _, nn in ipairs(c.neigh) do if not fS[nn] and not sS[nn] and isE(nn) then tinsert(uT, nn) end end for _, nn in ipairs(n.neigh) do if not fS[nn] and not sS[nn] and isE(nn) then tinsert(uA, nn) end end if #uT > 0 and #uA > 0 then applyOverlap(c, n, uT, uA, fS, sS) end end end end
+        for i=1,#num do local c = num[i] for _, n in ipairs(c.neigh) do if n.state == "number" then local uT, uA = {}, {} for _, nn in ipairs(c.neigh) do if not fS[nn] and not sS[nn] and isE(nn) then tinsert(uT, nn) end end for _, nn in ipairs(n.neigh) do if not fS[nn] and not sS[nn] and isE(nn) then tinsert(uA, nn) end end if #uT > 0 and #uA > 0 then applyOverlap(c, n, uT, uA, fS, sS) end end end end
         local postF, postC = 0, 0 for _ in pairs(fS) do postF += 1 end for _ in pairs(sS) do postC += 1 end
         if postF ~= pF or postC ~= pC then changed = true end
         if not changed then solveCSP(fS, sS) local nF, nC = 0, 0 for _ in pairs(fS) do nF += 1 end for _ in pairs(sS) do nC += 1 end if nF ~= postF or nC ~= postC then changed = true end end
@@ -457,22 +462,14 @@ local function updateH()
                 local c = col[z]
                 if c and c.part then
                     local covered = c.covered and c.state ~= "number"
-                    if not covered then
-                        if c.borders then
-                            for _, b in c.borders do b.Transparency = 1 end
-                        end
+                    if not covered then if c.borders then for _, b in pairs(c.borders) do b.Transparency = 1 end end
                     else
                         local iM = state.cells.toFlag[c] ~= nil
                         local iS = state.cells.toClear[c] ~= nil
                         local iW = c.isWrongFlag
                         local iG = config.GuessHelper and c == bG
-                        if iM or iS or iG or iW then
-                            if en then
-                                applyH(c, iW and COLOR_WRONG or iM and COLOR_MINE or iS and COLOR_SAFE or COLOR_GUESS)
-                            end
-                        elseif c.borders then
-                            for _, b in c.borders do b.Transparency = 1 end
-                        end
+                        if en and (iM or iS or iG or iW) then applyH(c, iW and COLOR_WRONG or iM and COLOR_MINE or iS and COLOR_SAFE or COLOR_GUESS)
+                        elseif c.borders then for _, b in pairs(c.borders) do b.Transparency = 1 end end
                     end
                 end
             end
