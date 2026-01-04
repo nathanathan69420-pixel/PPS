@@ -31,7 +31,7 @@ local function scanB()
 end
 local function clearB()
     if not state.cells.grid then return end
-    for x = 0, state.grid.w - 1 do local col = state.cells.grid[x] if col then for z = 0, state.grid.h - 1 do local c = col[z] if c then if c.borders then for _, b in pairs(c.borders) do b:Destroy() end c.borders = nil end c.isHighlightedMine, c.isHighlightedSafe, c.isHighlightedGuess, c.isWrongFlag = false, false, false, false end end end end
+    for x = 0, (state.grid.w or 0) - 1 do local col = state.cells.grid[x] if col then for z = 0, (state.grid.h or 0) - 1 do local c = col[z] if c then if c.borders then for _, b in pairs(c.borders) do b:Destroy() end c.borders = nil end c.isHighlightedMine, c.isHighlightedSafe, c.isHighlightedGuess, c.isWrongFlag = false, false, false, false end end end end
 end
 local function rebuildG(folder)
     clearB() state.cells.grid, state.grid.w, state.grid.h = {}, 0, 0
@@ -50,13 +50,17 @@ end
 local function updateS(folder)
     state.cells.numbered = {} local grid = state.cells.grid if state.grid.w == 0 or not grid then return end
     for x = 0, state.grid.w - 1 do local col = grid[x] if col then for z = 0, state.grid.h - 1 do
-        local c = col[z] local p = c and c.part
-        if p then
-            c.state, c.number, c.covered = "unknown", nil, true
-            local ng = c._ng or p:FindFirstChild("NumberGui")
-            if ng then c._ng = ng local lbl = c._tl or ng:FindFirstChild("TextLabel") if lbl then c._tl = lbl local t = lbl.Text if t ~= "" then local n = tonumber(t) if n then c.number, c.covered, c.state = n, false, "number" tinsert(state.cells.numbered, c) end end end end
-            if c.covered then local cl = p.Color local r, g, b = cl.R*255, cl.G*255, cl.B*255 if r >= 170 and g >= 170 and b >= 170 and abs(r-g) <= 60 and abs(g-b) <= 60 and abs(r-b) <= 60 then c.covered = false end end
-            if c.covered and hasF(p) then c.state = "flagged" end
+        local c = col[z] if c.part then
+            if c.state == "number" then tinsert(state.cells.numbered, c)
+            else
+                c.state, c.number, c.covered = "unknown", nil, true
+                local ng = c._ng or c.part:FindFirstChild("NumberGui")
+                if ng then c._ng = ng local lbl = c._tl or ng:FindFirstChild("TextLabel") if lbl then c._tl = lbl local t = lbl.Text if t ~= "" then local n = tonumber(t) if n then c.number, c.covered, c.state = n, false, "number" tinsert(state.cells.numbered, c) end end end end
+                if c.state ~= "number" then
+                    if c.covered then local cl = c.part.Color local r, g, b = cl.R*255, cl.G*255, cl.B*255 if r >= 170 and g >= 170 and b >= 170 and abs(r-g) <= 60 and abs(g-b) <= 60 and abs(r-b) <= 60 then c.covered = false end end
+                    if c.covered and hasF(c.part) then c.state = "flagged" end
+                end
+            end
         end
     end end end
 end
@@ -64,9 +68,9 @@ local function countR(c, fS) local r = c.number or 0 local n = c.neigh for j = 1
 local function getC(num, fS, sS)
     local bds, map = {}, {}
     for j = 1, #num do
-        local ncIdx = num[j] local r, ns, n = ncIdx._cr, {}, ncIdx.neigh
+        local nc = num[j] local r, ns, n = nc._cr, {}, nc.neigh
         for k = 1, #n do local t = n[k] if not fS[t] and t.state ~= "number" and t.covered ~= false and not sS[t] then tinsert(ns, t) if not map[t] then map[t] = true tinsert(bds, t) end end end
-        ncIdx._cn = ns
+        nc._cn = ns
     end
     local adj = {} for j = 1, #bds do adj[bds[j]] = {} end
     for j = 1, #num do local ns = num[j]._cn for i = 1, #ns do for k = i+1, #ns do local u, v = ns[i], ns[k] adj[u][v], adj[v][u] = true, true end end end
@@ -74,10 +78,7 @@ local function getC(num, fS, sS)
     for j = 1, #bds do
         local u = bds[j] if not vis[u] then
             local comp, q = {}, {u} vis[u] = true
-            while #q > 0 do
-                local cur = tremove(q) tinsert(comp, cur)
-                for n in pairs(adj[cur] or {}) do if not vis[n] then vis[n] = true tinsert(q, n) end end
-            end
+            while #q > 0 do local cur = tremove(q) tinsert(comp, cur) for n in pairs(adj[cur] or {}) do if not vis[n] then vis[n] = true tinsert(q, n) end end end
             tinsert(comps, comp)
         end
     end
@@ -85,15 +86,15 @@ local function getC(num, fS, sS)
 end
 local function solveCSP(fS, sS)
     local num, tS = state.cells.numbered, clock()
-    for j = 1, #num do local ncIdx = num[j] local r, n = ncIdx.number or 0, ncIdx.neigh for k = 1, #n do if fS[n[k]] then r = r - 1 end end ncIdx._cr = r end
+    for j = 1, #num do local nc = num[j] local r, n = nc.number or 0, nc.neigh for k = 1, #n do if fS[n[k]] then r = r - 1 end end nc._cr = r end
     local comps = getC(num, fS, sS) if #comps == 0 then return end
-    local cData, tCV = {}, 0
+    local cD, tCV, budget = {}, 0, 0.04
     for i = 1, #comps do
+        if clock() - tS > budget then break end
         local v = comps[i] local nV = #v if nV == 0 then continue end
         local deg = {} for j = 1, nV do deg[v[j]] = 0 end tCV = tCV + nV
         for j = 1, #num do local n = num[j]._cn for k = 1, #n do if deg[n[k]] then deg[n[k]] = deg[n[k]] + 1 end end end
         tsort(v, function(a, b) return deg[a] > deg[b] end)
-        if clock() - tS > 0.08 then break end
         local map, cts, cCts = {}, {}, {} for j = 1, nV do map[v[j]], cCts[j] = j, {} end
         local cons = {}
         for j = 1, #num do local nc, cv = num[j], {} for k = 1, #nc._cn do local m = map[nc._cn[k]] if m then cv[#cv+1] = m end end if #cv > 0 then tsort(cv) cons[#cons+1] = {v = cv, r = nc._cr, cur = 0, un = #cv} end end
@@ -102,49 +103,41 @@ local function solveCSP(fS, sS)
         local cur, solC, abrt = {}, 0, false
         local function bt(idx)
             if solC >= 50000 or abrt then return end
-            if (solC % 512 == 0) and (clock() - tS > 0.08) then abrt = true return end
-            if idx > nV then
-                solC = solC + 1 local ms = 0 for j = 1, nV do if cur[j] == 1 then ms = ms + 1 end end
-                cts[ms] = (cts[ms] or 0) + 1
-                for j = 1, nV do if cur[j] == 1 then cCts[j][ms] = (cCts[j][ms] or 0) + 1 end end
-                return
-            end
+            if (solC % 512 == 0) and (clock() - tS > budget) then abrt = true return end
+            if idx > nV then solC = solC + 1 local ms = 0 for j = 1, nV do if cur[j] == 1 then ms = ms + 1 end end cts[ms] = (cts[ms] or 0) + 1 for j = 1, nV do if cur[j] == 1 then cCts[j][ms] = (cCts[j][ms] or 0) + 1 end end return end
             local t = vT[idx]
             for val = 0, 1 do
                 local ok = true
                 for j = 1, #t do local c = t[j] local ns = c.cur + val if ns > c.r or (ns + c.un - 1) < c.r then ok = false break end end
-                if ok then
-                    cur[idx] = val for j = 1, #t do local c = t[j] c.cur, c.un = c.cur + val, c.un - 1 end
-                    bt(idx + 1) if abrt then return end
-                    for j = 1, #t do local c = t[j] c.cur, c.un = c.cur - val, c.un + 1 end
-                end
+                if ok then cur[idx] = val for j = 1, #t do local c = t[j] c.cur, c.un = c.cur + val, c.un - 1 end bt(idx + 1) if abrt then return end for j = 1, #t do local c = t[j] c.cur, c.un = c.cur - val, c.un + 1 end end
             end
         end
-        if nV <= 16 then
+        if nV <= 12 then
             for m = 0, 2^nV - 1 do
                 local ok = true for j = 1, #cons do local s = 0 local cV = cons[j].v for k = 1, #cV do if bit_extract(m, cV[k]-1) == 1 then s = s + 1 end end if s ~= cons[j].r then ok = false break end end
                 if ok then solC = solC + 1 local ms = 0 for j = 1, nV do if bit_extract(m, j-1) == 1 then ms = ms + 1 local mS = cCts[j] mS[ms] = (mS[ms] or 0) + 1 end end cts[ms] = (cts[ms] or 0) + 1 end
             end
         else bt(1) end
-        if not abrt and solC > 0 then tinsert(cData, {v = v, cts = cts, ccts = cCts, total = solC}) end
+        if not abrt and solC > 0 then tinsert(cD, {v = v, cts = cts, ccts = cCts, total = solC}) end
     end
-    if #cData > 0 then
-        local valC = {} for i = 1, #cData do local vc = {} for k in pairs(cData[i].cts) do vc[k] = true end valC[i] = vc end
-        if Options.TotalMines and Options.TotalMines.Value > 0 then
+    if #cD > 0 then
+        local valC = {} for i = 1, #cD do local vc = {} for k in pairs(cD[i].cts) do vc[k] = true end valC[i] = vc end
+        local mng = Options.TotalMines and Options.TotalMines.Value or 25
+        if mng > 0 then
             local kF, tU, grid = 0, 0, state.cells.grid
-            for x = 0, state.grid.w - 1 do if grid[x] then for z = 0, state.grid.h - 1 do local c = grid[x][z] if c then if c.state == "flagged" or fS[c] then kF = kF + 1 elseif c.state ~= "number" and c.covered ~= false and not sS[c] then tU = tU + 1 end end end end end
-            local tM, sl, dp = Options.TotalMines.Value - kF, max(0, tU - tCV), { [0] = true }
-            for i = 1, #cData do local nD, d = {}, cData[i] for s in pairs(dp) do for k in pairs(d.cts) do local ns = s + k if ns <= tM then nD[ns] = true end end end dp = nD end
+            for x = 0, state.grid.w - 1 do local col = grid[x] if col then for z = 0, state.grid.h - 1 do local c = col[z] if c then if c.state == "flagged" or fS[c] then kF = kF + 1 elseif c.state ~= "number" and c.covered ~= false and not sS[c] then tU = tU + 1 end end end end end
+            local tM, sl, dp = mng - kF, max(0, tU - tCV), { [0] = true }
+            for i = 1, #cD do local nD, d = {}, cD[i] for s in pairs(dp) do for k in pairs(d.cts) do local ns = s + k if ns <= tM then nD[ns] = true end end end dp = nD end
             local fVS = {} for s in pairs(dp) do if s + sl >= tM and s <= tM then fVS[s] = true end end
-            local pC = {} for i = 1, #cData do pC[i] = {} end
+            local pC = {} for i = 1, #cD do pC[i] = {} end
             local function pr(idx, s)
-                if idx > #cData then return fVS[s] == true end
-                local d, ok = cData[idx], false for k in pairs(d.cts) do if pr(idx + 1, s + k) then pC[idx][k], ok = true, true end end return ok
+                if idx > #cD then return fVS[s] == true end
+                local d, ok = cD[idx], false for k in pairs(d.cts) do if pr(idx + 1, s + k) then pC[idx][k], ok = true, true end end return ok
             end
             if pr(1, 0) then valC = pC end
         end
-        for i = 1, #cData do
-            local d, tVS, vc = cData[i], 0, valC[i] for k, c in pairs(d.cts) do if vc[k] then tVS = tVS + c end end
+        for i = 1, #cD do
+            local d, tVS, vc = cD[i], 0, valC[i] for k, c in pairs(d.cts) do if vc[k] then tVS = tVS + c end end
             if tVS > 0 then
                 for vi = 1, #d.v do
                     local v, mC = d.v[vi], 0 for k in pairs(vc) do mC = mC + (d.ccts[vi][k] or 0) end
@@ -169,9 +162,9 @@ end
 local function updateL()
     if state.grid.w == 0 then state.cells.toFlag, state.cells.toClear = {}, {} return end
     local num = state.cells.numbered if #num == 0 then return end
-    local fS, sS, ch, it = {}, {}, true, 0
+    local fS, sS, ch, it, tS = {}, {}, true, 0, clock()
     for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do local c=col[z] if c then c._prob=nil end end end end
-    while ch and it < 64 do
+    while ch and it < 32 and (clock() - tS < 0.05) do
         ch, it = false, it + 1
         for j = 1, #num do
             local c = num[j] local unk, flg, n = {}, 0, c.neigh
@@ -205,8 +198,7 @@ local function updateG()
     local kF, uK = 0, 0 for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do local c=col[z] if c.state == "flagged" or state.cells.toFlag[c] then kF=kF+1 elseif c.state ~= "number" and c.covered ~= false and not state.cells.toClear[c] then uK=uK+1 end end end end
     local gD = uK > 0 and (((Options.TotalMines and Options.TotalMines.Value or 25) - kF) / uK) or 0.15
     local pP = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
-    local maxD = pP and sqrt((state.grid.w*5)^2 + (state.grid.h*5)^2) or 1
-    local bestC, bestS = nil, nil
+    local maxD, bestC, bestS = pP and sqrt((state.grid.w*5)^2 + (state.grid.h*5)^2) or 1, nil, nil
     for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do
         local c = col[z] if c and c.part and c.state ~= "number" and c.covered ~= false and not hasF(c.part) and not state.cells.toFlag[c] and not state.cells.toClear[c] then
             local pb = c._prob
@@ -222,8 +214,7 @@ local function updateG()
                 pb = (hasNIdx and vC > 0) and (pS / vC) or gD
             end
             local s = pb + ((x == 0 or x == state.grid.w-1 or z == 0 or z == state.grid.h-1) and config.EdgePenalty or 0)
-            local uN = 0 local n4 = c.neigh for k = 1, #n4 do local t = n4[k] if t.state ~= "number" and t.covered ~= false and not state.cells.toFlag[t] and not state.cells.toClear[t] then uN = uN + 1 end end
-            local cN = 0 for k = 1, #n4 do if n4[k].state == "number" then cN = cN + 1 end end
+            local uN, cN, n4 = 0, 0, c.neigh for k = 1, #n4 do local t = n4[k] if t.state ~= "number" and t.covered ~= false and not state.cells.toFlag[t] and not state.cells.toClear[t] then uN = uN + 1 end if t.state == "number" then cN = cN + 1 end end
             s = s - (uN * 0.01) - (cN * 0.05) + (sqrt((x-state.grid.w/2)^2 + (z-state.grid.h/2)^2) / (state.grid.w + state.grid.h)) * 0.05
             if pP then s = s + ((c.pos - pP).Magnitude / maxD) * config.DistanceWeight end
             if not bestS or s < bestS then bestS, bestC = s, c end
@@ -268,20 +259,13 @@ local function updateH()
     end end end
 end
 theme.BuiltInThemes["Default"][2] = { BackgroundColor = "16293a", MainColor = "26445f", AccentColor = "5983a0", OutlineColor = "325573", FontColor = "d2dae1" }
-local win = lib:CreateWindow({ Title = "Axis Hub -\nMinesweeper.lua", Footer = "by RwalDev & Plow | 1.9.3", NotifySide = "Right", ShowCustomCursor = true })
+local win = lib:CreateWindow({ Title = "Axis Hub -\nMinesweeper.lua", Footer = "by RwalDev & Plow | 1.9.4", NotifySide = "Right", ShowCustomCursor = true })
 local h, m, s = win:AddTab("Home", "house"), win:AddTab("Main", "target"), win:AddTab("Settings", "settings")
 local status = h:AddLeftGroupbox("Status") status:AddLabel(string.format("Welcome, %s\nGame: Minesweeper", lp.DisplayName), true) status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 local perf = h:AddRightGroupbox("Performance") local fpsL, pingL = perf:AddLabel("FPS: ...", true), perf:AddLabel("Ping: ...", true)
 local mainB = m:AddLeftGroupbox("Main") mainB:AddToggle("HighlightMines", { Text = "Highlight Mines", Default = false }) mainB:AddToggle("BypassAnticheat", { Text = "Bypass Anticheat", Default = true })
 mainB:AddSlider("TotalMines", { Text = "Total Mines", Default = 25, Min = 0, Max = 200, Rounding = 0, Suffix = "mines" })
-local cfgB = s:AddLeftGroupbox("Config") cfgB:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end }) cfgB:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
-lib.ToggleKeybind = Options.MenuKeybind
-local function bypass()
-    if not getrawmetatable or not hookmetamethod then return end
-    local r = game:GetService("ReplicatedStorage"):FindFirstChild("Patukka")
-    if r then local old old = hookmetamethod(game, "__namecall", function(self, ...) local m = getnamecallmethod() if self == r and (m == "InvokeServer" or m == "FireServer") then if Toggles.BypassAnticheat and Toggles.BypassAnticheat.Value then return nil end end return old(self, ...) end) end
-end
-local lastS, solveInt = 0, 0.05
+local lastS, solveInt, el, fr = 0, 0.1, 0, 0
 rs.Heartbeat:Connect(function()
     config.Enabled = Toggles.HighlightMines and Toggles.HighlightMines.Value
     if not config.Enabled then clearB() state.cells.toFlag, state.cells.toClear, state.lastPartCount = {}, {}, -1 return end
@@ -292,11 +276,10 @@ rs.Heartbeat:Connect(function()
     if neb or (now - lastS) >= solveInt then lastS = now updateS(f) updateL() updateG() end
     updateH()
 end)
-local el, fr = 0, 0
 rs.RenderStepped:Connect(function(dt)
     el, fr = el + dt, fr + 1
     if el >= 0.5 then 
-        local fps = floor(fr / el + 0.5) fpsL:SetText("FPS: " .. fps)
+        fpsL:SetText("FPS: " .. floor(fr / el + 0.5))
         local net = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]
         local png = 0 pcall(function() png = net:GetValue() end)
         pingL:SetText("Ping: " .. floor(png) .. " ms")
@@ -307,4 +290,4 @@ theme:SetLibrary(lib) save:SetLibrary(lib) save:IgnoreThemeSettings() save:SetIg
 theme:SetFolder("PlowsScriptHub") save:SetFolder("PlowsScriptHub/Minesweeper")
 save:BuildConfigSection(s) theme:ApplyToTab(s) save:LoadAutoloadConfig()
 lib:OnUnload(function() clearB() local f = workspace:FindFirstChild("MinesweeperHighlights") if f then f:Destroy() end end)
-pcall(bypass)
+pcall(function() if not getrawmetatable or not hookmetamethod then return end local r = game:GetService("ReplicatedStorage"):FindFirstChild("Patukka") if r then local old old = hookmetamethod(game, "__namecall", function(self, ...) local m = getnamecallmethod() if self == r and (m == "InvokeServer" or m == "FireServer") then if Toggles.BypassAnticheat and Toggles.BypassAnticheat.Value then return nil end end return old(self, ...) end) end end)
