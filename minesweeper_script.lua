@@ -278,7 +278,7 @@ local function autoFlag()
 end
 local function applyH(c, col)
     if not c.borders then
-        local th, ins = 0.15, 0.02
+        local th, ins = 0.08, 0.05
         local function np() local p=Instance.new("Part") p.Anchored,p.CanCollide,p.CanQuery,p.CanTouch,p.CastShadow,p.Transparency,p.Material,p.Size=true,false,false,false,false,1,Enum.Material.Neon,Vector3.new(1,1,1) return p end
         c.borders = { top = np(), bottom = np(), left = np(), right = np() }
         local f = workspace:FindFirstChild("MinesweeperHighlights") or Instance.new("Folder", workspace) f.Name = "MinesweeperHighlights"
