@@ -149,20 +149,20 @@ local function solveCSP(fS, sS)
             end
             local totW = 0 for _, w in pairs(fW) do totW = totW + w end
             if totW > 0 then
-                local pre, suf = { [0] = { [0] = 1 } }, { [#cD + 1] = { [0] = 1 } }
+                local pr, sf = { [0] = { [0] = 1 } }, { [#cD + 1] = { [0] = 1 } }
                 for i = 1, #cD do
                     local nD, d = {}, cD[i]
-                    for s, w in pairs(pre[i-1]) do for k, c in pairs(d.cts) do local ns = s + k if ns <= tM then nD[ns] = (nD[ns] or 0) + w * c end end end
-                    pre[i] = nD
+                    for s, w in pairs(pr[i-1]) do for k, c in pairs(d.cts) do local ns = s + k if ns <= tM then nD[ns] = (nD[ns] or 0) + w * c end end end
+                    pr[i] = nD
                 end
                 for i = #cD, 1, -1 do
                     local nD, d = {}, cD[i]
-                    for s, w in pairs(suf[i+1]) do for k, c in pairs(d.cts) do local ns = s + k if ns <= tM then nD[ns] = (nD[ns] or 0) + w * c end end end
-                    suf[i] = nD
+                    for s, w in pairs(sf[i+1]) do for k, c in pairs(d.cts) do local ns = s + k if ns <= tM then nD[ns] = (nD[ns] or 0) + w * c end end end
+                    sf[i] = nD
                 end
                 for i = 1, #cD do
                     local d = cD[i]
-                    local p1, s1 = pre[i-1], suf[i+1]
+                    local p1, s1 = pr[i-1], sf[i+1]
                     local comb = {}
                     for s, w in pairs(p1) do for ks, kw in pairs(s1) do local ns = s + ks if ns <= tM then comb[ns] = (comb[ns] or 0) + w * kw end end end
                     for vi = 1, #d.v do
@@ -176,7 +176,9 @@ local function solveCSP(fS, sS)
                             mP = mP + c * sK
                         end
                         v._prob = mP / totW
-                        if v._prob > 0.9999 then fS[v] = true elseif v._prob < 0.0001 then sS[v] = true if v.state == "flagged" then v.isWrongFlag = true end end
+                        if not d.abrt and d.total < 100000 then
+                            if v._prob > 0.9999 then fS[v] = true elseif v._prob < 0.0001 then sS[v] = true if v.state == "flagged" then v.isWrongFlag = true end end
+                        end
                     end
                 end
                 local slP = 0
@@ -190,18 +192,24 @@ local function solveCSP(fS, sS)
                     local v = d.v[vi]
                     local mC = 0 for k, c in pairs(d.cts) do mC = mC + (d.ccts[vi][k] or 0) end
                     v._prob = mC / d.total
-                    if v._prob > 0.9999 then fS[v] = true elseif v._prob < 0.0001 then sS[v] = true end
+                    if not d.abrt and d.total < 100000 then
+                        if v._prob > 0.9999 then fS[v] = true elseif v._prob < 0.0001 then sS[v] = true end
+                    end
                 end
             end
         end
     end
 end
 local function applyS(cA, cB, uA, uB, fS, sS)
-    local sA, sB, iS = {}, {}, 0 for _, u in ipairs(uA) do sA[u] = true end
-    for _, u in ipairs(uB) do if sA[u] then iS = iS + 1 sA[u] = false sB[u] = false else sB[u] = true end end
-    local oA, oB, iL = {}, {}, {} for _, u in ipairs(uA) do if sA[u] ~= false then oA[#oA+1] = u else iL[#iL+1] = u end end
-    for _, u in ipairs(uB) do if sB[u] then oB[#oB+1] = u end end
-    if #iL == 0 then return end local rA, rB = countR(cA, fS), countR(cB, fS) local minI, maxI = max(0, rA - #oA, rB - #oB), min(rA, rB, #iL)
+    local sA, sB = {}, {}
+    for _, u in ipairs(uA) do sA[u] = true end
+    for _, u in ipairs(uB) do if sA[u] then sA[u] = nil else sB[u] = true end end
+    local oA, oB, iL = {}, {}, {}
+    for _, u in ipairs(uA) do if sA[u] then tinsert(oA, u) else tinsert(iL, u) end end
+    for _, u in ipairs(uB) do if sB[u] then tinsert(oB, u) end end
+    if #iL == 0 then return end
+    local rA, rB = countR(cA, fS), countR(cB, fS)
+    local minI, maxI = max(0, rA-#oA, rB-#oB), min(rA, rB, #iL)
     if minI == maxI then
         if rA - minI == 0 then for _, u in ipairs(oA) do sS[u] = true end elseif rA - minI == #oA then for _, u in ipairs(oA) do fS[u] = true end end
         if rB - minI == 0 then for _, u in ipairs(oB) do sS[u] = true end elseif rB - minI == #oB then for _, u in ipairs(oB) do fS[u] = true end end
