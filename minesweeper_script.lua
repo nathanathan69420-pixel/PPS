@@ -36,6 +36,7 @@ local function clearB()
     if not state.cells.grid then return end
     for x = 0, state.grid.w - 1 do local col = state.cells.grid[x] if col then for z = 0, state.grid.h - 1 do local c = col[z] if c then if c.borders then for _, b in pairs(c.borders) do b:Destroy() end c.borders = nil end c.isHighlightedMine, c.isHighlightedSafe, c.isHighlightedGuess, c.isWrongFlag = false, false, false, false end end end end
 end
+local function rebuildG(folder)
     clearB() state.cells.grid, state.grid.w, state.grid.h = {}, 0, 0
     state.cells.toFlag, state.cells.toClear, state.cells.numbered = {}, {}, {}
     state.clicked = {}
