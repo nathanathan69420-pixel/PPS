@@ -11,7 +11,9 @@ local COLOR_SAFE, COLOR_MINE, COLOR_GUESS, COLOR_WRONG = Color3.fromRGB(0, 255, 
 local abs, floor, huge, sqrt, max, min, clock = math.abs, math.floor, math.huge, math.sqrt, math.max, math.min, os.clock
 local tsort, tinsert, tremove = table.sort, table.insert, table.remove
 local bit_extract = bit32.extract
-local Vector3_new, CFrame_new, Instance_new = Vector3.new, CFrame.new, Instance.new
+local vec3 = Vector3.new
+local cfnew = CFrame.new
+local inst = Instance.new
 local function cluster(vals, d) 
     local res = {} if #vals == 0 then return res end 
     local cur, count = vals[1], 1 
@@ -22,7 +24,6 @@ local function median(vals) if #vals == 0 then return nil end tsort(vals) return
 local function estS(coords) if #coords < 3 then return 4 end local d = {} for i = 2, #coords do d[#d+1] = abs(coords[i] - coords[i-1]) end return median(d) or 4 end
 local function findI(t, s) local bI, bD = 1, huge for i = 1, #s do local d = abs(t - s[i]) if d < bD then bD, bI = d, i end end return bI - 1 end
 local function hasF(p) return p:FindFirstChild("Flag", true) ~= nil end
-local function isE(c) return c.state ~= "number" and c.covered ~= false end
 local cachedB = nil
 local function scanB()
     if cachedB and cachedB.Parent then return cachedB end
@@ -44,8 +45,8 @@ local function rebuildG(folder)
     local ux, uz = cluster(xs, w), cluster(zs, h) state.grid.w, state.grid.h = #ux, #uz
     if state.grid.w == 0 or state.grid.h == 0 then return end
     local ay = sY / #pD
-    for x = 0, state.grid.w - 1 do state.cells.grid[x] = {} for z = 0, state.grid.h - 1 do state.cells.grid[x][z] = { ix = x, iz = z, pos = Vector3_new(ux[x+1], ay, uz[z+1]), part = nil, state = "unknown", covered = true, neigh = {} } end end
-    for _, d in ipairs(pD) do local xi, zi = findI(d.pos.X, ux), findI(d.pos.Z, uz) local c = state.cells.grid[xi][zi] if not c.part or (d.pos - Vector3_new(ux[xi+1], d.pos.Y, uz[zi+1])).Magnitude < (c.part.Position - Vector3_new(ux[xi+1], c.part.Position.Y, uz[zi+1])).Magnitude then c.part, c.pos = d.p, d.pos end end
+    for x = 0, state.grid.w - 1 do state.cells.grid[x] = {} for z = 0, state.grid.h - 1 do state.cells.grid[x][z] = { ix = x, iz = z, pos = vec3(ux[x+1], ay, uz[z+1]), part = nil, state = "unknown", covered = true, neigh = {} } end end
+    for _, d in ipairs(pD) do local xi, zi = findI(d.pos.X, ux), findI(d.pos.Z, uz) local c = state.cells.grid[xi][zi] if not c.part or (d.pos - vec3(ux[xi+1], d.pos.Y, uz[zi+1])).Magnitude < (c.part.Position - vec3(ux[xi+1], c.part.Position.Y, uz[zi+1])).Magnitude then c.part, c.pos = d.p, d.pos end end
     for z = 0, state.grid.h - 1 do for x = 0, state.grid.w - 1 do local c = state.cells.grid[x][z] for dz = -1, 1 do for dx = -1, 1 do if dx ~= 0 or dz ~= 0 then local nx, nz = x + dx, z + dz if nx >= 0 and nx < state.grid.w and nz >= 0 and nz < state.grid.h then tinsert(c.neigh, state.cells.grid[nx][nz]) end end end end end end
 end
 local function updateS(folder)
@@ -61,14 +62,27 @@ local function updateS(folder)
         end
     end end end
 end
-local function countR(c, fS) local r = c.number or 0 for _, n in ipairs(c.neigh) do if fS[n] then r = r - 1 end end return r end
+local function countR(c, fS) local r = c.number or 0 local n = c.neigh for j = 1, #n do if fS[n[j]] then r = r - 1 end end return r end
 local function getC(num, fS, sS)
     local bds, map = {}, {}
-    for _, nc in ipairs(num) do local r, ns = nc.number or 0, {} for _, n in ipairs(nc.neigh) do if fS[n] then r = r - 1 elseif isE(n) and not sS[n] then tinsert(ns, n) if not map[n] then map[n] = true tinsert(bds, n) end end end nc._cr, nc._cn = r, ns end
-    local adj = {} for _, u in ipairs(bds) do adj[u] = {} end
-    for _, nc in ipairs(num) do local ns = nc._cn for i = 1, #ns do for j = i+1, #ns do local u, v = ns[i], ns[j] adj[u][v], adj[v][u] = true, true end end end
+    for j = 1, #num do
+        local nc = num[j] local r, ns, n = nc.number or 0, {}, nc.neigh
+        for k = 1, #n do local t = n[k] if fS[t] then r = r - 1 elseif t.state ~= "number" and t.covered ~= false and not sS[t] then tinsert(ns, t) if not map[t] then map[t] = true tinsert(bds, t) end end end
+        nc._cr, nc._cn = r, ns
+    end
+    local adj = {} for j = 1, #bds do adj[bds[j]] = {} end
+    for j = 1, #num do local ns = num[j]._cn for i = 1, #ns do for k = i+1, #ns do local u, v = ns[i], ns[k] adj[u][v], adj[v][u] = true, true end end end
     local vis, comps = {}, {}
-    for _, u in ipairs(bds) do if not vis[u] then local comp, q = {}, {u} vis[u] = true while #q > 0 do local cur = tremove(q) tinsert(comp, cur) for n in pairs(adj[cur] or {}) do if not vis[n] then vis[n] = true tinsert(q, n) end end end tinsert(comps, comp) end end
+    for j = 1, #bds do
+        local u = bds[j] if not vis[u] then
+            local comp, q = {}, {u} vis[u] = true
+            while #q > 0 do
+                local cur = tremove(q) tinsert(comp, cur)
+                for n in pairs(adj[cur] or {}) do if not vis[n] then vis[n] = true tinsert(q, n) end end
+            end
+            tinsert(comps, comp)
+        end
+    end
     return comps
 end
 local function solveCSP(fS, sS)
@@ -78,7 +92,7 @@ local function solveCSP(fS, sS)
     for i = 1, #comps do
         local v = comps[i] local nV = #v if nV == 0 then continue end
         local deg = {} for j = 1, nV do deg[v[j]] = 0 end tCV = tCV + nV
-        for j = 1, #num do local nc = num[j] for k = 1, #nc._cn do local n = nc._cn[k] if deg[n] then deg[n] = deg[n] + 1 end end end
+        for j = 1, #num do local nc = num[j] local n = nc._cn for k = 1, #n do if deg[n[k]] then deg[n[k]] = deg[n[k]] + 1 end end end
         tsort(v, function(a, b) return deg[a] > deg[b] end)
         if clock() - tS > 0.08 then break end
         local map, cts, cCts = {}, {}, {} for j = 1, nV do map[v[j]], cCts[j] = j, {} end
@@ -92,25 +106,26 @@ local function solveCSP(fS, sS)
             if solC >= 50000 or abrt then return end
             if (solC % 512 == 0) and (clock() - tS > 0.08) then abrt = true return end
             if idx > nV then
-                solC = solC + 1 local ms = 0 for j = 1, nV do ms = ms + cur[j] end
+                solC = solC + 1 local ms = 0 for j = 1, nV do if cur[j] == 1 then ms = ms + 1 end end
                 cts[ms] = (cts[ms] or 0) + 1
                 for j = 1, nV do if cur[j] == 1 then cCts[j][ms] = (cCts[j][ms] or 0) + 1 end end
                 return
             end
+            local t = vT[idx]
             for val = 0, 1 do
                 local ok = true
-                for j = 1, #vT[idx] do local c = vT[idx][j] local ns = c.cur + val if ns > c.r or (ns + c.un - 1) < c.r then ok = false break end end
+                for j = 1, #t do local c = t[j] local ns = c.cur + val if ns > c.r or (ns + c.un - 1) < c.r then ok = false break end end
                 if ok then
-                    cur[idx] = val for j = 1, #vT[idx] do local c = vT[idx][j] c.cur, c.un = c.cur + val, c.un - 1 end
+                    cur[idx] = val for j = 1, #t do local c = t[j] c.cur, c.un = c.cur + val, c.un - 1 end
                     bt(idx + 1) if abrt then return end
-                    for j = 1, #vT[idx] do local c = vT[idx][j] c.cur, c.un = c.cur - val, c.un + 1 end
+                    for j = 1, #t do local c = t[j] c.cur, c.un = c.cur - val, c.un + 1 end
                 end
             end
         end
-        if nV <= 14 then
+        if nV <= 16 then
             for m = 0, 2^nV - 1 do
-                local ok = true for j = 1, #cons do local s = 0 for _, vi in ipairs(cons[j].v) do if bit_extract(m, vi-1) == 1 then s = s + 1 end end if s ~= cons[j].r then ok = false break end end
-                if ok then solC = solC + 1 local ms = 0 for j = 1, nV do if bit_extract(m, j-1) == 1 then ms = ms + 1 cCts[j][ms] = (cCts[j][ms] or 0) + 1 end end cts[ms] = (cts[ms] or 0) + 1 end
+                local ok = true for j = 1, #cons do local s = 0 local cV = cons[j].v for k = 1, #cV do if bit_extract(m, cV[k]-1) == 1 then s = s + 1 end end if s ~= cons[j].r then ok = false break end end
+                if ok then solC = solC + 1 local ms = 0 for j = 1, nV do if bit_extract(m, j-1) == 1 then ms = ms + 1 local mS = cCts[j] mS[ms] = (mS[ms] or 0) + 1 end end cts[ms] = (cts[ms] or 0) + 1 end
             end
         else bt(1) end
         if not abrt and solC > 0 then tinsert(cD, {v = v, cts = cts, ccts = cCts, total = solC}) end
@@ -119,7 +134,7 @@ local function solveCSP(fS, sS)
         local valC = {} for i = 1, #cD do local vc = {} for k in pairs(cD[i].cts) do vc[k] = true end valC[i] = vc end
         if config.TotalMines then
             local kF, tU, grid = 0, 0, state.cells.grid
-            for x = 0, state.grid.w - 1 do if grid[x] then for z = 0, state.grid.h - 1 do local c = grid[x][z] if c then if fS[c] then kF = kF + 1 elseif isE(c) and not sS[c] then tU = tU + 1 end end end end end
+            for x = 0, state.grid.w - 1 do if grid[x] then for z = 0, state.grid.h - 1 do local c = grid[x][z] if c then if fS[c] then kF = kF + 1 elseif c.state ~= "number" and c.covered ~= false and not sS[c] then tU = tU + 1 end end end end end
             local tM, sl, dp = config.TotalMines - kF, max(0, tU - tCV), { [0] = true }
             for i = 1, #cD do local nD, d = {}, cD[i] for s in pairs(dp) do for k in pairs(d.cts) do local ns = s + k if ns <= tM then nD[ns] = true end end end dp = nD end
             local fVS = {} for s in pairs(dp) do if s + sl >= tM and s <= tM then fVS[s] = true end end
@@ -157,17 +172,28 @@ local function updateL()
     if state.grid.w == 0 then state.cells.toFlag, state.cells.toClear = {}, {} return end
     local num = state.cells.numbered if #num == 0 then return end
     local fS, sS, ch, it = {}, {}, true, 0
-    for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do local c=col[z] if c then c._prob = nil end end end end
+    for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do local c=col[z] if c then c._prob=nil end end end end
     while ch and it < 64 do
         ch, it = false, it + 1
-        for _, c in ipairs(num) do
-            local unk, flg = {}, 0 for _, n in ipairs(c.neigh) do if fS[n] then flg = flg + 1 elseif not sS[n] and isE(n) then tinsert(unk, n) end end
+        for j = 1, #num do
+            local c = num[j] local unk, flg, n = {}, 0, c.neigh
+            for k = 1, #n do local t = n[k] if fS[t] then flg = flg + 1 elseif not sS[t] and t.state ~= "number" and t.covered ~= false then tinsert(unk, t) end end
             local r = (c.number or 0) - flg
-            if r > 0 and r == #unk then for _, u in ipairs(unk) do if not fS[u] then fS[u] = true ch = true end end
-            elseif r == 0 and #unk > 0 then for _, u in ipairs(unk) do if not sS[u] then sS[u] = true ch = true end end end
+            if r > 0 and r == #unk then for k = 1, #unk do local u = unk[k] if not fS[u] then fS[u] = true ch = true end end
+            elseif r == 0 and #unk > 0 then for k = 1, #unk do local u = unk[k] if not sS[u] then sS[u] = true ch = true end end end
         end
         local pF, pC = 0, 0 for _ in pairs(fS) do pF = pF + 1 end for _ in pairs(sS) do pC = pC + 1 end
-        for _, c in ipairs(num) do for _, n in ipairs(c.neigh) do if n.state == "number" then local uT, uA = {}, {} for _, nn in ipairs(c.neigh) do if not fS[nn] and not sS[nn] and isE(nn) then tinsert(uT, nn) end end for _, nn in ipairs(n.neigh) do if not fS[nn] and not sS[nn] and isE(nn) then tinsert(uA, nn) end end if #uT > 0 and #uA > 0 then applyS(c, n, uT, uA, fS, sS) end end end end
+        for j = 1, #num do
+            local c = num[j] local n = c.neigh
+            for k = 1, #n do
+                local a = n[k] if a.state == "number" then
+                    local uT, uA, n1, n2 = {}, {}, c.neigh, a.neigh
+                    for m = 1, #n1 do local t = n1[m] if not fS[t] and not sS[t] and t.state ~= "number" and t.covered ~= false then tinsert(uT, t) end end
+                    for m = 1, #n2 do local t = n2[m] if not fS[t] and not sS[t] and t.state ~= "number" and t.covered ~= false then tinsert(uA, t) end end
+                    if #uT > 0 and #uA > 0 then applyS(c, a, uT, uA, fS, sS) end
+                end
+            end
+        end
         local postF, postC = 0, 0 for _ in pairs(fS) do postF = postF + 1 end for _ in pairs(sS) do postC = postC + 1 end
         if postF ~= pF or postC ~= pC then ch = true end
         if not ch then solveCSP(fS, sS) local nF, nC = 0, 0 for _ in pairs(fS) do nF = nF + 1 end for _ in pairs(sS) do nC = nC + 1 end if nF ~= postF or nC ~= postC then ch = true end end
@@ -177,23 +203,29 @@ local function updateL()
 end
 local function updateG()
     state.bestGuessCell = nil if not config.GuessHelper or state.grid.w == 0 then return end
-    local kF, uK = 0, 0 for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do local c=col[z] if c.state == "flagged" or state.cells.toFlag[c] then kF=kF+1 elseif isE(c) and not state.cells.toClear[c] then uK=uK+1 end end end end
+    local kF, uK = 0, 0 for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do local c=col[z] if c.state == "flagged" or state.cells.toFlag[c] then kF=kF+1 elseif c.state ~= "number" and c.covered ~= false and not state.cells.toClear[c] then uK=uK+1 end end end end
     local gD = uK > 0 and ((config.TotalMines - kF) / uK) or 0.15
     local pP = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") and lp.Character.HumanoidRootPart.Position
     local maxD = pP and sqrt((state.grid.w*5)^2 + (state.grid.h*5)^2) or 1
     local bestC, bestS = nil, nil
     for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do
-        local c = col[z] if c and c.part and isE(c) and not hasF(c.part) and not state.cells.toFlag[c] and not state.cells.toClear[c] then
+        local c = col[z] if c and c.part and c.state ~= "number" and c.covered ~= false and not hasF(c.part) and not state.cells.toFlag[c] and not state.cells.toClear[c] then
             local pb = c._prob
             if not pb then
-                local vC, pS, hasN = 0, 0, false
-                for _, n in ipairs(c.neigh) do if n.state == "number" and n.number and n.number > 0 then hasN = true local fs, lu = 0, 0 for _, nn in ipairs(n.neigh) do if (nn.part and hasF(nn.part)) or state.cells.toFlag[nn] then fs = fs + 1 elseif isE(nn) and not state.cells.toFlag[nn] and not state.cells.toClear[nn] then lu = lu + 1 end end local r = n.number - fs if r <= 0 then vC = vC + 1 elseif lu > 0 then pS = pS + (r/lu) vC = vC + 1 end end end
-                pb = (hasN and vC > 0) and (pS / vC) or gD
+                local vC, pS, hasNIdx, n = 0, 0, false, c.neigh
+                for k = 1, #n do
+                    local t = n[k] if t.state == "number" and t.number and t.number > 0 then
+                        hasNIdx = true local fs, lu, n3 = 0, 0, t.neigh
+                        for m = 1, #n3 do local nn = n3[m] if (nn.part and hasF(nn.part)) or state.cells.toFlag[nn] then fs = fs + 1 elseif nn.state ~= "number" and nn.covered ~= false and not state.cells.toFlag[nn] and not state.cells.toClear[nn] then lu = lu + 1 end end
+                        local r = t.number - fs if r <= 0 then vC = vC + 1 elseif lu > 0 then pS = pS + (r/lu) vC = vC + 1 end
+                    end
+                end
+                pb = (hasNIdx and vC > 0) and (pS / vC) or gD
             end
             local s = pb + ((x == 0 or x == state.grid.w-1 or z == 0 or z == state.grid.h-1) and config.EdgePenalty or 0)
-            local uN = 0 for _, n in ipairs(c.neigh) do if isE(n) and not state.cells.toFlag[n] and not state.cells.toClear[n] then uN = uN + 1 end end
-            s = s - (uN * 0.01) - ( (function() local cN=0 for _,n in ipairs(c.neigh) do if n.state=="number" then cN=cN+1 end end return cN end)() * 0.05 )
-            local dx, dz = x - state.grid.w/2, z - state.grid.h/2 s = s + (sqrt(dx*dx + dz*dz) / (state.grid.w + state.grid.h)) * 0.05
+            local uN = 0 local n4 = c.neigh for k = 1, #n4 do local t = n4[k] if t.state ~= "number" and t.covered ~= false and not state.cells.toFlag[t] and not state.cells.toClear[t] then uN = uN + 1 end end
+            local cN = 0 for k = 1, #n4 do if n4[k].state == "number" then cN = cN + 1 end end
+            s = s - (uN * 0.01) - (cN * 0.05) + (sqrt((x-state.grid.w/2)^2 + (z-state.grid.h/2)^2) / (state.grid.w + state.grid.h)) * 0.05
             if pP then s = s + ((c.pos - pP).Magnitude / maxD) * config.DistanceWeight end
             if not bestS or s < bestS then bestS, bestC = s, c end
         end
@@ -204,15 +236,15 @@ end
 local function applyH(c, col)
     if not c.borders then
         local th, ins = 0.15, 0.02
-        local function np() local p=Instance_new("Part") p.Anchored,p.CanCollide,p.CanQuery,p.CanTouch,p.CastShadow,p.Transparency,p.Material,p.Size=true,false,false,false,false,1,Enum.Material.Neon,Vector3_new(1,1,1) return p end
+        local function np() local p=inst("Part") p.Anchored,p.CanCollide,p.CanQuery,p.CanTouch,p.CastShadow,p.Transparency,p.Material,p.Size=true,false,false,false,false,1,Enum.Material.Neon,vec3(1,1,1) return p end
         c.borders = { top = np(), bottom = np(), left = np(), right = np() }
-        local f = workspace:FindFirstChild("MinesweeperHighlights") or Instance_new("Folder", workspace) f.Name = "MinesweeperHighlights"
+        local f = workspace:FindFirstChild("MinesweeperHighlights") or inst("Folder", workspace) f.Name = "MinesweeperHighlights"
         for _, b in pairs(c.borders) do b.Parent = f end
         if c.part then
             local sz, hx, hz, yf = c.part.Size, c.part.Size.X/2 - ins, c.part.Size.Z/2 - ins, c.part.Size.Y/2 + 0.01
             local t, b, l, r = c.borders.top, c.borders.bottom, c.borders.left, c.borders.right
-            t.Size, b.Size, l.Size, r.Size = Vector3_new(sz.X-ins*2, th, th), Vector3_new(sz.X-ins*2, th, th), Vector3_new(th, th, sz.Z-ins*2), Vector3_new(th, th, sz.Z-ins*2)
-            t.CFrame, b.CFrame, l.CFrame, r.CFrame = c.part.CFrame*CFrame_new(0, yf, -hz), c.part.CFrame*CFrame.new(0, yf, hz), c.part.CFrame*CFrame.new(-hx, yf, 0), c.part.CFrame*CFrame.new(hx, yf, 0)
+            t.Size, b.Size, l.Size, r.Size = vec3(sz.X-ins*2, th, th), vec3(sz.X-ins*2, th, th), vec3(th, th, sz.Z-ins*2), vec3(th, th, sz.Z-ins*2)
+            t.CFrame, b.CFrame, l.CFrame, r.CFrame = c.part.CFrame*cfnew(0, yf, -hz), c.part.CFrame*cfnew(0, yf, hz), c.part.CFrame*cfnew(-hx, yf, 0), c.part.CFrame*cfnew(hx, yf, 0)
         end
     end
     for _, b in pairs(c.borders) do b.Color, b.Transparency = col, 0 end
@@ -238,7 +270,7 @@ local function updateH()
     end end end
 end
 theme.BuiltInThemes["Default"][2] = { BackgroundColor = "16293a", MainColor = "26445f", AccentColor = "5983a0", OutlineColor = "325573", FontColor = "d2dae1" }
-local win = lib:CreateWindow({ Title = "Axis Hub -\nMinesweeper.lua", Footer = "by RwalDev & Plow | 1.8.8", NotifySide = "Right", ShowCustomCursor = true })
+local win = lib:CreateWindow({ Title = "Axis Hub -\nMinesweeper.lua", Footer = "by RwalDev & Plow | 1.8.9", NotifySide = "Right", ShowCustomCursor = true })
 local h, m, s = win:AddTab("Home", "house"), win:AddTab("Main", "target"), win:AddTab("Settings", "settings")
 local status = h:AddLeftGroupbox("Status") status:AddLabel(string.format("Welcome, %s\nGame: Minesweeper", lp.DisplayName), true) status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 local perf = h:AddRightGroupbox("Performance") local fpsL, pingL = perf:AddLabel("FPS: ...", true), perf:AddLabel("Ping: ...", true)
@@ -261,7 +293,6 @@ rs.Heartbeat:Connect(function()
     if neb or (now - lastS) >= solveInt then lastS = now updateS(f) updateL() updateG() end
     updateH()
 end)
-local elap, frames = 0, 0
 rs.RenderStepped:Connect(function(dt)
     elap, frames = elap + dt, frames + 1
     if elap >= 1 then fpsL:SetText("FPS: " .. floor(frames/elap+0.5)) local net = game:GetService("Stats").Network.ServerStatsItem["Data Ping"] pingL:SetText("Ping: " .. (net and floor(net:GetValue()) or 0) .. " ms") frames, elap = 0, 0 end
