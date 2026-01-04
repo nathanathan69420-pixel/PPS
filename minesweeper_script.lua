@@ -378,15 +378,20 @@ local function bypass()
     local r = game:GetService("ReplicatedStorage"):FindFirstChild("Patukka")
     if r then local old old = hookmetamethod(game, "__namecall", function(self, ...) local m = getnamecallmethod() if self == r and (m == "InvokeServer" or m == "FireServer") then if Toggles.BypassAnticheat and Toggles.BypassAnticheat.Value then return nil end end return old(self, ...) end) end
 end
-local lastS, solveInt, lastUnc = 0, 0.1, 0
+local lastS, solveInt, lastFld = 0, 0.1, nil
 rs.Heartbeat:Connect(function()
     config.Enabled = Toggles.HighlightMines and Toggles.HighlightMines.Value
     if not config.Enabled then clearB() state.cells.toFlag, state.cells.toClear, state.lastPartCount = {}, {}, -1 return end
     local f = scanB() if not f then return end
     local pL, now = f:GetChildren(), tick()
     local pc = #pL
-    local neb = abs(pc - state.lastPartCount) > 10
-    if neb then clearB() state.lastPartCount = pc rebuildG(f) end
+    local neb = (f ~= lastFld) or (pc > state.lastPartCount + 5)
+    if neb then 
+        clearB() 
+        state.lastPartCount = pc 
+        lastFld = f
+        rebuildG(f) 
+    end
     if state.grid.w == 0 then return end
     if neb or (now - lastS) >= solveInt then 
         lastS = now 
