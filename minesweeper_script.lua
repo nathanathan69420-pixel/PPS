@@ -305,22 +305,15 @@ local function autoFlag()
     if not h then return end
     for c in pairs(state.cells.toFlag) do
         if c.part and not hasF(c.part) and (c.pos - h.Position).Magnitude <= r then
-            local cd = c.part:FindFirstChildWhichIsA("ClickDetector")
-            if cd then
-                if fireclickdetector then
-                    fireclickdetector(cd, 0)
-                    lastF = tick()
-                    break
-                else
-                    local r = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
-                    local rf = r and r:FindFirstChild("FlagEvents")
-                    local re = rf and rf:FindFirstChild("PlaceFlag")
-                    if re and re:IsA("RemoteEvent") then
-                        re:FireServer(c.part)
-                        lastF = tick()
-                        break
-                    end
-                end
+            local sp, on = workspace.CurrentCamera:WorldToViewportPoint(c.pos)
+            if on then
+                local vim = game:GetService("VirtualInputManager")
+                vim:SendMouseMoveEvent(sp.X, sp.Y, game)
+                vim:SendMouseButtonEvent(sp.X, sp.Y, 0, true, game, 0)
+                task.wait()
+                vim:SendMouseButtonEvent(sp.X, sp.Y, 0, false, game, 0)
+                lastF = tick()
+                break
             end
         end
     end
