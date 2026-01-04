@@ -6,7 +6,7 @@ local rs, plrs = game:GetService("RunService"), game:GetService("Players")
 local lp = plrs.LocalPlayer
 local Toggles, Options = lib.Toggles, lib.Options
 local config = { Enabled = false, GuessHelper = true, TotalMines = 25, DistanceWeight = 0.1, EdgePenalty = 0.05 }
-local state = { cells = { grid = {}, numbered = {}, toFlag = {}, toClear = {} }, grid = { w = 0, h = 0 }, lastPartCount = -1, bestGuessCell = nil, dirtyFlag = true, lock = {} }
+local state = { cells = { grid = {}, numbered = {}, toFlag = {}, toClear = {} }, grid = { w = 0, h = 0 }, lastPartCount = -1, bestGuessCell = nil, dirtyFlag = true }
 local COLOR_SAFE, COLOR_MINE, COLOR_GUESS, COLOR_WRONG = Color3.fromRGB(0, 255, 0), Color3.fromRGB(255, 0, 0), Color3.fromRGB(0, 170, 255), Color3.fromRGB(255, 0, 255)
 local abs, floor, huge, sqrt, max, min, clock = math.abs, math.floor, math.huge, math.sqrt, math.max, math.min, os.clock
 local tsort, tinsert, tremove = table.sort, table.insert, table.remove
@@ -87,7 +87,7 @@ local function solveCSP(fS, sS)
     local num, tS = state.cells.numbered, clock()
     for j = 1, #num do local nc = num[j] local r, n = nc.number or 0, nc.neigh for k = 1, #n do if fS[n[k]] then r = r - 1 end end nc._cr = r end
     local comps = getC(num, fS, sS) if #comps == 0 then return end
-    local cD, tCV = {}, 0
+    local cData, tCV = {}, 0
     for i = 1, #comps do
         local v = comps[i] local nV = #v if nV == 0 then continue end
         local deg = {} for j = 1, nV do deg[v[j]] = 0 end tCV = tCV + nV
@@ -127,25 +127,25 @@ local function solveCSP(fS, sS)
                 if ok then solC = solC + 1 local ms = 0 for j = 1, nV do if bit_extract(m, j-1) == 1 then ms = ms + 1 local mS = cCts[j] mS[ms] = (mS[ms] or 0) + 1 end end cts[ms] = (cts[ms] or 0) + 1 end
             end
         else bt(1) end
-        if not abrt and solC > 0 then tinsert(cD, {v = v, cts = cts, ccts = cCts, total = solC}) end
+        if not abrt and solC > 0 then tinsert(cData, {v = v, cts = cts, ccts = cCts, total = solC}) end
     end
-    if #cD > 0 then
-        local valC = {} for i = 1, #cD do local vc = {} for k in pairs(cD[i].cts) do vc[k] = true end valC[i] = vc end
+    if #cData > 0 then
+        local valC = {} for i = 1, #cData do local vc = {} for k in pairs(cData[i].cts) do vc[k] = true end valC[i] = vc end
         if config.TotalMines then
             local kF, tU, grid = 0, 0, state.cells.grid
             for x = 0, state.grid.w - 1 do if grid[x] then for z = 0, state.grid.h - 1 do local c = grid[x][z] if c then if fS[c] then kF = kF + 1 elseif c.state ~= "number" and c.covered ~= false and not sS[c] then tU = tU + 1 end end end end end
             local tM, sl, dp = config.TotalMines - kF, max(0, tU - tCV), { [0] = true }
-            for i = 1, #cD do local nD, d = {}, cD[i] for s in pairs(dp) do for k in pairs(d.cts) do local ns = s + k if ns <= tM then nD[ns] = true end end end dp = nD end
+            for i = 1, #cData do local nD, d = {}, cData[i] for s in pairs(dp) do for k in pairs(d.cts) do local ns = s + k if ns <= tM then nD[ns] = true end end end dp = nD end
             local fVS = {} for s in pairs(dp) do if s + sl >= tM and s <= tM then fVS[s] = true end end
-            local pC = {} for i = 1, #cD do pC[i] = {} end
+            local pC = {} for i = 1, #cData do pC[i] = {} end
             local function pr(idx, s)
-                if idx > #cD then return fVS[s] == true end
-                local d, ok = cD[idx], false for k in pairs(d.cts) do if pr(idx + 1, s + k) then pC[idx][k], ok = true, true end end return ok
+                if idx > #cData then return fVS[s] == true end
+                local d, ok = cData[idx], false for k in pairs(d.cts) do if pr(idx + 1, s + k) then pC[idx][k], ok = true, true end end return ok
             end
             if pr(1, 0) then valC = pC end
         end
-        for i = 1, #cD do
-            local d, tVS, vc = cD[i], 0, valC[i] for k, c in pairs(d.cts) do if vc[k] then tVS = tVS + c end end
+        for i = 1, #cData do
+            local d, tVS, vc = cData[i], 0, valC[i] for k, c in pairs(d.cts) do if vc[k] then tVS = tVS + c end end
             if tVS > 0 then
                 for vi = 1, #d.v do
                     local v, mC = d.v[vi], 0 for k in pairs(vc) do mC = mC + (d.ccts[vi][k] or 0) end
@@ -197,11 +197,18 @@ local function updateL()
         if postF ~= pF or postC ~= pC then ch = true end
         if not ch then solveCSP(fS, sS) local nF, nC = 0, 0 for _ in pairs(fS) do nF = nF + 1 end for _ in pairs(sS) do nC = nC + 1 end if nF ~= postF or nC ~= postC then ch = true end end
     end
-    local stableF, stableS = {}, {}
-    for c in pairs(fS) do stableF[c] = true end
-    for c in pairs(sS) do stableS[c] = true end
-    if state.cells.toFlag ~= stableF or state.cells.toClear ~= stableS then state.dirtyFlag = true end
-    state.cells.toFlag, state.cells.toClear = stableF, stableS
+    local changed = false
+    local newF, lastF = {}, state.cells.toFlag
+    for c in pairs(fS) do newF[c] = true if not lastF[c] then changed = true end end
+    if not changed then for c in pairs(lastF) do if not fS[c] then changed = true break end end end
+    local newS, lastS = {}, state.cells.toClear
+    if not changed then
+        for c in pairs(sS) do newS[c] = true if not lastS[c] then changed = true end end
+        if not changed then for c in pairs(lastS) do if not sS[c] then changed = true break end end end
+    else
+        for c in pairs(sS) do newS[c] = true end
+    end
+    if changed then state.cells.toFlag, state.cells.toClear, state.dirtyFlag = newF, newS, true end
 end
 local function updateG()
     state.bestGuessCell = nil if not config.GuessHelper or state.grid.w == 0 then return end
@@ -232,8 +239,7 @@ local function updateG()
             if not bestS or s < bestS then bestS, bestC = s, c end
         end
     end end end
-    if state.bestGuessCell ~= bestC then state.dirtyFlag = true end
-    state.bestGuessCell = bestC
+    if state.bestGuessCell ~= bestC then state.bestGuessCell, state.dirtyFlag = bestC, true end
 end
 local function applyH(c, col)
     if not c.borders then
@@ -272,7 +278,7 @@ local function updateH()
     end end end
 end
 theme.BuiltInThemes["Default"][2] = { BackgroundColor = "16293a", MainColor = "26445f", AccentColor = "5983a0", OutlineColor = "325573", FontColor = "d2dae1" }
-local win = lib:CreateWindow({ Title = "Axis Hub -\nMinesweeper.lua", Footer = "by RwalDev & Plow | 1.9.0", NotifySide = "Right", ShowCustomCursor = true })
+local win = lib:CreateWindow({ Title = "Axis Hub -\nMinesweeper.lua", Footer = "by RwalDev & Plow | 1.9.1", NotifySide = "Right", ShowCustomCursor = true })
 local h, m, s = win:AddTab("Home", "house"), win:AddTab("Main", "target"), win:AddTab("Settings", "settings")
 local status = h:AddLeftGroupbox("Status") status:AddLabel(string.format("Welcome, %s\nGame: Minesweeper", lp.DisplayName), true) status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 local perf = h:AddRightGroupbox("Performance") local fpsL, pingL = perf:AddLabel("FPS: ...", true), perf:AddLabel("Ping: ...", true)
