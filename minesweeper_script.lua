@@ -53,27 +53,26 @@ local function updateS(folder)
     state.cells.numbered = {} local grid = state.cells.grid if state.grid.w == 0 or not grid then return end
     for x = 0, state.grid.w - 1 do local col = grid[x] if col then for z = 0, state.grid.h - 1 do
         local c = col[z] local p = c and c.part
-        if p and c.covered then
-            local ng = c._ng or p:FindFirstChild("NumberGui")
+        if p then
+            local ng = c._ng or p:FindFirstChildWhichIsA("SurfaceGui") or p:FindFirstChildWhichIsA("BillboardGui")
             if ng then 
-                c._ng = ng local lbl = c._tl or ng:FindFirstChild("TextLabel") 
-                if lbl then 
-                    c._tl = lbl local t = lbl.Text 
-                    if t ~= "" then 
-                        local n = tonumber(t) 
-                        if n then c.number, c.covered, c.state = n, false, "number" end 
-                    end 
-                end 
+                c._ng = ng local l = c._tl or ng:FindFirstChildWhichIsA("TextLabel")
+                if l then 
+                    c._tl = l local t = l.Text
+                    local n = tonumber(t)
+                    if n then c.number, c.covered, c.state = n, false, "number"
+                    elseif t ~= "" and t ~= " " then c.covered, c.state = false, "empty" c.number = 0 end
+                end
             end
             if c.covered then 
                 local cl = p.Color local r, g, b = cl.R*255, cl.G*255, cl.B*255 
-                local avg = (r + g + b) / 3
-                if avg > 165 and abs(r-avg) < 20 and abs(g-avg) < 20 and abs(b-avg) < 20 then c.covered = false end
+                local av = (r + g + b) / 3
+                if av > 165 and abs(r-av) < 20 and abs(g-av) < 20 and abs(b-av) < 20 then c.covered, c.state, c.number = false, "empty", 0 end
             end
             if c.covered and hasF(p) then c.state = "flagged" end
             c.isWrongFlag = false
         end
-        if c.state == "number" then tinsert(state.cells.numbered, c) end
+        if not c.covered and (c.state == "number" or c.state == "empty") then tinsert(state.cells.numbered, c) end
     end end end
 end
 local function countR(c, fS) local r = c.number or 0 for _, n in ipairs(c.neigh) do if fS[n] then r = r - 1 end end return r end
@@ -258,10 +257,10 @@ local function updateL()
             local unk, flg = {}, 0 for _, n in ipairs(c.neigh) do if fS[n] then flg = flg + 1 elseif not sS[n] and isE(n) then tinsert(unk, n) end end
             local r = (c.number or 0) - flg
             if r > 0 and r == #unk then for _, u in ipairs(unk) do if not fS[u] then fS[u] = true ch = true end end
-            elseif r == 0 and #unk > 0 then for _, u in ipairs(unk) do if not sS[u] then sS[u] = true ch = true end end end
+            elseif r <= 0 and #unk > 0 then for _, u in ipairs(unk) do if not sS[u] then sS[u] = true ch = true end end end
         end
         local pF, pC = 0, 0 for _ in pairs(fS) do pF = pF + 1 end for _ in pairs(sS) do pC = pC + 1 end
-        for _, c in ipairs(num) do for _, n in ipairs(c.neigh) do if n.state == "number" then local uT, uA = {}, {} for _, nn in ipairs(c.neigh) do if not fS[nn] and not sS[nn] and isE(nn) then tinsert(uT, nn) end end for _, nn in ipairs(n.neigh) do if not fS[nn] and not sS[nn] and isE(nn) then tinsert(uA, nn) end end if #uT > 0 and #uA > 0 then applyS(c, n, uT, uA, fS, sS) end end end end
+        for _, c in ipairs(num) do for _, n in ipairs(c.neigh) do if n.state == "number" or n.state == "empty" then local uT, uA = {}, {} for _, nn in ipairs(c.neigh) do if not fS[nn] and not sS[nn] and isE(nn) then tinsert(uT, nn) end end for _, nn in ipairs(n.neigh) do if not fS[nn] and not sS[nn] and isE(nn) then tinsert(uA, nn) end end if #uT > 0 and #uA > 0 then applyS(c, n, uT, uA, fS, sS) end end end end
         local postF, postC = 0, 0 for _ in pairs(fS) do postF = postF + 1 end for _ in pairs(sS) do postC = postC + 1 end
         if postF ~= pF or postC ~= pC then ch = true end
         if not ch then solveCSP(fS, sS) local nF, nC = 0, 0 for _ in pairs(fS) do nF = nF + 1 end for _ in pairs(sS) do nC = nC + 1 end if nF ~= postF or nC ~= postC then ch = true end end
