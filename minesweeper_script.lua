@@ -135,7 +135,7 @@ local function solveCSP(fS, sS)
                 end
             end
         end
-        if nV <= 24 then
+        if nV <= 22 then
             for m = 0, 2^nV - 1 do
                 local ok = true for j = 1, #cons do local s = 0 for _, vi in ipairs(cons[j].v) do if bit32.extract(m, vi-1) == 1 then s = s + 1 end end if s ~= cons[j].r then ok = false break end end
                 if ok then solC = solC + 1 local ms = 0 for j = 1, nV do if bit32.extract(m, j-1) == 1 then ms = ms + 1 cCts[j][ms] = (cCts[j][ms] or 0) + 1 end end cts[ms] = (cts[ms] or 0) + 1 end
@@ -147,10 +147,10 @@ local function solveCSP(fS, sS)
     if #cD > 0 then
         if config.TotalMines then
             local kF, tU, grid = 0, 0, state.cells.grid
-            for x = 0, state.grid.w - 1 do if grid[x] then for z = 0, state.grid.h - 1 do local c = grid[x][z] if c then if fS[c] then kF = kF + 1 elseif isE(c) and not sS[c] then tU = tU + 1 end end end end end
+            for x = 0, state.grid.w - 1 do if grid[x] then for z = 0, state.grid.h - 1 do local c = grid[x][z] if c then if c.state == "flagged" or fS[c] then kF = kF + 1 elseif isE(c) and not sS[c] then tU = tU + 1 end end end end end
             local tM, sl = config.TotalMines - kF, max(0, tU - tCV)
             local lnF = { [0] = 0 }
-            for j = 1, max(tM, sl) do lnF[j] = lnF[j-1] + math.log(j) end
+            for j = 1, max(tM, sl) + 1 do lnF[j] = lnF[j-1] + math.log(j) end
             local function nCr(n, r) if r < 0 or r > n then return 0 end return math.exp(lnF[n] - lnF[r] - lnF[n-r]) end
             local dp = { [0] = 1 }
             for i = 1, #cD do
@@ -198,10 +198,10 @@ local function solveCSP(fS, sS)
                         end
                         v._prob = mP / totW
                         local p = v._prob
-                        v._ent = (p > 1e-6 and p < (1 - 1e-6)) and -(p * math.log(p) + (1-p) * math.log(1-p)) or 0
-                        if not d.abrt and d.total < 1000000 then
-                            if abs(mP - totW) < 1e-13 then fS[v] = true 
-                            elseif mP < 1e-13 then sS[v] = true if v.state == "flagged" then v.isWrongFlag = true end end
+                        v._ent = (p > 1e-6 and p < (1-1e-6)) and -(p*math.log(p) + (1-p)*math.log(1-p)) or 0
+                        if not d.abrt then
+                            if abs(mP - totW) < (totW * 1e-11) then fS[v] = true 
+                            elseif mP < (totW * 1e-11) then sS[v] = true if v.state == "flagged" then v.isWrongFlag = true end end
                         end
                     end
                 end
@@ -209,7 +209,7 @@ local function solveCSP(fS, sS)
                 for fs, fw in pairs(fW) do if tM > fs then slP = slP + fw * (tM - fs) / sl end end
                 state._slProb = sl == 0 and 0 or (slP / totW)
                 local sp = state._slProb
-                state._slEnt = (sp > 1e-6 and sp < (1 - 1e-6)) and -(sp * math.log(sp) + (1-sp) * math.log(1-sp)) or 0
+                state._slEnt = (sp > 1e-6 and sp < (1-1e-6)) and -(sp*math.log(sp) + (1-sp)*math.log(1-sp)) or 0
             end
         else
             for i = 1, #cD do
@@ -219,10 +219,8 @@ local function solveCSP(fS, sS)
                     local mC = 0 for k, c in pairs(d.cts) do mC = mC + (d.ccts[vi][k] or 0) end
                     v._prob = mC / d.total
                     local p = v._prob
-                    v._ent = (p > 1e-6 and p < (1 - 1e-6)) and -(p * math.log(p) + (1-p) * math.log(1-p)) or 0
-                    if not d.abrt and d.total < 1000000 then
-                        if abs(mC - d.total) < 1e-6 then fS[v] = true elseif mC < 1e-6 then sS[v] = true end
-                    end
+                    v._ent = (p > 1e-6 and p < (1-1e-6)) and -(p*math.log(p) + (1-p)*math.log(1-p)) or 0
+                    if not d.abrt then if abs(mC - d.total) < 1e-6 then fS[v] = true elseif mC < 1e-6 then sS[v] = true end end
                 end
             end
         end
