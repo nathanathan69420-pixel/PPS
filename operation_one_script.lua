@@ -79,7 +79,6 @@ local config = win:AddTab("Settings", "settings")
 
 local status = home:AddLeftGroupbox("Status")
 local visuals = main:AddLeftGroupbox("Visuals")
-local tri = main:AddRightGroupbox("Triggerbot")
 local cfgBox = config:AddLeftGroupbox("Config")
 
 status:AddLabel(string.format("Welcome, %s\nGame: Operation One", lp.DisplayName), true)
@@ -103,9 +102,6 @@ visuals:AddToggle("NameESP", { Text = "Name", Default = true }):AddKeyPicker("Na
 visuals:AddToggle("DroneESP", { Text = "Drone ESP", Default = true }):AddKeyPicker("DroneKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Drone" })
 visuals:AddToggle("DroneOutline", { Text = "Drone Outline", Default = true })
 visuals:AddToggle("Chams", { Text = "Chams", Default = false }):AddKeyPicker("ChamsKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Chams" }):AddColorPicker("ChamsColor", { Default = Color3.fromRGB(255, 50, 50), Title = "Chams Color" })
-
-tri:AddToggle("Triggerbot", { Text = "Triggerbot", Default = false }):AddKeyPicker("TriggerKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Triggerbot" })
-tri:AddSlider("TriggerDelay", { Text = "Delay", Default = 0, Min = 0, Max = 1, Rounding = 1 })
 
 local tracerType = 1
 local Toggles = lib.Toggles
@@ -376,29 +372,7 @@ plrs.PlayerRemoving:Connect(function(plr) removeplr(plr.Name) end)
 plrs.PlayerAdded:Connect(function(plr) plr.CharacterAdded:Connect(function() charhook(plr) end) end)
 for _, plr in ipairs(plrs:GetPlayers()) do if plr.Character then charhook(plr) end end
 
-local function checkE(obj)
-    if not obj then return nil end
-    local p = obj:FindFirstAncestorOfClass("Model")
-    if p then
-        local h = p:FindFirstChildOfClass("Humanoid")
-        if h and h.Health > 0 and plrs:GetPlayerFromCharacter(p) and plrs:GetPlayerFromCharacter(p).Team ~= lp.Team then return p end
-    end
-    return nil
-end
-
-local lastT = 0
 local mainLoop = rs.RenderStepped:Connect(function()
-    if Toggles.Triggerbot and Toggles.Triggerbot.Value then
-        local now = tick()
-        if now - lastT >= Options.TriggerDelay.Value then
-            local r = cam:ViewportPointToRay(screensize.X/2, screensize.Y/2)
-            local res = workspace:Raycast(r.Origin, r.Direction * 1000)
-            if res and res.Instance and checkE(res.Instance) then
-                if mouse1click then mouse1click() else game:GetService("VirtualInputManager"):SendMouseButtonEvent(screensize.X/2, screensize.Y/2, 0, true, game, 0) task.wait() game:GetService("VirtualInputManager"):SendMouseButtonEvent(screensize.X/2, screensize.Y/2, 0, false, game, 0) end
-                lastT = now
-            end
-        end
-    end
     local espOn = Toggles.ESPEnabled and Toggles.ESPEnabled.Value
 
     local enemies, drones = getenemies()
