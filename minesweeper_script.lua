@@ -123,27 +123,70 @@ local function solveCSP(fS, sS)
         if not abrt and solC > 0 then tinsert(cD, {v = v, cts = cts, ccts = cCts, total = solC}) end
     end
     if #cD > 0 then
-        local valC = {} for i = 1, #cD do local vc = {} for k in pairs(cD[i].cts) do vc[k] = true end valC[i] = vc end
         if config.TotalMines then
             local kF, tU, grid = 0, 0, state.cells.grid
             for x = 0, state.grid.w - 1 do if grid[x] then for z = 0, state.grid.h - 1 do local c = grid[x][z] if c then if fS[c] then kF = kF + 1 elseif isE(c) and not sS[c] then tU = tU + 1 end end end end end
-            local tM, sl, dp = config.TotalMines - kF, max(0, tU - tCV), { [0] = true }
-            for i = 1, #cD do local nD, d = {}, cD[i] for s in pairs(dp) do for k in pairs(d.cts) do local ns = s + k if ns <= tM then nD[ns] = true end end end dp = nD end
-            local fVS = {} for s in pairs(dp) do if s + sl >= tM and s <= tM then fVS[s] = true end end
-            local pC = {} for i = 1, #cD do pC[i] = {} end
-            local function pr(idx, s)
-                if idx > #cD then return fVS[s] == true end
-                local d, ok = cD[idx], false for k in pairs(d.cts) do if pr(idx + 1, s + k) then pC[idx][k], ok = true, true end end return ok
+            local tM, sl = config.TotalMines - kF, max(0, tU - tCV)
+            local dp = { [0] = 1 }
+            local function nCr(n, r) if r < 0 or r > n then return 0 end local res = 1 for j = 1, r do res = res * (n - j + 1) / j end return res end
+            for i = 1, #cD do
+                local nD, d = {}, cD[i]
+                for s, ways in pairs(dp) do
+                    for k, count in pairs(d.cts) do
+                        local ns = s + k
+                        if ns <= tM then nD[ns] = (nD[ns] or 0) + ways * count end
+                    end
+                end
+                dp = nD
             end
-            if pr(1, 0) then valC = pC end
-        end
-        for i = 1, #cD do
-            local d, tVS, vc = cD[i], 0, valC[i] for k, c in pairs(d.cts) do if vc[k] then tVS = tVS + c end end
-            if tVS > 0 then
+            local fW = {}
+            for s, ways in pairs(dp) do
+                local rem = tM - s
+                if rem >= 0 and rem <= sl then
+                    fW[s] = ways * nCr(sl, rem)
+                end
+            end
+            local totW = 0 for _, w in pairs(fW) do totW = totW + w end
+            if totW > 0 then
+                for i = 1, #cD do
+                    local d = cD[i]
+                    for vi = 1, #d.v do
+                        local v, mP = d.v[vi], 0
+                        for k, lWays in pairs(d.cts) do
+                            local sSum = 0
+                            for fs, fWays in pairs(fW) do
+                                local nDP = { [0] = 1 }
+                                for j = 1, #cD do
+                                    if i ~= j then
+                                        local tD, nD2 = cD[j], {}
+                                        for ts, tw in pairs(nDP) do for tk, tc in pairs(tD.cts) do local ns = ts + tk if ns <= tM then nD2[ns] = (nD2[ns] or 0) + tw * tc end end end
+                                        nDP = nD2
+                                    end
+                                end
+                                local rem = tM - k
+                                local oW = nDP[fs - k] or 0
+                                if oW > 0 then
+                                    local gW = oW * nCr(sl, tM - fs)
+                                    if gW > 0 then mP = mP + (d.ccts[vi][k] or 0) * gW end
+                                end
+                            end
+                        end
+                        v._prob = mP / totW
+                        if v._prob > 0.9999 then fS[v] = true elseif v._prob < 0.0001 then sS[v] = true if v.state == "flagged" then v.isWrongFlag = true end end
+                    end
+                end
+                local slP = 0
+                for fs, fw in pairs(fW) do if tM > fs then slP = slP + fw * (tM - fs) / sl end end
+                state._slProb = sl == 0 and 0 or (slP / totW)
+            end
+        else
+            for i = 1, #cD do
+                local d = cD[i]
                 for vi = 1, #d.v do
-                    local v, mC = d.v[vi], 0 for k in pairs(vc) do mC = mC + (d.ccts[vi][k] or 0) end
-                    if mC == tVS then fS[v] = true elseif mC == 0 then sS[v] = true if v.state == "flagged" then v.isWrongFlag = true end end
-                    v._prob = mC / tVS
+                    local v = d.v[vi]
+                    local mC = 0 for k, c in pairs(d.cts) do mC = mC + (d.ccts[vi][k] or 0) end
+                    v._prob = mC / d.total
+                    if v._prob > 0.9999 then fS[v] = true elseif v._prob < 0.0001 then sS[v] = true end
                 end
             end
         end
@@ -195,12 +238,12 @@ local function updateG()
     local bestC, bestS = nil, nil
     for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do
         local c = col[z] if c and c.part and isE(c) and not hasF(c.part) and not state.cells.toFlag[c] and not state.cells.toClear[c] then
-            local pb = c._prob
-            if not pb then
-                local vC, pS, hasN = 0, 0, false
-                for _, n in ipairs(c.neigh) do if n.state == "number" and n.number and n.number > 0 then hasN = true local fs, lu = 0, 0 for _, nn in ipairs(n.neigh) do if (nn.part and hasF(nn.part)) or state.cells.toFlag[nn] then fs = fs + 1 elseif isE(nn) and not state.cells.toFlag[nn] and not state.cells.toClear[nn] then lu = lu + 1 end end local r = n.number - fs if r <= 0 then vC = vC + 1 elseif lu > 0 then pS = pS + (r/lu) vC = vC + 1 end end end
-                pb = (hasN and vC > 0) and (pS / vC) or gD
-            end
+                local pb = c._prob or state._slProb
+                if not pb then
+                    local vC, pS, hasN = 0, 0, false
+                    for _, n in ipairs(c.neigh) do if n.state == "number" and n.number and n.number > 0 then hasN = true local fs, lu = 0, 0 for _, nn in ipairs(n.neigh) do if (nn.part and hasF(nn.part)) or state.cells.toFlag[nn] then fs = fs + 1 elseif isE(nn) and not state.cells.toFlag[nn] and not state.cells.toClear[nn] then lu = lu + 1 end end local r = n.number - fs if r <= 0 then vC = vC + 1 elseif lu > 0 then pS = pS + (r/lu) vC = vC + 1 end end end
+                    pb = (hasN and vC > 0) and (pS / vC) or gD
+                end
             local s = pb + ((x == 0 or x == state.grid.w-1 or z == 0 or z == state.grid.h-1) and config.EdgePenalty or 0)
             local uN = 0 for _, n in ipairs(c.neigh) do if isE(n) and not state.cells.toFlag[n] and not state.cells.toClear[n] then uN = uN + 1 end end
             s = s - (uN * 0.005) - ( (function() local cN=0 for _,n in ipairs(c.neigh) do if n.state=="number" then cN=cN+1 end end return cN end)() * 0.02 )
