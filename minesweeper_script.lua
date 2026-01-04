@@ -301,9 +301,16 @@ rs.Heartbeat:Connect(function()
     if neb or (now - lastS) >= solveInt then lastS = now updateS(f) updateL() updateG() end
     updateH()
 end)
+local el, fr = 0, 0
 rs.RenderStepped:Connect(function(dt)
-    elap, frames = elap + dt, frames + 1
-    if elap >= 1 then fpsL:SetText("FPS: " .. floor(frames/elap+0.5)) local net = game:GetService("Stats").Network.ServerStatsItem["Data Ping"] pingL:SetText("Ping: " .. (net and floor(net:GetValue()) or 0) .. " ms") frames, elap = 0, 0 end
+    el, fr = el + dt, fr + 1
+    if el >= 0.5 then 
+        local fps = floor(fr / el + 0.5) fpsL:SetText("FPS: " .. fps)
+        local net = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]
+        local png = 0 pcall(function() png = net:GetValue() end)
+        pingL:SetText("Ping: " .. floor(png) .. " ms")
+        el, fr = 0, 0 
+    end
 end)
 theme:SetLibrary(lib) save:SetLibrary(lib) save:IgnoreThemeSettings() save:SetIgnoreIndexes({ "MenuKeybind" })
 theme:SetFolder("PlowsScriptHub") save:SetFolder("PlowsScriptHub/Minesweeper")
