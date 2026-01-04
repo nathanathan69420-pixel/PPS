@@ -51,24 +51,24 @@ local function rebuildG(folder)
     for z = 0, state.grid.h - 1 do for x = 0, state.grid.w - 1 do local c = state.cells.grid[x][z] for dz = -1, 1 do for dx = -1, 1 do if dx ~= 0 or dz ~= 0 then local nx, nz = x + dx, z + dz if nx >= 0 and nx < state.grid.w and nz >= 0 and nz < state.grid.h then tinsert(c.neigh, state.cells.grid[nx][nz]) end end end end end end
 end
 local function updateS(folder)
-    state.cells.numbered = {} local grid = state.cells.grid if state.grid.w == 0 or not grid then return end
+    state.cells.numbered = {} local grid = state.cells.grid if not grid or state.grid.w == 0 then return end
     for x = 0, state.grid.w - 1 do local col = grid[x] if col then for z = 0, state.grid.h - 1 do
-        local c = col[z] local p = c and c.part
-        if p then
-            local ng = c._ng or p:FindFirstChildWhichIsA("SurfaceGui") or p:FindFirstChildWhichIsA("BillboardGui")
-            if ng then 
-                c._ng = ng local l = c._tl or ng:FindFirstChildWhichIsA("TextLabel")
-                if l then 
-                    c._tl = l local t = l.Text
-                    local n = tonumber(t)
+        local c = col[z] local p = c.part if p then
+            if not c._isRef then
+                local ng = p:FindFirstChildWhichIsA("SurfaceGui") or p:FindFirstChildWhichIsA("BillboardGui")
+                if ng then c._ng = ng c._tl = ng:FindFirstChildWhichIsA("TextLabel") end
+                c._isRef = true
+            end
+            local lbl = c._tl
+            if lbl then 
+                local t = lbl.Text if t ~= "" then local n = tonumber(t)
                     if n then c.number, c.covered, c.state = n, false, "number"
-                    elseif t ~= "" and t ~= " " then c.covered, c.state = false, "empty" c.number = 0 end
+                    elseif t ~= " " then c.covered, c.state, c.number = false, "empty", 0 end
                 end
             end
             if c.covered then 
                 local cl = p.Color local r, g, b = cl.R*255, cl.G*255, cl.B*255 
-                local av = (r + g + b) / 3
-                if av > 165 and abs(r-av) < 20 and abs(g-av) < 20 and abs(b-av) < 20 then c.covered, c.state, c.number = false, "empty", 0 end
+                local av = (r + g + b) / 3 if av > 165 and abs(r-av) < 20 and abs(g-av) < 20 and abs(b-av) < 20 then c.covered, c.state, c.number = false, "empty", 0 end
             end
             if hasF(p) then c.state = "flagged" end
             c.isWrongFlag = false
@@ -199,8 +199,8 @@ local function solveCSP(fS, sS)
                         local p = v._prob
                         v._ent = (p > 1e-6 and p < (1 - 1e-6)) and -(p * math.log(p) + (1-p) * math.log(1-p)) or 0
                         if not d.abrt and d.total < 1000000 then
-                            if abs(mP - totW) < (totW * 1e-12) then fS[v] = true 
-                            elseif mP < (totW * 1e-12) then sS[v] = true if v.state == "flagged" then v.isWrongFlag = true end end
+                            if abs(mP - totW) < 1e-14 then fS[v] = true 
+                            elseif mP < 1e-14 then sS[v] = true if v.state == "flagged" then v.isWrongFlag = true end end
                         end
                     end
                 end
