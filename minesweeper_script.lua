@@ -6,7 +6,7 @@ local rs, plrs = game:GetService("RunService"), game:GetService("Players")
 local lp = plrs.LocalPlayer
 local Toggles, Options = lib.Toggles, lib.Options
 local config = { Enabled = false, GuessHelper = true, TotalMines = 25, DistanceWeight = 0.1, EdgePenalty = 0.05 }
-local state = { cells = { grid = {}, numbered = {}, toFlag = {}, toClear = {} }, grid = { w = 0, h = 0 }, lastPartCount = -1, bestGuessCell = nil }
+local state = { cells = { grid = {}, numbered = {}, toFlag = {}, toClear = {} }, grid = { w = 0, h = 0 }, lastPartCount = -1, bestGuessCell = nil, clicked = {} }
 local elap, frames = 0, 0
 local COLOR_SAFE, COLOR_MINE, COLOR_GUESS, COLOR_WRONG = Color3.fromRGB(0, 255, 0), Color3.fromRGB(255, 0, 0), Color3.fromRGB(0, 170, 255), Color3.fromRGB(255, 0, 255)
 local abs, floor, huge, sqrt, max, min = math.abs, math.floor, math.huge, math.sqrt, math.max, math.min
@@ -303,16 +303,19 @@ local function autoFlag()
     if tick() - lastF < d then return end
     local h = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
     if not h then return end
+    local now = tick()
     for c in pairs(state.cells.toFlag) do
-        if c.part and c.state ~= "flagged" and not hasF(c.part) and (c.pos - h.Position).Magnitude <= r then
+        local p = c.part
+        if p and c.state ~= "flagged" and not hasF(p) and not (state.clicked[p] and (now - state.clicked[p]) < 2) and (c.pos - h.Position).Magnitude <= r then
             local sp, on = workspace.CurrentCamera:WorldToViewportPoint(c.pos)
             if on then
                 local vim = game:GetService("VirtualInputManager")
+                state.clicked[p] = now
                 vim:SendMouseMoveEvent(sp.X, sp.Y, game)
                 vim:SendMouseButtonEvent(sp.X, sp.Y, 0, true, game, 0)
                 task.wait()
                 vim:SendMouseButtonEvent(sp.X, sp.Y, 0, false, game, 0)
-                lastF = tick()
+                lastF = now
                 break
             end
         end
