@@ -306,10 +306,21 @@ local function autoFlag()
     for c in pairs(state.cells.toFlag) do
         if c.part and not hasF(c.part) and (c.pos - h.Position).Magnitude <= r then
             local cd = c.part:FindFirstChildWhichIsA("ClickDetector")
-            if cd and fireclickdetector then
-                fireclickdetector(cd, 0)
-                lastF = tick()
-                break
+            if cd then
+                if fireclickdetector then
+                    fireclickdetector(cd, 0)
+                    lastF = tick()
+                    break
+                else
+                    local r = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
+                    local rf = r and r:FindFirstChild("FlagEvents")
+                    local re = rf and rf:FindFirstChild("PlaceFlag")
+                    if re and re:IsA("RemoteEvent") then
+                        re:FireServer(c.part)
+                        lastF = tick()
+                        break
+                    end
+                end
             end
         end
     end
