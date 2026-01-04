@@ -298,6 +298,7 @@ local function updateG()
     end end end
     state.bestGuessCell = bestC
 end
+local lastF = 0
 local function autoFlag()
     if not (Toggles.AutoFlag and Toggles.AutoFlag.Value) then return end
     local r, d, now = Options.FlagRange.Value, Options.FlagDelay.Value, tick()
