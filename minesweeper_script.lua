@@ -97,8 +97,8 @@ local function solveCSP(fS, sS)
         for j = 1, #cons do for _, vi in ipairs(cons[j].v) do tinsert(vT[vi], cons[j]) end end
         local cur, solC, abrt = {}, 0, false
         local function bt(idx)
-            if solC >= 100000 or abrt then return end
-            if (solC % 256 == 0) and (os.clock() - tS > 0.1) then abrt = true return end
+            if solC >= 1000000 or abrt then return end
+            if (solC % 512 == 0) and (os.clock() - tS > 0.1) then abrt = true return end
             if idx > nV then
                 solC = solC + 1 local ms = 0 for j = 1, nV do ms = ms + cur[j] end
                 cts[ms] = (cts[ms] or 0) + 1
@@ -107,10 +107,16 @@ local function solveCSP(fS, sS)
             end
             for val = 0, 1 do
                 local ok = true
-                for j = 1, #vT[idx] do local c = vT[idx][j] local ns = c.cur + val if ns > c.r or (ns + c.un - 1) < c.r then ok = false break end end
+                for j = 1, #vT[idx] do
+                    local c = vT[idx][j]
+                    local ns = c.cur + val
+                    if ns > c.r or (ns + c.un - 1) < c.r then ok = false break end
+                end
                 if ok then
-                    cur[idx] = val for j = 1, #vT[idx] do local c = vT[idx][j] c.cur, c.un = c.cur + val, c.un - 1 end
-                    bt(idx + 1) if abrt then return end
+                    cur[idx] = val
+                    for j = 1, #vT[idx] do local c = vT[idx][j] c.cur, c.un = c.cur + val, c.un - 1 end
+                    bt(idx + 1)
+                    if abrt then return end
                     for j = 1, #vT[idx] do local c = vT[idx][j] c.cur, c.un = c.cur - val, c.un + 1 end
                 end
             end
@@ -128,8 +134,10 @@ local function solveCSP(fS, sS)
             local kF, tU, grid = 0, 0, state.cells.grid
             for x = 0, state.grid.w - 1 do if grid[x] then for z = 0, state.grid.h - 1 do local c = grid[x][z] if c then if fS[c] then kF = kF + 1 elseif isE(c) and not sS[c] then tU = tU + 1 end end end end end
             local tM, sl = config.TotalMines - kF, max(0, tU - tCV)
+            local lnF = { [0] = 0 }
+            for j = 1, max(tM, sl) do lnF[j] = lnF[j-1] + math.log(j) end
+            local function nCr(n, r) if r < 0 or r > n then return 0 end return math.exp(lnF[n] - lnF[r] - lnF[n-r]) end
             local dp = { [0] = 1 }
-            local function nCr(n, r) if r < 0 or r > n then return 0 end local res = 1 for j = 1, r do res = res * (n - j + 1) / j end return res end
             for i = 1, #cD do
                 local nD, d = {}, cD[i]
                 for s, ways in pairs(dp) do
@@ -176,7 +184,9 @@ local function solveCSP(fS, sS)
                             mP = mP + c * sK
                         end
                         v._prob = mP / totW
-                        if not d.abrt and d.total < 100000 then
+                        local p = v._prob
+                        v._ent = (p > 0 and p < 1) and -(p * math.log(p) + (1-p) * math.log(1-p)) or 0
+                        if not d.abrt and d.total < 1000000 then
                             if v._prob > 0.9999 then fS[v] = true elseif v._prob < 0.0001 then sS[v] = true if v.state == "flagged" then v.isWrongFlag = true end end
                         end
                     end
@@ -184,6 +194,8 @@ local function solveCSP(fS, sS)
                 local slP = 0
                 for fs, fw in pairs(fW) do if tM > fs then slP = slP + fw * (tM - fs) / sl end end
                 state._slProb = sl == 0 and 0 or (slP / totW)
+                local sp = state._slProb
+                state._slEnt = (sp > 0 and sp < 1) and -(sp * math.log(sp) + (1-sp) * math.log(1-sp)) or 0
             end
         else
             for i = 1, #cD do
@@ -192,7 +204,9 @@ local function solveCSP(fS, sS)
                     local v = d.v[vi]
                     local mC = 0 for k, c in pairs(d.cts) do mC = mC + (d.ccts[vi][k] or 0) end
                     v._prob = mC / d.total
-                    if not d.abrt and d.total < 100000 then
+                    local p = v._prob
+                    v._ent = (p > 0 and p < 1) and -(p * math.log(p) + (1-p) * math.log(1-p)) or 0
+                    if not d.abrt and d.total < 1000000 then
                         if v._prob > 0.9999 then fS[v] = true elseif v._prob < 0.0001 then sS[v] = true end
                     end
                 end
@@ -252,15 +266,16 @@ local function updateG()
     for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do
         local c = col[z] if c and c.part and isE(c) and not hasF(c.part) and not state.cells.toFlag[c] and not state.cells.toClear[c] then
                 local pb = c._prob or state._slProb
+                local ent = c._ent or state._slEnt or 0
                 if not pb then
                     local vC, pS, hasN = 0, 0, false
                     for _, n in ipairs(c.neigh) do if n.state == "number" and n.number and n.number > 0 then hasN = true local fs, lu = 0, 0 for _, nn in ipairs(n.neigh) do if (nn.part and hasF(nn.part)) or state.cells.toFlag[nn] then fs = fs + 1 elseif isE(nn) and not state.cells.toFlag[nn] and not state.cells.toClear[nn] then lu = lu + 1 end end local r = n.number - fs if r <= 0 then vC = vC + 1 elseif lu > 0 then pS = pS + (r/lu) vC = vC + 1 end end end
                     pb = (hasN and vC > 0) and (pS / vC) or gD
                 end
-                local s = pb + ((x == 0 or x == state.grid.w-1 or z == 0 or z == state.grid.h-1) and config.EdgePenalty or 0)
+                local s = pb - (ent * 0.05) + ((x == 0 or x == state.grid.w-1 or z == 0 or z == state.grid.h-1) and config.EdgePenalty or 0)
                 local uN = 0 for _, n in ipairs(c.neigh) do if isE(n) and not state.cells.toFlag[n] and not state.cells.toClear[n] then uN = uN + 1 end end
                 local nC = 0 for _, n in ipairs(c.neigh) do if n.state == "number" then nC = nC + 1 end end
-                s = s - (uN * 0.01) - (nC * 0.05)
+                s = s - (uN * 0.01) - (nC * 0.01)
                 local dx, dz = x - state.grid.w/2, z - state.grid.h/2 s = s + (sqrt(dx*dx + dz*dz) / (state.grid.w + state.grid.h)) * 0.02
                 if pP then s = s + ((c.pos - pP).Magnitude / maxD) * config.DistanceWeight end
                 if not bestS or s < bestS then bestS, bestC = s, c end
