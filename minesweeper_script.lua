@@ -23,7 +23,7 @@ end
 local function median(vals) if #vals == 0 then return nil end tsort(vals) return vals[floor((#vals + 1) / 2)] end
 local function estS(coords) if #coords < 3 then return 4 end local d = {} for i = 2, #coords do d[#d+1] = abs(coords[i] - coords[i-1]) end return median(d) or 4 end
 local function findI(t, s) local bI, bD = 1, huge for i = 1, #s do local d = abs(t - s[i]) if d < bD then bD, bI = d, i end end return bI - 1 end
-local function hasF(p) for _, v in ipairs(p:GetChildren()) do if v.Name == "Flag" or v:IsA("Model") or (v:IsA("BasePart") and v.Name ~= "Part") then return true end end return false end
+local function hasF(p) for _, v in ipairs(p:GetChildren()) do if v.Name:lower():find("flag") or (v:IsA("Model") and #v:GetChildren() > 0) then return true end end return false end
 local function isE(c) return c.state ~= "number" and c.covered ~= false end
 local cachedB = nil
 local function scanB()
@@ -200,8 +200,8 @@ local function solveCSP(fS, sS)
                         local p = v._prob
                         v._ent = (p > 1e-6 and p < (1 - 1e-6)) and -(p * math.log(p) + (1-p) * math.log(1-p)) or 0
                         if not d.abrt and d.total < 1000000 then
-                            if abs(mP - totW) < 1e-12 then fS[v] = true 
-                            elseif mP < 1e-12 then sS[v] = true if v.state == "flagged" then v.isWrongFlag = true end end
+                            if abs(mP - totW) < 1e-13 then fS[v] = true 
+                            elseif mP < 1e-13 then sS[v] = true if v.state == "flagged" then v.isWrongFlag = true end end
                         end
                     end
                 end
@@ -304,9 +304,9 @@ local function autoFlag()
     if tick() - lastF < d then return end
     local h = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
     if not h then return end
-    for c in pairs(state.cells.toFlag) do
+    for c, _ in pairs(state.cells.toFlag) do
         local p = c.part
-        if p and c.state ~= "flagged" and not (state.clicked[p] and (now - state.clicked[p]) < 3) and not hasF(p) and (c.pos - h.Position).Magnitude <= r then
+        if p and c.state ~= "flagged" and not (state.clicked[p] and (now - state.clicked[p]) < 2) and not hasF(p) and (c.pos - h.Position).Magnitude <= r then
             local sp, on = workspace.CurrentCamera:WorldToViewportPoint(c.pos)
             if on then
                 local vim = game:GetService("VirtualInputManager")
