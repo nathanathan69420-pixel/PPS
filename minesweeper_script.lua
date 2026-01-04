@@ -9,6 +9,7 @@ local config = { Enabled = false, GuessHelper = true, TotalMines = 25, DistanceW
 local state = { cells = { grid = {}, numbered = {}, toFlag = {}, toClear = {} }, grid = { w = 0, h = 0 }, lastPartCount = -1, bestGuessCell = nil, clicked = {} }
 local elap, frames = 0, 0
 local cS, cM, cG, cW = Color3.fromRGB(0,255,0), Color3.fromRGB(255,0,0), Color3.fromRGB(0,170,255), Color3.fromRGB(255,0,255)
+local lastF = 0
 local abs, floor, huge, sqrt, max, min = math.abs, math.floor, math.huge, math.sqrt, math.max, math.min
 local tsort, tinsert, tremove = table.sort, table.insert, table.remove
 local function cluster(vals, d) 
@@ -298,7 +299,6 @@ local function updateG()
     end end end
     state.bestGuessCell = bestC
 end
-local lastF = 0
 local function autoFlag()
     if not (Toggles.AutoFlag and Toggles.AutoFlag.Value) then return end
     local r, d, now = Options.FlagRange.Value, Options.FlagDelay.Value, tick()
@@ -386,11 +386,6 @@ rs.Heartbeat:Connect(function()
     local pL, now = f:GetChildren(), tick()
     local pc = #pL
     local neb = abs(pc - state.lastPartCount) > 10
-    if not neb then
-        local curUnc = 0 for i=1,pc do if not pL[i]:FindFirstChildWhichIsA("SurfaceGui") and not pL[i]:FindFirstChildWhichIsA("BillboardGui") then curUnc = curUnc + 1 end end
-        if curUnc > lastUnc + 10 then neb = true end
-        lastUnc = curUnc
-    end
     if neb then clearB() state.lastPartCount = pc rebuildG(f) end
     if state.grid.w == 0 then return end
     if neb or (now - lastS) >= solveInt then 
