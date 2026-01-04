@@ -6,14 +6,12 @@ local rs, plrs = game:GetService("RunService"), game:GetService("Players")
 local lp = plrs.LocalPlayer
 local Toggles, Options = lib.Toggles, lib.Options
 local config = { Enabled = false, GuessHelper = true, TotalMines = 25, DistanceWeight = 0.1, EdgePenalty = 0.05 }
-local state = { cells = { grid = {}, numbered = {}, toFlag = {}, toClear = {} }, grid = { w = 0, h = 0 }, lastPartCount = -1, bestGuessCell = nil, dirtyFlag = true }
+local state = { cells = { grid = {}, numbered = {}, toFlag = {}, toClear = {} }, grid = { w = 0, h = 0 }, lastPartCount = -1, bestGuessCell = nil, dirtyFlag = true, lock = {} }
 local COLOR_SAFE, COLOR_MINE, COLOR_GUESS, COLOR_WRONG = Color3.fromRGB(0, 255, 0), Color3.fromRGB(255, 0, 0), Color3.fromRGB(0, 170, 255), Color3.fromRGB(255, 0, 255)
 local abs, floor, huge, sqrt, max, min, clock = math.abs, math.floor, math.huge, math.sqrt, math.max, math.min, os.clock
 local tsort, tinsert, tremove = table.sort, table.insert, table.remove
 local bit_extract = bit32.extract
-local vec3 = Vector3.new
-local cfnew = CFrame.new
-local inst = Instance.new
+local vec3, cfnew, inst = Vector3.new, CFrame.new, Instance.new
 local function cluster(vals, d) 
     local res = {} if #vals == 0 then return res end 
     local cur, count = vals[1], 1 
@@ -66,9 +64,9 @@ local function countR(c, fS) local r = c.number or 0 local n = c.neigh for j = 1
 local function getC(num, fS, sS)
     local bds, map = {}, {}
     for j = 1, #num do
-        local nc = num[j] local r, ns, n = nc.number or 0, {}, nc.neigh
-        for k = 1, #n do local t = n[k] if fS[t] then r = r - 1 elseif t.state ~= "number" and t.covered ~= false and not sS[t] then tinsert(ns, t) if not map[t] then map[t] = true tinsert(bds, t) end end end
-        nc._cr, nc._cn = r, ns
+        local nc = num[j] local r, ns, n = nc._cr, {}, nc.neigh
+        for k = 1, #n do local t = n[k] if not fS[t] and t.state ~= "number" and t.covered ~= false and not sS[t] then tinsert(ns, t) if not map[t] then map[t] = true tinsert(bds, t) end end end
+        nc._cn = ns
     end
     local adj = {} for j = 1, #bds do adj[bds[j]] = {} end
     for j = 1, #num do local ns = num[j]._cn for i = 1, #ns do for k = i+1, #ns do local u, v = ns[i], ns[k] adj[u][v], adj[v][u] = true, true end end end
@@ -87,12 +85,13 @@ local function getC(num, fS, sS)
 end
 local function solveCSP(fS, sS)
     local num, tS = state.cells.numbered, clock()
+    for j = 1, #num do local nc = num[j] local r, n = nc.number or 0, nc.neigh for k = 1, #n do if fS[n[k]] then r = r - 1 end end nc._cr = r end
     local comps = getC(num, fS, sS) if #comps == 0 then return end
     local cD, tCV = {}, 0
     for i = 1, #comps do
         local v = comps[i] local nV = #v if nV == 0 then continue end
         local deg = {} for j = 1, nV do deg[v[j]] = 0 end tCV = tCV + nV
-        for j = 1, #num do local nc = num[j] local n = nc._cn for k = 1, #n do if deg[n[k]] then deg[n[k]] = deg[n[k]] + 1 end end end
+        for j = 1, #num do local n = num[j]._cn for k = 1, #n do if deg[n[k]] then deg[n[k]] = deg[n[k]] + 1 end end end
         tsort(v, function(a, b) return deg[a] > deg[b] end)
         if clock() - tS > 0.08 then break end
         local map, cts, cCts = {}, {}, {} for j = 1, nV do map[v[j]], cCts[j] = j, {} end
@@ -198,8 +197,11 @@ local function updateL()
         if postF ~= pF or postC ~= pC then ch = true end
         if not ch then solveCSP(fS, sS) local nF, nC = 0, 0 for _ in pairs(fS) do nF = nF + 1 end for _ in pairs(sS) do nC = nC + 1 end if nF ~= postF or nC ~= postC then ch = true end end
     end
-    if state.cells.toFlag ~= fS or state.cells.toClear ~= sS then state.dirtyFlag = true end
-    state.cells.toFlag, state.cells.toClear = fS, sS
+    local stableF, stableS = {}, {}
+    for c in pairs(fS) do stableF[c] = true end
+    for c in pairs(sS) do stableS[c] = true end
+    if state.cells.toFlag ~= stableF or state.cells.toClear ~= stableS then state.dirtyFlag = true end
+    state.cells.toFlag, state.cells.toClear = stableF, stableS
 end
 local function updateG()
     state.bestGuessCell = nil if not config.GuessHelper or state.grid.w == 0 then return end
@@ -270,7 +272,7 @@ local function updateH()
     end end end
 end
 theme.BuiltInThemes["Default"][2] = { BackgroundColor = "16293a", MainColor = "26445f", AccentColor = "5983a0", OutlineColor = "325573", FontColor = "d2dae1" }
-local win = lib:CreateWindow({ Title = "Axis Hub -\nMinesweeper.lua", Footer = "by RwalDev & Plow | 1.8.9", NotifySide = "Right", ShowCustomCursor = true })
+local win = lib:CreateWindow({ Title = "Axis Hub -\nMinesweeper.lua", Footer = "by RwalDev & Plow | 1.9.0", NotifySide = "Right", ShowCustomCursor = true })
 local h, m, s = win:AddTab("Home", "house"), win:AddTab("Main", "target"), win:AddTab("Settings", "settings")
 local status = h:AddLeftGroupbox("Status") status:AddLabel(string.format("Welcome, %s\nGame: Minesweeper", lp.DisplayName), true) status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 local perf = h:AddRightGroupbox("Performance") local fpsL, pingL = perf:AddLabel("FPS: ...", true), perf:AddLabel("Ping: ...", true)
