@@ -36,8 +36,8 @@ local function clearB()
     if not state.cells.grid then return end
     for x = 0, state.grid.w - 1 do local col = state.cells.grid[x] if col then for z = 0, state.grid.h - 1 do local c = col[z] if c then if c.borders then for _, b in pairs(c.borders) do b:Destroy() end c.borders = nil end c.isHighlightedMine, c.isHighlightedSafe, c.isHighlightedGuess, c.isWrongFlag = false, false, false, false end end end end
 end
-local function rebuildG(folder)
     clearB() state.cells.grid, state.grid.w, state.grid.h = {}, 0, 0
+    state.cells.toFlag, state.cells.toClear, state.cells.numbered = {}, {}, {}
     state.clicked = {}
     local pts = folder:GetChildren() if #pts == 0 then return end
     local pD, sY = {}, 0
@@ -245,12 +245,12 @@ end
 local function updateL()
     if state.grid.w == 0 then state.cells.toFlag, state.cells.toClear = {}, {} return end
     local num = state.cells.numbered if #num == 0 then return end
-    local fS, sS = state.cells.toFlag, state.cells.toClear
+    local fS, sS = {}, {} 
+    state.cells.toFlag, state.cells.toClear = fS, sS
     local ch, it, tO = true, 0, os.clock()
     for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do local c=col[z] if c then 
         c._prob = nil 
         if c.state == "flagged" then fS[c] = true end
-        if not c.covered or c.state == "number" or c.state == "empty" then fS[c], sS[c] = nil, nil end
     end end end end
     while ch and it < 64 do
         ch, it = false, it + 1
@@ -297,29 +297,33 @@ local function updateG()
     end end end
     state.bestGuessCell = bestC
 end
-local lastF = 0
 local function autoFlag()
     if not (Toggles.AutoFlag and Toggles.AutoFlag.Value) then return end
     local r, d, now = Options.FlagRange.Value, Options.FlagDelay.Value, tick()
     if now - lastF < d then return end
     local h = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
     if not h then return end
+    local targets, count = {}, 0
     for c, _ in pairs(state.cells.toFlag) do
         local p = c.part
         if p and not hasF(p) and not (state.clicked[p] and (now - state.clicked[p]) < 3) and (c.pos - h.Position).Magnitude <= r then
-            local sp, on = workspace.CurrentCamera:WorldToViewportPoint(c.pos)
-            if on then
-                local vim = game:GetService("VirtualInputManager")
-                state.clicked[p] = now
-                vim:SendMouseMoveEvent(sp.X, sp.Y, game)
-                vim:SendMouseButtonEvent(sp.X, sp.Y, 0, true, game, 0)
-                task.wait(0.05)
-                vim:SendMouseButtonEvent(sp.X, sp.Y, 0, false, game, 0)
-                lastF = now
-                break
-            end
+            count = count + 1 targets[count] = c
+            if count >= 3 then break end
         end
     end
+    for i = 1, count do
+        local c = targets[i] local p = c.part
+        local sp, on = workspace.CurrentCamera:WorldToViewportPoint(c.pos)
+        if on then
+            local vim = game:GetService("VirtualInputManager")
+            state.clicked[p] = now
+            vim:SendMouseMoveEvent(sp.X, sp.Y, game)
+            vim:SendMouseButtonEvent(sp.X, sp.Y, 0, true, game, 0)
+            task.wait(0.04)
+            vim:SendMouseButtonEvent(sp.X, sp.Y, 0, false, game, 0)
+        end
+    end
+    if count > 0 then lastF = now end
 end
 local function applyH(c, col)
     if not c.borders then
