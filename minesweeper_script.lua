@@ -54,6 +54,7 @@ local function updateS(folder)
     state.cells.numbered = {} local grid = state.cells.grid if not grid or state.grid.w == 0 then return end
     for x = 0, state.grid.w - 1 do local col = grid[x] if col then for z = 0, state.grid.h - 1 do
         local c = col[z] local p = c.part if p then
+            c.state, c.number, c.covered = "unknown", nil, true
             if not c._isRef then
                 local ng = p:FindFirstChildWhichIsA("SurfaceGui") or p:FindFirstChildWhichIsA("BillboardGui")
                 if ng then c._ng = ng c._tl = ng:FindFirstChildWhichIsA("TextLabel") end
@@ -70,7 +71,7 @@ local function updateS(folder)
                 local cl = p.Color local r, g, b = cl.R*255, cl.G*255, cl.B*255 
                 local av = (r + g + b) / 3 if av > 165 and abs(r-av) < 20 and abs(g-av) < 20 and abs(b-av) < 20 then c.covered, c.state, c.number = false, "empty", 0 end
             end
-            if hasF(p) then c.state = "flagged" end
+            if hasF(p) then c.state, c.covered = "flagged", true end
             c.isWrongFlag = false
         end
         if not c.covered and (c.state == "number" or c.state == "empty") then tinsert(state.cells.numbered, c) end
@@ -198,7 +199,7 @@ local function solveCSP(fS, sS)
                         v._prob = mP / totW
                         local p = v._prob
                         v._ent = (p > 1e-6 and p < (1 - 1e-6)) and -(p * math.log(p) + (1-p) * math.log(1-p)) or 0
-                        if not d.abrt or d.total >= 1000000 then
+                        if not d.abrt and d.total < 1000000 then
                             if abs(mP - totW) < 1e-12 then fS[v] = true 
                             elseif mP < 1e-12 then sS[v] = true if v.state == "flagged" then v.isWrongFlag = true end end
                         end
