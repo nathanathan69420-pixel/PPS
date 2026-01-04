@@ -53,19 +53,27 @@ local function updateS(folder)
     state.cells.numbered = {} local grid = state.cells.grid if state.grid.w == 0 or not grid then return end
     for x = 0, state.grid.w - 1 do local col = grid[x] if col then for z = 0, state.grid.h - 1 do
         local c = col[z] local p = c and c.part
-        if p then
-            c.state, c.number, c.covered = "unknown", nil, true
+        if p and c.covered then
             local ng = c._ng or p:FindFirstChild("NumberGui")
-            if ng then c._ng = ng local lbl = c._tl or ng:FindFirstChild("TextLabel") if lbl then c._tl = lbl local t = lbl.Text if t ~= "" then local n = tonumber(t) if n then c.number, c.covered, c.state = n, false, "number" tinsert(state.cells.numbered, c) end end end end
+            if ng then 
+                c._ng = ng local lbl = c._tl or ng:FindFirstChild("TextLabel") 
+                if lbl then 
+                    c._tl = lbl local t = lbl.Text 
+                    if t ~= "" then 
+                        local n = tonumber(t) 
+                        if n then c.number, c.covered, c.state = n, false, "number" end 
+                    end 
+                end 
+            end
             if c.covered then 
-                local cl = p.Color 
-                local r, g, b = cl.R*255, cl.G*255, cl.B*255 
+                local cl = p.Color local r, g, b = cl.R*255, cl.G*255, cl.B*255 
                 local avg = (r + g + b) / 3
                 if avg > 165 and abs(r-avg) < 20 and abs(g-avg) < 20 and abs(b-avg) < 20 then c.covered = false end
             end
             if c.covered and hasF(p) then c.state = "flagged" end
             c.isWrongFlag = false
         end
+        if c.state == "number" then tinsert(state.cells.numbered, c) end
     end end end
 end
 local function countR(c, fS) local r = c.number or 0 for _, n in ipairs(c.neigh) do if fS[n] then r = r - 1 end end return r end
@@ -361,8 +369,14 @@ rs.Heartbeat:Connect(function()
     local pc, now = #f:GetChildren(), tick()
     local neb = pc ~= state.lastPartCount if neb then clearB() state.lastPartCount = pc rebuildG(f) end
     if state.grid.w == 0 then return end
-    if neb or (now - lastS) >= solveInt then lastS = now updateS(f) updateL() updateG() end
-    updateH() autoFlag()
+    if neb or (now - lastS) >= solveInt then 
+        lastS = now 
+        updateS(f) 
+        updateL() 
+        updateG() 
+        updateH()
+    end
+    autoFlag()
 end)
 rs.RenderStepped:Connect(function(dt)
     elap, frames = elap + dt, frames + 1
