@@ -157,7 +157,6 @@ local function updateS()
                 local c = col[z]
                 local p = c.part
                 if p then
-                    c.state, c.number, c.covered = "unknown", nil, true
                     local ng = c._ng or p:FindFirstChild("NumberGui")
                     if ng then
                         c._ng = ng
@@ -169,7 +168,6 @@ local function updateS()
                                 local n = tonumber(t)
                                 if n then 
                                     c.number, c.covered, c.state = n, false, "number"
-                                    tinsert(state.cells.numbered, c)
                                 end
                             end
                         end
@@ -181,7 +179,8 @@ local function updateS()
                             c.covered = false
                         end
                     end
-                    if c.covered and hasF(p) then c.state = "flagged" end
+                    if c.covered and hasF(p) then c.state = "flagged" elseif not c.covered and not c.number then c.state = "empty" end
+                    if c.state == "number" then tinsert(state.cells.numbered, c) end
                 end
             end
         end
@@ -271,7 +270,8 @@ local function solveCSP(fS, sS)
                 if ok then solC = solC + 1 local ms = 0 for j = 1, nV do if bit32.extract(m, j-1) == 1 then ms = ms + 1 cCts[j][ms] = (cCts[j][ms] or 0) + 1 end end cts[ms] = (cts[ms] or 0) + 1 end
             end
         else bt(1) end
-        if not abrt and solC > 0 then tinsert(cD, {v = v, cts = cts, ccts = cCts, total = solC}) end
+        if abrt then state.aborted = true end
+        if solC > 0 then tinsert(cD, {v = v, cts = cts, ccts = cCts, total = solC}) end
     end
     if #cD > 0 then
         local valC = {} for i = 1, #cD do local vc = {} for k in pairs(cD[i].cts) do vc[k] = true end valC[i] = vc end
@@ -318,8 +318,12 @@ end
 local function updateL()
     if state.grid.w == 0 then state.cells.toFlag, state.cells.toClear = {}, {} return end
     local num = state.cells.numbered if #num == 0 then return end
-    local hash = "" for _, c in num do hash = hash .. (c.part and c.part.Name or "") .. (c.number or 0) end
-    if state.lastH == hash then return end
+    local hash, uC = "", 0
+    for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do if not col[z].covered then uC += 1 end end end end
+    for _, c in num do hash = hash .. (c.part and c.part.Name or "") .. (c.number or 0) end
+    hash = hash .. uC
+    if state.lastH == hash and not state.aborted then return end
+    state.aborted = false
     local fS, sS, changed, it = {}, {}, true, 0
     for x=0,state.grid.w-1 do local col=state.cells.grid[x] if col then for z=0,state.grid.h-1 do local c=col[z] if c then c._prob = nil c.isWrongFlag = false end end end end
     while changed and it < 64 do
