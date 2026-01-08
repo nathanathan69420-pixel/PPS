@@ -3,17 +3,30 @@ local lib = loadstring(game:HttpGet(repo .. "Library.lua"))()
 local theme = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
 local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
-local function bypass()
+local function stealth()
+    if not getrawmetatable or not setreadonly or not newcclosure then return end
     local g = game
     local lp = g:GetService("Players").LocalPlayer
-    if not getrawmetatable or not setreadonly or not newcclosure or not getnamecallmethod then return end
     local gm = getrawmetatable(g)
     local old_nc = gm.__namecall
+    local old_idx = gm.__index
+
     setreadonly(gm, false)
     gm.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
-        if not checkcaller() and method == "Kick" and self == lp then return nil end
+        if not checkcaller() and (method == "Kick" or method == "kick") and self == lp then return nil end
         return old_nc(self, ...)
+    end)
+    
+    gm.__index = newcclosure(function(self, k)
+        if not checkcaller() and self:IsA("BasePart") and self:IsDescendantOf(workspace) then
+            if k == "Size" and self:FindFirstChild("AxisOriginalSize") then
+                return self.AxisOriginalSize.Value
+            elseif k == "Transparency" and self:FindFirstChild("AxisOriginalTrans") then
+                return self.AxisOriginalTrans.Value
+            end
+        end
+        return old_idx(self, k)
     end)
     setreadonly(gm, true)
 end
@@ -24,27 +37,17 @@ local lp = plrs.LocalPlayer
 local mouse = lp:GetMouse()
 local cam = workspace.CurrentCamera
 
-local ts = lib.Toggles
-local os = lib.Options
+local ts, os = lib.Toggles, lib.Options
 
 theme.BuiltInThemes["Default"][2] = {
-    BackgroundColor = "16293a",
-    MainColor = "26445f",
-    AccentColor = "5983a0",
-    OutlineColor = "325573",
-    FontColor = "d2dae1"
+    BackgroundColor = "16293a", MainColor = "26445f", AccentColor = "5983a0", OutlineColor = "325573", FontColor = "d2dae1"
 }
 
 local win = lib:CreateWindow({
-    Title = "Axis Hub -\nBloxstrike.lua",
-    Footer = "by RwalDev & Plow | 1.8.4",
-    NotifySide = "Right",
-    ShowCustomCursor = true,
+    Title = "Axis Hub -\nBloxstrike.lua", Footer = "by RwalDev & Plow | 1.8.4", NotifySide = "Right", ShowCustomCursor = true,
 })
 
-local hTab = win:AddTab("Home", "house")
-local mTab = win:AddTab("Main", "crosshair")
-local sTab = win:AddTab("Settings", "settings")
+local hTab, mTab, sTab = win:AddTab("Home", "house"), win:AddTab("Main", "crosshair"), win:AddTab("Settings", "settings")
 
 local status = hTab:AddLeftGroupbox("Status")
 local aiming = mTab:AddLeftGroupbox("Aiming")
@@ -61,16 +64,13 @@ aiming:AddSlider("HitboxTransparency", { Text = "Hitbox Transparency", Default =
 aiming:AddSlider("HitboxSize", { Text = "Hitbox Size", Default = 1, Min = 1, Max = 15, Rounding = 0, Compact = true })
 aiming:AddDropdown("Hitboxes", { Values = { "Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "LeftArm", "RightArm", "All" }, Default = "All", Multi = true, Text = "Hitboxes" })
 
-visuals:AddToggle("Chams", { Text = "Chams", Default = false }):AddColorPicker("ChamsColor", { Default = Color3.fromRGB(255, 0, 0), Title = "Chams Color" })
+visuals:AddToggle("Chams", { Text = "Chams", Default = false }):AddColorPicker("ChamsColor", { Default = Color3.fromRGB(0, 170, 255), Title = "Chams Color" })
 visuals:AddToggle("BoxESP", { Text = "Box ESP", Default = false })
 visuals:AddDropdown("BoxType", { Values = { "2D", "3D" }, Default = "2D", Text = "Box Type" })
 visuals:AddToggle("SkeletonESP", { Text = "Skeleton ESP", Default = false })
 visuals:AddToggle("HeadESP", { Text = "Head ESP", Default = false })
 
-local boxes = {}
-local heads = {}
-local originals = {}
-local proxies = {}
+local heads, boxes, cache = {}, {}, {}
 
 local function isEnemy(plr)
     if not plr or plr == lp then return false end
@@ -78,184 +78,122 @@ local function isEnemy(plr)
     return lp.Team ~= plr.Team
 end
 
-local function cleanProxies(part)
-    if proxies[part] then
-        for _, v in pairs(proxies[part]) do if v then v:Destroy() end end
-        proxies[part] = nil
+local function apply(p, sz, trans)
+    if not p:FindFirstChild("AxisOriginalSize") then
+        local v = Instance.new("Vector3Value", p)
+        v.Name = "AxisOriginalSize"
+        v.Value = p.Size
     end
+    if not p:FindFirstChild("AxisOriginalTrans") then
+        local v = Instance.new("NumberValue", p)
+        v.Name = "AxisOriginalTrans"
+        v.Value = p.Transparency
+    end
+    p.Size, p.Transparency = sz, trans
+end
+
+local function reset(p)
+    local s = p:FindFirstChild("AxisOriginalSize")
+    local t = p:FindFirstChild("AxisOriginalTrans")
+    if s then p.Size = s.Value s:Destroy() end
+    if t then p.Transparency = t.Value t:Destroy() end
+    local v = p:FindFirstChild("AxisViz")
+    if v then v:Destroy() end
 end
 
 local function updateHitboxes()
-    local expandEnabled = ts.HitboxExpander.Value
-    local size = os.HitboxSize.Value
-    local transparency = os.HitboxTransparency.Value
-    local selected = os.Hitboxes.Value
-
+    local enabled, size, trans, parts = ts.HitboxExpander.Value, os.HitboxSize.Value, os.HitboxTransparency.Value, os.Hitboxes.Value
     for _, plr in pairs(plrs:GetPlayers()) do
-        if plr ~= lp and plr.Character then
-            local char = plr.Character
-            local enemy = isEnemy(plr)
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            
-            if hum and hum.Health > 0 then
-                for _, p in pairs(char:GetChildren()) do
-                    if p:IsA("BasePart") then
-                        if not originals[p] then originals[p] = { size = p.Size, trans = p.Transparency } end
-                        
-                        local shouldExpand = expandEnabled and enemy and (selected["All"] or selected[p.Name])
-                        
-                        if shouldExpand then
-                            p.Size = Vector3.new(size, size, size)
-                            p.Transparency = 1
-                            p.CanCollide = false
-                            
-                            if not proxies[p] then
-                                local fake = Instance.new("Part")
-                                fake.Name = "AxisFake"
-                                fake.Size = originals[p].size
-                                fake.Color = p.Color
-                                fake.Material = p.Material
-                                fake.CanCollide = false
-                                fake.CanTouch = false
-                                fake.CanQuery = false
-                                fake.Transparency = originals[p].trans
-                                fake.Parent = char
-                                
-                                local weld = Instance.new("WeldConstraint")
-                                weld.Part0 = fake
-                                weld.Part1 = p
-                                weld.Parent = fake
-                                
-                                local viz = Instance.new("Part")
-                                viz.Name = "AxisViz"
-                                viz.Size = p.Size
-                                viz.Shape = p.Shape
-                                viz.Color = Color3.fromRGB(255, 255, 255)
-                                viz.Material = Enum.Material.ForceField
-                                viz.CanCollide = false
-                                viz.CanTouch = false
-                                viz.CanQuery = false
-                                viz.Parent = char
-                                
-                                local weld2 = Instance.new("WeldConstraint")
-                                weld2.Part0 = viz
-                                weld2.Part1 = p
-                                weld2.Parent = viz
-                                
-                                proxies[p] = { fake = fake, viz = viz }
-                            end
-                            
-                            local pData = proxies[p]
-                            pData.viz.Size = p.Size
-                            pData.viz.Transparency = transparency
-                        else
-                            p.Size = originals[p].size
-                            p.Transparency = originals[p].trans
-                            p.CanCollide = true
-                            cleanProxies(p)
+        local enemy = isEnemy(plr)
+        local char = plr.Character
+        if char and enemy then
+            for _, p in pairs(char:GetChildren()) do
+                if p:IsA("BasePart") and (parts["All"] or parts[p.Name]) then
+                    if enabled then
+                        apply(p, Vector3.new(size, size, size), 1)
+                        local viz = p:FindFirstChild("AxisViz")
+                        if not viz then
+                            viz = Instance.new("SelectionBox")
+                            viz.Name = "AxisViz"
+                            viz.LineAlpha = 0
+                            viz.SurfaceColor3 = Color3.new(1, 1, 1)
+                            viz.Adornee = p
+                            viz.Parent = p
                         end
+                        viz.SurfaceAlpha = trans * 0.5
+                    else
+                        reset(p)
                     end
                 end
             end
+        elseif char then
+            for _, p in pairs(char:GetChildren()) do if p:IsA("BasePart") then reset(p) end end
         end
     end
 end
 
-local lastTrigger = 0
-rs.Heartbeat:Connect(function()
-    if ts.Triggerbot.Value and mouse.Target then
-        local target = mouse.Target
-        local model = target:FindFirstAncestorOfClass("Model")
-        local plr = model and plrs:GetPlayerFromCharacter(model)
-        
-        if plr and isEnemy(plr) then
-            local now = tick()
-            if now - lastTrigger >= os.TriggerDelay.Value then
-                mouse1click()
-                lastTrigger = now
-            end
+local lastT = 0
+local loop = rs.Heartbeat:Connect(function()
+    local tbOn = ts.Triggerbot.Value
+    if tbOn and mouse.Target then
+        local m = mouse.Target:FindFirstAncestorOfClass("Model")
+        local p = m and plrs:GetPlayerFromCharacter(m)
+        if p and isEnemy(p) and (tick() - lastT >= os.TriggerDelay.Value) then
+            mouse1click()
+            lastT = tick()
         end
     end
-    
+
     updateHitboxes()
-    
+
     for _, plr in pairs(plrs:GetPlayers()) do
-        if plr ~= lp and plr.Character then
-            local char = plr.Character
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            local head = char:FindFirstChild("Head")
-            local enemy = isEnemy(plr)
-            
-            local cham = char:FindFirstChild("AxisCham")
-            if ts.Chams.Value and enemy and hum and hum.Health > 0 then
+        local char = plr.Character
+        local enemy = isEnemy(plr)
+        if char and enemy and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
+            local cham = char:FindFirstChild("AxisC")
+            if ts.Chams.Value then
                 if not cham then
-                    cham = Instance.new("Highlight")
-                    cham.Name = "AxisCham"
-                    cham.Parent = char
+                    cham = Instance.new("Highlight", char)
+                    cham.Name = "AxisC"
+                    cham.OutlineTransparency = 0
+                    cham.FillTransparency = 0.5
                 end
                 cham.FillColor = os.ChamsColor.Value
-                cham.FillTransparency = 0.5
-                cham.OutlineColor = Color3.new(1, 1, 1)
                 cham.Enabled = true
-            elseif cham then
-                cham.Enabled = false
-            end
+            elseif cham then cham.Enabled = false end
 
             if not heads[plr] then
-                local h = Drawing.new("Circle")
-                h.Thickness = 1
-                h.NumSides = 12
-                h.Radius = 5
-                h.Filled = true
-                heads[plr] = h
+                heads[plr] = Drawing.new("Circle")
+                heads[plr].Thickness, heads[plr].NumSides, heads[plr].Radius, heads[plr].Filled = 1, 12, 5, true
             end
-            
-            local hESP = heads[plr]
-            if ts.HeadESP.Value and enemy and head and hum and hum.Health > 0 then
+            local h, head = heads[plr], char:FindFirstChild("Head")
+            if ts.HeadESP.Value and head then
                 local pos, vis = cam:WorldToViewportPoint(head.Position)
                 if vis then
-                    hESP.Position = Vector2.new(pos.X, pos.Y)
-                    hESP.Color = Color3.new(1, 0, 0)
-                    hESP.Visible = true
-                else
-                    hESP.Visible = false
-                end
-            else
-                hESP.Visible = false
-            end
+                    h.Position, h.Color, h.Visible = Vector2.new(pos.X, pos.Y), Color3.new(1, 0, 0), true
+                else h.Visible = false end
+            else h.Visible = false end
 
             if not boxes[plr] then
-                local b = Drawing.new("Square")
-                b.Thickness = 1
-                b.Filled = false
-                boxes[plr] = b
+                boxes[plr] = Drawing.new("Square")
+                boxes[plr].Thickness, boxes[plr].Filled = 1, false
             end
-            
-            local bESP = boxes[plr]
-            if ts.BoxESP.Value and enemy and hum and hum.Health > 0 then
-                local _, vis = cam:WorldToViewportPoint(char:GetPivot().Position)
-                if vis then
-                    local size, pos = char:GetBoundingBox()
-                    local top, on1 = cam:WorldToViewportPoint((pos * CFrame.new(0, size.Y/2, 0)).Position)
-                    local bottom, on2 = cam:WorldToViewportPoint((pos * CFrame.new(0, -size.Y/2, 0)).Position)
-                    
-                    if on1 and on2 then
-                        local h = math.abs(top.Y - bottom.Y)
-                        local w = h * 0.6
-                        bESP.Size = Vector2.new(w, h)
-                        bESP.Position = Vector2.new(top.X - w/2, top.Y)
-                        bESP.Color = Color3.new(1, 1, 1)
-                        bESP.Visible = true
-                    else
-                        bESP.Visible = false
-                    end
-                else
-                    bESP.Visible = false
-                end
-            else
-                bESP.Visible = false
-            end
+            local b = boxes[plr]
+            if ts.BoxESP.Value then
+                local size, pos = char:GetBoundingBox()
+                local t, on1 = cam:WorldToViewportPoint((pos * CFrame.new(0, size.Y/2, 0)).Position)
+                local bot, on2 = cam:WorldToViewportPoint((pos * CFrame.new(0, -size.Y/2, 0)).Position)
+                if on1 and on2 then
+                    local hVal = math.abs(t.Y - bot.Y)
+                    local wVal = hVal * 0.6
+                    b.Size, b.Position, b.Color, b.Visible = Vector2.new(wVal, hVal), Vector2.new(t.X - wVal/2, t.Y), Color3.new(1, 1, 1), true
+                else b.Visible = false end
+            else b.Visible = false end
         else
+            if char then
+                local cham = char:FindFirstChild("AxisC")
+                if cham then cham.Enabled = false end
+            end
             if heads[plr] then heads[plr].Visible = false end
             if boxes[plr] then boxes[plr].Visible = false end
         end
@@ -265,11 +203,9 @@ end)
 cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
 cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })
 lib.ToggleKeybind = os.MenuKeybind
-
 theme:SetLibrary(lib)
 save:SetLibrary(lib)
 save:IgnoreThemeSettings()
-save:SetIgnoreIndexes({ "MenuKeybind" })
 theme:SetFolder("PlowsScriptHub")
 save:SetFolder("PlowsScriptHub/BloxStrike")
 save:BuildConfigSection(sTab)
@@ -277,10 +213,16 @@ theme:ApplyToTab(sTab)
 save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
+    loop:Disconnect()
     for _, h in pairs(heads) do h:Remove() end
     for _, b in pairs(boxes) do b:Remove() end
-    for p, d in pairs(originals) do if p and p.Parent then p.Size = d.size p.Transparency = d.trans p.CanCollide = true end end
-    for _, pTable in pairs(proxies) do for _, v in pairs(pTable) do if v then v:Destroy() end end end
+    for _, plr in pairs(plrs:GetPlayers()) do
+        if plr.Character then
+            local cham = plr.Character:FindFirstChild("AxisC")
+            if cham then cham:Destroy() end
+            for _, p in pairs(plr.Character:GetChildren()) do if p:IsA("BasePart") then reset(p) end end
+        end
+    end
 end)
 
-pcall(bypass)
+pcall(stealth)
