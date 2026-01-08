@@ -85,7 +85,7 @@ theme.BuiltInThemes["Default"][2] = {
 
 local win = lib:CreateWindow({
     Title = "Axis Hub - Blind Shot.lua",
-    Footer = "by RwalDev & Plow | 1.9.4 | Discord: .gg/UuyxhqgEVs",
+    Footer = "by RwalDev & Plow | 1.8.4 | Discord: .gg/UuyxhqgEVs",
     NotifySide = "Right",
     ShowCustomCursor = true,
 })
