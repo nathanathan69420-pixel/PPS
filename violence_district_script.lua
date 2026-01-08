@@ -87,13 +87,13 @@ theme.BuiltInThemes["Default"][2] = {
 
 local win = lib:CreateWindow({
     Title = "Axis Hub -\nViolence District.lua",
-    Footer = "by RwalDev & Plow | 1.8.4 | Discord: .gg/UuyxhqgEVs",
+    Footer = "by RwalDev & Plow | 1.9.4 | Discord: .gg/UuyxhqgEVs",
     NotifySide = "Right",
     ShowCustomCursor = true,
 })
 
 local home = win:AddTab("Home", "house")
-local main = win:AddTab("Main", "target")
+local main = win:AddTab("Main", "swords")
 local config = win:AddTab("Settings", "settings")
 
 local status = home:AddLeftGroupbox("Status")
