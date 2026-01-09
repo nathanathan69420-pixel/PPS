@@ -400,7 +400,7 @@ task.spawn(function()
         for _, weapon in ipairs(weapons) do
             local toggle = lib.Toggles["AutoBuy" .. weapon.name:gsub(" ", "")]
             if toggle and toggle.Value then
-                local remote = ReplicatedStorage:FindFirstChild("WeaponShopRemote")
+                local remote = game:GetService("ReplicatedStorage"):FindFirstChild("WeaponShopRemote")
                 if remote then
                     remote:FireServer("PurchaseSkin", {
                         name = weapon.name,

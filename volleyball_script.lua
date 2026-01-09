@@ -133,7 +133,9 @@ end })
 funcs:AddSlider("Size", { Text = "Hitbox Size", Default = 10, Min = 5, Max = 20, Callback = function(v) size = v end })
 funcs:AddSlider("Transparency", { Text = "Hitbox Transparency", Default = 0.5, Min = 0, Max = 1, Callback = function(v) trans = v end })
 
-keybinds:AddLabel("Hitbox Expander"):AddKeyPicker("HitboxKey", { Default = "None", Mode = "Toggle", Text = "Toggle Hitbox", Callback = function(v) lib.Options.Hitbox:SetValue(v) end })
+keybinds:AddLabel("Hitbox Expander"):AddKeyPicker("HitboxKey", { Default = "None", Mode = "Toggle", Text = "Toggle Hitbox", Callback = function(v) 
+    if lib.Toggles.Hitbox then lib.Toggles.Hitbox:SetValue(v) end
+end })
 
 cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
 cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })

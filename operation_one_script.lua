@@ -121,7 +121,7 @@ local espchams = {}
 local function genName()
     local s = ""
     for i = 1, math.random(8, 12) do
-        s ..= string.char(math.random(97, 122))
+        s = s .. string.char(math.random(97, 122))
     end
     return s
 end

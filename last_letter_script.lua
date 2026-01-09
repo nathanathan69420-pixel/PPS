@@ -141,12 +141,12 @@ local function downloadWords()
     }
     
     for i, url in ipairs(urls) do
-        local res = request({Url = url, Method = "GET"})
-        if res and res.Body then
+        local success, res = pcall(function() return game:HttpGet(url, true) end)
+        if success and res then
             if url:find("json") then
-                writefile("words_dictionary.json", res.Body)
+                writefile("words_dictionary.json", res)
             else
-                writefile("words_alpha.txt", res.Body)
+                writefile("words_alpha.txt", res)
             end
             break
         end

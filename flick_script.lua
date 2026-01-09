@@ -3,9 +3,21 @@ local lib = loadstring(game:HttpGet(repo .. "Library.lua"))()
 local theme = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
 local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
+local function get(name)
+    local s = game:GetService(name)
+    if not s then return nil end
+    if cloneref then
+        local success, res = pcall(cloneref, s)
+        return success and res or s
+    end
+    return s
+end
+
+local cam = workspace.CurrentCamera
+
 local function safeClick()
     local vim = game:GetService("VirtualInputManager")
-    if vim then
+    if vim and cam then
         vim:SendMouseButtonEvent(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2, 0, true, game, 0)
         task.wait(0.01)
         vim:SendMouseButtonEvent(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2, 0, false, game, 0)
@@ -80,7 +92,6 @@ end
 local rs = get("RunService")
 local plrs = get("Players")
 local uis = get("UserInputService")
-local cam = workspace.CurrentCamera
 local lp = plrs.LocalPlayer
 
 theme.BuiltInThemes["Default"][2] = {

@@ -605,7 +605,8 @@ local function updateG()
                                 if rValue <= 0 then 
                                     vCValue = vCValue + 1 
                                 elseif luValue > 0 then 
-                                    pSValue = pSValue + (rValue/luValue) vCValue = vCValue + 1 
+                                    pSValue = pSValue + (rValue/luValue)
+                                    vCValue = vCValue + 1 
                                 end
                             end
                         end
