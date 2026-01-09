@@ -16,7 +16,7 @@ theme.BuiltInThemes["Default"][2] = {
 }
 
 local win = lib:CreateWindow({
-    Title = "Axis Hub -\nBloxstrike.lua", Footer = "by RwalDev & Plow | 1.8.4", NotifySide = "Right", ShowCustomCursor = true,
+    Title = "Axis Hub -\nBloxstrike.lua", Footer = "by RwalDev & Plow | 1.9.5", NotifySide = "Right", ShowCustomCursor = true,
 })
 
 local hTab, mTab, sTab = win:AddTab("Home", "house"), win:AddTab("Main", "crosshair"), win:AddTab("Settings", "settings")
@@ -42,22 +42,43 @@ visuals:AddDropdown("BoxType", { Values = { "2D", "3D" }, Default = "2D", Text =
 visuals:AddToggle("SkeletonESP", { Text = "Skeleton ESP", Default = false })
 visuals:AddToggle("HeadESP", { Text = "Head ESP", Default = false })
 
-local heads, boxes, skeletons, pModels = {}, {}, {}, {}
-
-local function genName()
-    local s = ""
-    for i = 1, 10 do s ..= string.char(math.random(97, 122)) end
-    return s
-end
-
-local hbRoot = Instance.new("Folder")
-hbRoot.Name = genName()
-hbRoot.Parent = workspace
+local heads, boxes, skeletons, originals = {}, {}, {}, {}
 
 local function isEnemy(p)
     if not p or p == lp then return false end
     if not lp.Team or not p.Team then return true end
     return lp.Team ~= p.Team
+end
+
+local function apply(limb, size, trans)
+    if not originals[limb] then
+        originals[limb] = {size = limb.Size, trans = limb.Transparency, collide = limb.CanCollide}
+    end
+    limb.Size = Vector3.new(size, size, size)
+    limb.Transparency = trans
+    limb.CanCollide = false
+    
+    local viz = limb:FindFirstChild("Handle")
+    if not viz then
+        viz = Instance.new("SelectionBox")
+        viz.Name = "Handle"
+        viz.Adornee = limb
+        viz.LineAlpha = 0
+        viz.SurfaceColor3 = Color3.new(1, 1, 1)
+        viz.SurfaceTransparency = 0.5
+        viz.Parent = limb
+    end
+end
+
+local function reset(limb)
+    if originals[limb] then
+        limb.Size = originals[limb].size
+        limb.Transparency = originals[limb].trans
+        limb.CanCollide = originals[limb].collide
+        originals[limb] = nil
+    end
+    local viz = limb:FindFirstChild("Handle")
+    if viz then viz:Destroy() end
 end
 
 local function updateHitboxes()
@@ -68,59 +89,51 @@ local function updateHitboxes()
         local char = plr.Character
         
         if char and enemy and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
-            if not pModels[plr] then
-                local m = Instance.new("Model")
-                m.Name = genName()
-                Instance.new("Humanoid", m)
-                m.Parent = hbRoot
-                pModels[plr] = { model = m, parts = {} }
-            end
-            
-            local data = pModels[plr]
             for _, limbName in pairs({"Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "LeftArm", "RightArm"}) do
                 local limb = char:FindFirstChild(limbName)
-                if limb and limb:IsA("BasePart") and (selected["All"] or selected[limbName]) then
-                    if enabled then
-                        local p = data.parts[limbName]
-                        if not p then
-                            p = Instance.new("Part")
-                            p.Name = limbName
-                            p.Transparency = 1
-                            p.CanCollide = false
-                            p.CanTouch = true
-                            p.CanQuery = true
-                            p.Parent = data.model
-                            
-                            local viz = Instance.new("BoxHandleAdornment")
-                            viz.Name = "Viz"
-                            viz.AlwaysOnTop = true
-                            viz.ZIndex = 5
-                            viz.Color3 = Color3.new(1, 1, 1)
-                            viz.Adornee = p
-                            viz.Parent = p
-                            
-                            data.parts[limbName] = p
-                        end
-                        
-                        local finalSize = (limbName == "Head" and hbSize * 1.3 or hbSize)
-                        p.Size = Vector3.new(finalSize, finalSize, finalSize)
-                        p.CFrame = limb.CFrame
-                        p:FindFirstChild("Viz").Size = p.Size
-                        p:FindFirstChild("Viz").Transparency = hbTrans
-                    elseif data.parts[limbName] then
-                        data.parts[limbName]:Destroy()
-                        data.parts[limbName] = nil
+                if limb and limb:IsA("BasePart") then
+                    if enabled and (selected["All"] or selected[limbName]) then
+                        apply(limb, hbSize, hbTrans)
+                    else
+                        reset(limb)
                     end
-                elseif data.parts[limbName] then
-                    data.parts[limbName]:Destroy()
-                    data.parts[limbName] = nil
                 end
             end
-        elseif pModels[plr] then
-            pModels[plr].model:Destroy()
-            pModels[plr] = nil
         end
     end
+end
+
+local function bypass()
+    if not getrawmetatable then return end
+    local g = game
+    local gm = getrawmetatable(g)
+    local old_idx = gm.__index
+    local old_nc = gm.__namecall
+    
+    setreadonly(gm, false)
+    
+    gm.__index = newcclosure(function(self, k)
+        if not checkcaller() and typeof(self) == "Instance" and self:IsA("BasePart") then
+            local data = originals[self]
+            if data then
+                if k == "Size" then return data.size
+                elseif k == "Transparency" then return data.trans
+                elseif k == "CanCollide" then return data.collide
+                end
+            end
+        end
+        return old_idx(self, k)
+    end)
+    
+    gm.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        if not checkcaller() and (method == "Kick" or method == "kick") and self == lp then
+            return nil
+        end
+        return old_nc(self, ...)
+    end)
+    
+    setreadonly(gm, true)
 end
 
 local function draw(type, props)
@@ -133,18 +146,8 @@ local lastT = 0
 local loop = rs.RenderStepped:Connect(function()
     if ts.Triggerbot.Value and mouse.Target then
         local target = mouse.Target
-        local p = nil
-        
-        if target:IsDescendantOf(hbRoot) then
-            for plr, data in pairs(pModels) do
-                if target:IsDescendantOf(data.model) then p = plr break end
-            end
-        end
-        
-        if not p then
-            local model = target:FindFirstAncestorOfClass("Model")
-            p = model and plrs:GetPlayerFromCharacter(model)
-        end
+        local model = target:FindFirstAncestorOfClass("Model")
+        local p = model and plrs:GetPlayerFromCharacter(model)
 
         if p and isEnemy(p) and (tick() - lastT >= os.TriggerDelay.Value) then
             mouse1click()
@@ -266,8 +269,16 @@ save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
     loop:Disconnect()
-    hbRoot:Destroy()
     for _, h in pairs(heads) do h:Remove() end
     for _, b in pairs(boxes) do b.b2d:Remove() for _, l in pairs(b.b3d) do l:Remove() end end
     for _, s in pairs(skeletons) do for _, l in pairs(s) do l:Remove() end end
+    for limb, data in pairs(originals) do
+        if limb and limb.Parent then
+            limb.Size = data.size
+            limb.Transparency = data.trans
+            limb.CanCollide = data.collide
+        end
+    end
 end)
+
+pcall(bypass)

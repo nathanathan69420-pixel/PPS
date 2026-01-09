@@ -701,7 +701,7 @@ theme.BuiltInThemes["Default"][2] = {
 
 local win = lib:CreateWindow({ 
     Title = "Axis Hub -\nMinesweeper.lua", 
-    Footer = "by RwalDev & Plow | 1.8.4", 
+    Footer = "by RwalDev & Plow | 1.9.5", 	 
     NotifySide = "Right", 
     ShowCustomCursor = true 
 })
