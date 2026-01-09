@@ -176,26 +176,22 @@ end
 local function getCharMinMax(char)
     local minX, maxX = math.huge, -math.huge
     local minY, maxY = math.huge, -math.huge
-    for _, part in pairs(char:GetChildren()) do
-        if part:IsA("BasePart") then
-            local cf = part.CFrame
-            local size = part.Size / 2
-            local corners = {
-                Vector3.new(-size.X, -size.Y, -size.Z), Vector3.new(-size.X, -size.Y, size.Z),
-                Vector3.new(-size.X, size.Y, -size.Z), Vector3.new(-size.X, size.Y, size.Z),
-                Vector3.new(size.X, -size.Y, -size.Z), Vector3.new(size.X, -size.Y, size.Z),
-                Vector3.new(size.X, size.Y, -size.Z), Vector3.new(size.X, size.Y, size.Z),
-            }
-            for _, offset in pairs(corners) do
-                local worldPoint = cf:PointToWorldSpace(offset)
-                local screenPos, onScreen = cam:WorldToViewportPoint(worldPoint)
-                if onScreen then
-                    minX = math.min(minX, screenPos.X)
-                    maxX = math.max(maxX, screenPos.X)
-                    minY = math.min(minY, screenPos.Y)
-                    maxY = math.max(maxY, screenPos.Y)
-                end
-            end
+    local cf, size = char:GetBoundingBox()
+    local halfSize = size / 2
+    local corners = {
+        Vector3.new(-halfSize.X, -halfSize.Y, -halfSize.Z), Vector3.new(-halfSize.X, -halfSize.Y, halfSize.Z),
+        Vector3.new(-halfSize.X, halfSize.Y, -halfSize.Z), Vector3.new(-halfSize.X, halfSize.Y, halfSize.Z),
+        Vector3.new(halfSize.X, -halfSize.Y, -halfSize.Z), Vector3.new(halfSize.X, -halfSize.Y, halfSize.Z),
+        Vector3.new(halfSize.X, halfSize.Y, -halfSize.Z), Vector3.new(halfSize.X, halfSize.Y, halfSize.Z),
+    }
+    for _, offset in pairs(corners) do
+        local worldPoint = cf:PointToWorldSpace(offset)
+        local screenPos, onScreen = cam:WorldToViewportPoint(worldPoint)
+        if onScreen then
+            minX = math.min(minX, screenPos.X)
+            maxX = math.max(maxX, screenPos.X)
+            minY = math.min(minY, screenPos.Y)
+            maxY = math.max(maxY, screenPos.Y)
         end
     end
     return maxX, maxY, minX, minY
@@ -374,17 +370,31 @@ for _, plr in ipairs(plrs:GetPlayers()) do if plr.Character then charhook(plr) e
 
 local mainLoop = rs.RenderStepped:Connect(function()
     local espOn = Toggles.ESPEnabled and Toggles.ESPEnabled.Value
+    if not espOn then
+        for name, _ in pairs(espboxes) do removeplr(name) end
+        for drone, _ in pairs(espdrones) do removedrone(drone) end
+        return
+    end
 
     local enemies, drones = getenemies()
     local alive = {}
     
-    if espOn then
-        for _, e in pairs(enemies) do alive[e.Name] = true mainESP(e) end
-        for _, d in pairs(drones) do drone_esp(d) end
+    for _, e in pairs(enemies) do
+        alive[e.Name] = true
+        mainESP(e)
+    end
+    for _, d in pairs(drones) do
+        drone_esp(d)
     end
 
-    for name, _ in pairs(espboxes) do if not alive[name] then removeplr(name) end end
-    for drone, _ in pairs(espdrones) do if not drone or not drone:IsDescendantOf(workspace) or not (espOn and Toggles.DroneESP.Value) then removedrone(drone) end end
+    for name, _ in pairs(espboxes) do
+        if not alive[name] then removeplr(name) end
+    end
+    for drone, _ in pairs(espdrones) do
+        if not drone or not drone:IsDescendantOf(workspace) or not Toggles.DroneESP.Value then
+            removedrone(drone)
+        end
+    end
 end)
 cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
 cfgBox:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu bind" })

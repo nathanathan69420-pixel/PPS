@@ -44,6 +44,16 @@ visuals:AddToggle("HeadESP", { Text = "Head ESP", Default = false })
 
 local heads, boxes, skeletons, originals = {}, {}, {}, {}
 
+local BONE_PAIRS = {
+    {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
+    {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
+    {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
+    {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
+    {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"}
+}
+
+local LIMB_NAMES = {"Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "LeftArm", "RightArm"}
+
 local function isEnemy(p)
     if not p or p == lp then return false end
     if not lp.Team or not p.Team then return true end
@@ -83,20 +93,35 @@ end
 
 local function updateHitboxes()
     local enabled, hbSize, hbTrans, selected = ts.HitboxExpander.Value, os.HitboxSize.Value, os.HitboxTransparency.Value, os.Hitboxes.Value
-    
-    for _, plr in pairs(plrs:GetPlayers()) do
-        local enemy = isEnemy(plr)
-        local char = plr.Character
-        
-        if char and enemy and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
-            for _, limbName in pairs({"Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "LeftArm", "RightArm"}) do
-                local limb = char:FindFirstChild(limbName)
-                if limb and limb:IsA("BasePart") then
-                    if enabled and (selected["All"] or selected[limbName]) then
-                        apply(limb, hbSize, hbTrans)
-                    else
+    if not enabled then
+        for _, plr in pairs(plrs:GetPlayers()) do
+            local char = plr.Character
+            if char then
+                for _, limbName in pairs(LIMB_NAMES) do
+                    local limb = char:FindFirstChild(limbName)
+                    if limb and limb:IsA("BasePart") then
                         reset(limb)
                     end
+                end
+            end
+        end
+        return
+    end
+    
+    for _, plr in pairs(plrs:GetPlayers()) do
+        if not isEnemy(plr) then continue end
+        local char = plr.Character
+        if not char then continue end
+        local hum = char:FindFirstChild("Humanoid")
+        if not hum or hum.Health <= 0 then continue end
+        
+        for _, limbName in pairs(LIMB_NAMES) do
+            local limb = char:FindFirstChild(limbName)
+            if limb and limb:IsA("BasePart") then
+                if selected["All"] or selected[limbName] then
+                    apply(limb, hbSize, hbTrans)
+                else
+                    reset(limb)
                 end
             end
         end
@@ -142,13 +167,72 @@ local function draw(type, props)
     return obj
 end
 
+local BOX_CONNECTIONS = {{1,2},{2,4},{4,3},{3,1}, {5,6},{6,8},{8,7},{7,5}, {1,5},{2,6},{3,7},{4,8}}
+
+local function updateBoxESP(b, char, boxType)
+    local cf, sz = char:GetBoundingBox()
+    if boxType == "2D" then
+        for _, l in pairs(b.b3d) do l.Visible = false end
+        local t, on1 = cam:WorldToViewportPoint((cf * CFrame.new(0, sz.Y/2, 0)).Position)
+        local bot, on2 = cam:WorldToViewportPoint((cf * CFrame.new(0, -sz.Y/2, 0)).Position)
+        if on1 and on2 then
+            local hV = math.abs(t.Y - bot.Y)
+            local wV = hV * 0.6
+            b.b2d.Size = Vector2.new(wV, hV)
+            b.b2d.Position = Vector2.new(t.X - wV/2, t.Y)
+            b.b2d.Color = Color3.new(1, 1, 1)
+            b.b2d.Visible = true
+        else
+            b.b2d.Visible = false
+        end
+    else
+        b.b2d.Visible = false
+        local corners = {
+            cf * CFrame.new(-sz.X/2, sz.Y/2, sz.Z/2), cf * CFrame.new(sz.X/2, sz.Y/2, sz.Z/2),
+            cf * CFrame.new(-sz.X/2, -sz.Y/2, sz.Z/2), cf * CFrame.new(sz.X/2, -sz.Y/2, sz.Z/2),
+            cf * CFrame.new(-sz.X/2, sz.Y/2, -sz.Z/2), cf * CFrame.new(sz.X/2, sz.Y/2, -sz.Z/2),
+            cf * CFrame.new(-sz.X/2, -sz.Y/2, -sz.Z/2), cf * CFrame.new(sz.X/2, -sz.Y/2, -sz.Z/2)
+        }
+        for i, conn in ipairs(BOX_CONNECTIONS) do
+            if not b.b3d[i] then
+                b.b3d[i] = draw("Line", { Thickness = 1, Color = Color3.new(1,1,1), Visible = false })
+            end
+            local p1, v1 = cam:WorldToViewportPoint(corners[conn[1]].Position)
+            local p2, v2 = cam:WorldToViewportPoint(corners[conn[2]].Position)
+            if v1 and v2 then
+                b.b3d[i].From = Vector2.new(p1.X, p1.Y)
+                b.b3d[i].To = Vector2.new(p2.X, p2.Y)
+                b.b3d[i].Visible = true
+            else
+                b.b3d[i].Visible = false
+            end
+        end
+    end
+end
+
+local function updateSkeletonESP(skelData, char)
+    for i, pair in ipairs(BONE_PAIRS) do
+        if not skelData[i] then
+            skelData[i] = draw("Line", { Thickness = 1, Color = Color3.new(1,1,1), Visible = false })
+        end
+        local b1, b2 = char:FindFirstChild(pair[1]), char:FindFirstChild(pair[2])
+        if b1 and b2 then
+            local p1, v1 = cam:WorldToViewportPoint(b1.Position)
+            local p2, v2 = cam:WorldToViewportPoint(b2.Position)
+            skelData[i].From = Vector2.new(p1.X, p1.Y)
+            skelData[i].To = Vector2.new(p2.X, p2.Y)
+            skelData[i].Visible = v1 and v2
+        else
+            skelData[i].Visible = false
+        end
+    end
+end
+
 local lastT = 0
 local loop = rs.RenderStepped:Connect(function()
     if ts.Triggerbot.Value and mouse.Target then
-        local target = mouse.Target
-        local model = target:FindFirstAncestorOfClass("Model")
+        local model = mouse.Target:FindFirstAncestorOfClass("Model")
         local p = model and plrs:GetPlayerFromCharacter(model)
-
         if p and isEnemy(p) and (tick() - lastT >= os.TriggerDelay.Value) then
             mouse1click()
             lastT = tick()
@@ -158,87 +242,7 @@ local loop = rs.RenderStepped:Connect(function()
     updateHitboxes()
 
     for _, plr in pairs(plrs:GetPlayers()) do
-        local char = plr.Character
-        local enemy = isEnemy(plr)
-        
-        if char and enemy and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
-            local c = char:FindFirstChild("AxisC")
-            if ts.Chams.Value then
-                if not c then
-                    c = Instance.new("Highlight", char)
-                    c.Name = "AxisC"
-                    c.OutlineTransparency = 0
-                    c.FillTransparency = 0.5
-                end
-                c.FillColor = os.ChamsColor.Value
-                c.Enabled = true
-            elseif c then c.Enabled = false end
-
-            if not heads[plr] then heads[plr] = draw("Circle", { Thickness = 1, NumSides = 12, Radius = 5, Filled = true, Visible = false }) end
-            local h, head = heads[plr], char:FindFirstChild("Head")
-            if ts.HeadESP.Value and head then
-                local pos, vis = cam:WorldToViewportPoint(head.Position)
-                h.Position, h.Color, h.Visible = Vector2.new(pos.X, pos.Y), Color3.new(1, 0, 0), vis
-            else h.Visible = false end
-
-            if not boxes[plr] then boxes[plr] = { b2d = draw("Square", { Thickness = 1, Filled = false, Visible = false }), b3d = {} } end
-            local b = boxes[plr]
-            if ts.BoxESP.Value then
-                local cf, sz = char:GetBoundingBox()
-                if os.BoxType.Value == "2D" then
-                    for _, l in pairs(b.b3d) do l.Visible = false end
-                    local t, on1 = cam:WorldToViewportPoint((cf * CFrame.new(0, sz.Y/2, 0)).Position)
-                    local bot, on2 = cam:WorldToViewportPoint((cf * CFrame.new(0, -sz.Y/2, 0)).Position)
-                    if on1 and on2 then
-                        local hV = math.abs(t.Y - bot.Y)
-                        local wV = hV * 0.6
-                        b.b2d.Size, b.b2d.Position, b.b2d.Color, b.b2d.Visible = Vector2.new(wV, hV), Vector2.new(t.X - wV/2, t.Y), Color3.new(1, 1, 1), true
-                    else b.b2d.Visible = false end
-                else
-                    b.b2d.Visible = false
-                    local corners = {
-                        cf * CFrame.new(-sz.X/2, sz.Y/2, sz.Z/2), cf * CFrame.new(sz.X/2, sz.Y/2, sz.Z/2),
-                        cf * CFrame.new(-sz.X/2, -sz.Y/2, sz.Z/2), cf * CFrame.new(sz.X/2, -sz.Y/2, sz.Z/2),
-                        cf * CFrame.new(-sz.X/2, sz.Y/2, -sz.Z/2), cf * CFrame.new(sz.X/2, sz.Y/2, -sz.Z/2),
-                        cf * CFrame.new(-sz.X/2, -sz.Y/2, -sz.Z/2), cf * CFrame.new(sz.X/2, -sz.Y/2, -sz.Z/2)
-                    }
-                    local p_idx = { {1,2},{2,4},{4,3},{3,1}, {5,6},{6,8},{8,7},{7,5}, {1,5},{2,6},{3,7},{4,8} }
-                    for i, p in ipairs(p_idx) do
-                        if not b.b3d[i] then b.b3d[i] = draw("Line", { Thickness = 1, Color = Color3.new(1,1,1), Visible = false }) end
-                        local p1, v1 = cam:WorldToViewportPoint(corners[p[1]].Position)
-                        local p2, v2 = cam:WorldToViewportPoint(corners[p[2]].Position)
-                        if v1 and v2 then
-                            b.b3d[i].From, b.b3d[i].To, b.b3d[i].Visible = Vector2.new(p1.X, p1.Y), Vector2.new(p2.X, p2.Y), true
-                        else b.b3d[i].Visible = false end
-                    end
-                end
-            else
-                b.b2d.Visible = false
-                for _, l in pairs(b.b3d) do l.Visible = false end
-            end
-
-            if not skeletons[plr] then skeletons[plr] = {} end
-            if ts.SkeletonESP.Value then
-                local bonePairs = {
-                    {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
-                    {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
-                    {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
-                    {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
-                    {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"}
-                }
-                for i, p in ipairs(bonePairs) do
-                    if not skeletons[plr][i] then skeletons[plr][i] = draw("Line", { Thickness = 1, Color = Color3.new(1,1,1), Visible = false }) end
-                    local b1, b2 = char:FindFirstChild(p[1]), char:FindFirstChild(p[2])
-                    if b1 and b2 then
-                        local p1, v1 = cam:WorldToViewportPoint(b1.Position)
-                        local p2, v2 = cam:WorldToViewportPoint(b2.Position)
-                        skeletons[plr][i].From, skeletons[plr][i].To, skeletons[plr][i].Visible = Vector2.new(p1.X, p1.Y), Vector2.new(p2.X, p2.Y), v1 and v2
-                    else skeletons[plr][i].Visible = false end
-                end
-            else
-                for _, l in pairs(skeletons[plr]) do l.Visible = false end
-            end
-        else
+        if not isEnemy(plr) then
             if heads[plr] then heads[plr].Visible = false end
             if boxes[plr] then
                 boxes[plr].b2d.Visible = false
@@ -247,10 +251,65 @@ local loop = rs.RenderStepped:Connect(function()
             if skeletons[plr] then
                 for _, l in pairs(skeletons[plr]) do l.Visible = false end
             end
+            local char = plr.Character
             if char then
                 local c = char:FindFirstChild("AxisC")
                 if c then c.Enabled = false end
             end
+            continue
+        end
+        
+        local char = plr.Character
+        if not char then continue end
+        local hum = char:FindFirstChild("Humanoid")
+        if not hum or hum.Health <= 0 then continue end
+        
+        local c = char:FindFirstChild("AxisC")
+        if ts.Chams.Value then
+            if not c then
+                c = Instance.new("Highlight", char)
+                c.Name = "AxisC"
+                c.OutlineTransparency = 0
+                c.FillTransparency = 0.5
+            end
+            c.FillColor = os.ChamsColor.Value
+            c.Enabled = true
+        elseif c then
+            c.Enabled = false
+        end
+
+        if ts.HeadESP.Value then
+            if not heads[plr] then
+                heads[plr] = draw("Circle", { Thickness = 1, NumSides = 12, Radius = 5, Filled = true, Visible = false })
+            end
+            local head = char:FindFirstChild("Head")
+            if head then
+                local pos, vis = cam:WorldToViewportPoint(head.Position)
+                heads[plr].Position = Vector2.new(pos.X, pos.Y)
+                heads[plr].Color = Color3.new(1, 0, 0)
+                heads[plr].Visible = vis
+            else
+                heads[plr].Visible = false
+            end
+        elseif heads[plr] then
+            heads[plr].Visible = false
+        end
+
+        if ts.BoxESP.Value then
+            if not boxes[plr] then
+                boxes[plr] = { b2d = draw("Square", { Thickness = 1, Filled = false, Visible = false }), b3d = {} }
+            end
+            updateBoxESP(boxes[plr], char, os.BoxType.Value)
+        elseif boxes[plr] then
+            boxes[plr].b2d.Visible = false
+            for _, l in pairs(boxes[plr].b3d) do l.Visible = false end
+        end
+
+        if ts.SkeletonESP.Value then
+            if not skeletons[plr] then skeletons[plr] = {} end
+            updateSkeletonESP(skeletons[plr], char)
+        elseif skeletons[plr] then
+            for _, l in pairs(skeletons[plr]) do l.Visible = false end
         end
     end
 end)

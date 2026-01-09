@@ -160,13 +160,15 @@ local espData = {}
 local chamsData = {}
 local skeletonData = {}
 
-local bonePairs = {
+local BONE_PAIRS = {
     {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
     {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
     {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
     {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
     {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"}
 }
+
+local BOX_CONNECTIONS = {{1,2},{2,4},{4,3},{3,1},{5,6},{6,8},{8,7},{7,5},{1,5},{2,6},{3,7},{4,8}}
 
 local function getChar(p)
     return p and p.Character
@@ -237,12 +239,74 @@ local function cleanupPlayer(p)
     end
 end
 
+local function updateBoxESP(data, char, style)
+    local cf, size = char:GetBoundingBox()
+    local corners = {
+        cf * CFrame.new(size.X/2, size.Y/2, size.Z/2),
+        cf * CFrame.new(-size.X/2, size.Y/2, size.Z/2),
+        cf * CFrame.new(size.X/2, -size.Y/2, size.Z/2),
+        cf * CFrame.new(-size.X/2, -size.Y/2, size.Z/2),
+        cf * CFrame.new(size.X/2, size.Y/2, -size.Z/2),
+        cf * CFrame.new(-size.X/2, size.Y/2, -size.Z/2),
+        cf * CFrame.new(size.X/2, -size.Y/2, -size.Z/2),
+        cf * CFrame.new(-size.X/2, -size.Y/2, -size.Z/2)
+    }
+
+    if style == "2D" then
+        for _, l in pairs(data.box3D) do l.Visible = false end
+        local minX, minY = math.huge, math.huge
+        local maxX, maxY = -math.huge, -math.huge
+        local allOff = true
+        for _, c in pairs(corners) do
+            local pos, on = cam:WorldToViewportPoint(c.Position)
+            if on then
+                allOff = false
+                minX = math.min(minX, pos.X)
+                minY = math.min(minY, pos.Y)
+                maxX = math.max(maxX, pos.X)
+                maxY = math.max(maxY, pos.Y)
+            end
+        end
+        if not allOff then
+            data.box2D.Position = Vector2.new(minX, minY)
+            data.box2D.Size = Vector2.new(maxX - minX, maxY - minY)
+            data.box2D.Visible = true
+        else
+            data.box2D.Visible = false
+        end
+    else
+        data.box2D.Visible = false
+        local sc = {}
+        for _, c in pairs(corners) do
+            local pos = cam:WorldToViewportPoint(c.Position)
+            table.insert(sc, Vector2.new(pos.X, pos.Y))
+        end
+        for i, conn in ipairs(BOX_CONNECTIONS) do
+            local l = data.box3D[i]
+            l.From = sc[conn[1]]
+            l.To = sc[conn[2]]
+            l.Visible = true
+        end
+    end
+end
+
 local lastTrigger = 0
 local mainLoop = rs.RenderStepped:Connect(function()
     local espOn = Toggles.ESPEnabled and Toggles.ESPEnabled.Value
-    local boxOn = Toggles.BoxESP and Toggles.BoxESP.Value
-    local chamsOn = Toggles.Chams and Toggles.Chams.Value
-    local skelOn = Toggles.Skeleton and Toggles.Skeleton.Value
+    if not espOn then
+        for _, data in pairs(espData) do
+            data.box2D.Visible = false
+            for _, l in pairs(data.box3D) do l.Visible = false end
+        end
+        for _, h in pairs(chamsData) do h.Enabled = false end
+        for _, skel in pairs(skeletonData) do
+            for _, l in pairs(skel) do l.Visible = false end
+        end
+    end
+
+    local boxOn = espOn and Toggles.BoxESP and Toggles.BoxESP.Value
+    local chamsOn = espOn and Toggles.Chams and Toggles.Chams.Value
+    local skelOn = espOn and Toggles.Skeleton and Toggles.Skeleton.Value
     local triggerOn = Toggles.Triggerbot and Toggles.Triggerbot.Value
     local aimbotOn = Toggles.Aimbot and Toggles.Aimbot.Value
     local chamsColor = Options.ChamsColor and Options.ChamsColor.Value or Color3.new(1, 1, 1)
@@ -253,8 +317,7 @@ local mainLoop = rs.RenderStepped:Connect(function()
             local targetPos = target.Position
             local camPos = cam.CFrame.Position
             local direction = (targetPos - camPos).Unit
-            local targetCFrame = CFrame.lookAt(camPos, camPos + direction)
-            cam.CFrame = cam.CFrame:Lerp(targetCFrame, aimSmooth)
+            cam.CFrame = cam.CFrame:Lerp(CFrame.lookAt(camPos, camPos + direction), aimSmooth)
         end
     end
 
@@ -270,121 +333,96 @@ local mainLoop = rs.RenderStepped:Connect(function()
     end
 
     for _, p in pairs(plrs:GetPlayers()) do
-        if p ~= lp then
-            local char = getChar(p)
-            local alive = char and isAlive(char)
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-
-            if espOn and boxOn and alive and root then
-                if not espData[p] then
-                    espData[p] = {
-                        box2D = Drawing.new("Square"),
-                        box3D = {}
-                    }
-                    espData[p].box2D.Color = Color3.new(1, 1, 1)
-                    espData[p].box2D.Thickness = 1
-                    for i = 1, 12 do
-                        local l = Drawing.new("Line")
-                        l.Color = Color3.new(1, 1, 1)
-                        l.Thickness = 1
-                        table.insert(espData[p].box3D, l)
-                    end
-                end
-
-                local cf, size = char:GetBoundingBox()
-                local corners = {
-                    cf * CFrame.new(size.X/2, size.Y/2, size.Z/2),
-                    cf * CFrame.new(-size.X/2, size.Y/2, size.Z/2),
-                    cf * CFrame.new(size.X/2, -size.Y/2, size.Z/2),
-                    cf * CFrame.new(-size.X/2, -size.Y/2, size.Z/2),
-                    cf * CFrame.new(size.X/2, size.Y/2, -size.Z/2),
-                    cf * CFrame.new(-size.X/2, size.Y/2, -size.Z/2),
-                    cf * CFrame.new(size.X/2, -size.Y/2, -size.Z/2),
-                    cf * CFrame.new(-size.X/2, -size.Y/2, -size.Z/2)
-                }
-
-                if boxStyle == "2D" then
-                    local minX, minY = math.huge, math.huge
-                    local maxX, maxY = -math.huge, -math.huge
-                    local allOff = true
-                    for _, c in pairs(corners) do
-                        local pos, on = cam:WorldToViewportPoint(c.Position)
-                        if on then
-                            allOff = false
-                            minX = math.min(minX, pos.X)
-                            minY = math.min(minY, pos.Y)
-                            maxX = math.max(maxX, pos.X)
-                            maxY = math.max(maxY, pos.Y)
-                        end
-                    end
-                    if not allOff then
-                        espData[p].box2D.Position = Vector2.new(minX, minY)
-                        espData[p].box2D.Size = Vector2.new(maxX - minX, maxY - minY)
-                        espData[p].box2D.Visible = true
-                    else
-                        espData[p].box2D.Visible = false
-                    end
-                    for _, l in pairs(espData[p].box3D) do l.Visible = false end
-                else
-                    espData[p].box2D.Visible = false
-                    local sc = {}
-                    for _, c in pairs(corners) do
-                        local pos = cam:WorldToViewportPoint(c.Position)
-                        table.insert(sc, Vector2.new(pos.X, pos.Y))
-                    end
-                    local conns = {{1,2},{2,4},{4,3},{3,1},{5,6},{6,8},{8,7},{7,5},{1,5},{2,6},{3,7},{4,8}}
-                    for i, c in pairs(conns) do
-                        local l = espData[p].box3D[i]
-                        l.From = sc[c[1]]
-                        l.To = sc[c[2]]
-                        l.Visible = true
-                    end
-                end
-            elseif espData[p] then
+        if p == lp then continue end
+        
+        local char = getChar(p)
+        if not char then
+            if espData[p] then
                 espData[p].box2D.Visible = false
                 for _, l in pairs(espData[p].box3D) do l.Visible = false end
             end
-
-            if espOn and chamsOn and alive and char then
-                if not chamsData[p] then
-                    local h = Instance.new("Highlight")
-                    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                    h.FillTransparency = 0.55
-                    h.OutlineTransparency = 0
-                    h.Parent = Storage
-                    chamsData[p] = h
-                end
-                chamsData[p].Adornee = char
-                chamsData[p].FillColor = chamsColor
-                chamsData[p].Enabled = true
-            elseif chamsData[p] then chamsData[p].Enabled = false end
-
-            if espOn and skelOn and alive and char then
-                if not skeletonData[p] then
-                    skeletonData[p] = {}
-                    for i = 1, #bonePairs do
-                        local l = Drawing.new("Line")
-                        l.Color = Color3.new(1, 1, 1)
-                        l.Thickness = 1
-                        skeletonData[p][i] = l
-                    end
-                end
-                for i, pair in ipairs(bonePairs) do
-                    local p0 = char:FindFirstChild(pair[1])
-                    local p1 = char:FindFirstChild(pair[2])
-                    if p0 and p1 then
-                        local s0, on0 = worldToScreen(p0.Position)
-                        local s1, on1 = worldToScreen(p1.Position)
-                        skeletonData[p][i].From = s0
-                        skeletonData[p][i].To = s1
-                        skeletonData[p][i].Visible = on0 and on1
-                    else
-                        skeletonData[p][i].Visible = false
-                    end
-                end
-            elseif skeletonData[p] then
+            if chamsData[p] then chamsData[p].Enabled = false end
+            if skeletonData[p] then
                 for _, l in pairs(skeletonData[p]) do l.Visible = false end
             end
+            continue
+        end
+
+        local alive = isAlive(char)
+        if not alive then
+            if espData[p] then
+                espData[p].box2D.Visible = false
+                for _, l in pairs(espData[p].box3D) do l.Visible = false end
+            end
+            if chamsData[p] then chamsData[p].Enabled = false end
+            if skeletonData[p] then
+                for _, l in pairs(skeletonData[p]) do l.Visible = false end
+            end
+            continue
+        end
+
+        if boxOn then
+            if not espData[p] then
+                espData[p] = {
+                    box2D = Drawing.new("Square"),
+                    box3D = {}
+                }
+                espData[p].box2D.Color = Color3.new(1, 1, 1)
+                espData[p].box2D.Thickness = 1
+                for i = 1, 12 do
+                    local l = Drawing.new("Line")
+                    l.Color = Color3.new(1, 1, 1)
+                    l.Thickness = 1
+                    espData[p].box3D[i] = l
+                end
+            end
+            updateBoxESP(espData[p], char, boxStyle)
+        elseif espData[p] then
+            espData[p].box2D.Visible = false
+            for _, l in pairs(espData[p].box3D) do l.Visible = false end
+        end
+
+        if chamsOn then
+            if not chamsData[p] then
+                local h = Instance.new("Highlight")
+                h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                h.FillTransparency = 0.55
+                h.OutlineTransparency = 0
+                h.Parent = Storage
+                chamsData[p] = h
+            end
+            chamsData[p].Adornee = char
+            chamsData[p].FillColor = chamsColor
+            chamsData[p].Enabled = true
+        elseif chamsData[p] then
+            chamsData[p].Enabled = false
+        end
+
+        if skelOn then
+            if not skeletonData[p] then
+                skeletonData[p] = {}
+                for i = 1, #BONE_PAIRS do
+                    local l = Drawing.new("Line")
+                    l.Color = Color3.new(1, 1, 1)
+                    l.Thickness = 1
+                    skeletonData[p][i] = l
+                end
+            end
+            for i, pair in ipairs(BONE_PAIRS) do
+                local p0 = char:FindFirstChild(pair[1])
+                local p1 = char:FindFirstChild(pair[2])
+                if p0 and p1 then
+                    local s0, on0 = worldToScreen(p0.Position)
+                    local s1, on1 = worldToScreen(p1.Position)
+                    skeletonData[p][i].From = s0
+                    skeletonData[p][i].To = s1
+                    skeletonData[p][i].Visible = on0 and on1
+                else
+                    skeletonData[p][i].Visible = false
+                end
+            end
+        elseif skeletonData[p] then
+            for _, l in pairs(skeletonData[p]) do l.Visible = false end
         end
     end
 end)
