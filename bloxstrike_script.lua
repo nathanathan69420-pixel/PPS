@@ -7,9 +7,16 @@ local plrs = game:GetService("Players")
 local rs = game:GetService("RunService")
 local uis = game:GetService("UserInputService")
 local lp = plrs.LocalPlayer
+local mouse = lp:GetMouse()
 local cam = workspace.CurrentCamera
 
 local ts, os = lib.Toggles, lib.Options
+
+local function draw(type, props)
+    local obj = Drawing.new(type)
+    for k, v in pairs(props) do obj[k] = v end
+    return obj
+end
 
 theme.BuiltInThemes["Default"][2] = {
     BackgroundColor = "16293a", MainColor = "26445f", AccentColor = "5983a0", OutlineColor = "325573", FontColor = "d2dae1"
@@ -40,7 +47,7 @@ visuals:AddDropdown("BoxType", { Values = { "2D", "3D" }, Default = "2D", Text =
 visuals:AddToggle("SkeletonESP", { Text = "Skeleton ESP", Default = false })
 visuals:AddToggle("HeadESP", { Text = "Head ESP", Default = false })
 
-local heads, boxes, skeletons, originals = {}, {}, {}, {}
+local heads, boxes, skeletons = {}, {}, {}
 local hitbox_visualizer = draw("Circle", { Thickness = 1, Color = Color3.new(1,1,1), Filled = false, Visible = false, Radius = 10, NumSides = 24 })
 
 local BONE_PAIRS = {
@@ -51,24 +58,41 @@ local BONE_PAIRS = {
     {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"}
 }
 
-local LIMB_NAMES = {"Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "LeftArm", "RightArm", "LeftLeg", "RightLeg", "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm", "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg", "LeftFoot", "RightFoot", "LeftHand", "RightHand"}
-
-local function isEnemy(p)
-    if not p or p == lp then return false end
-    if not lp.Team or not p.Team then return true end
-    return lp.Team ~= p.Team
+local function isTarget(p)
+    return p and p ~= lp
 end
 
-
-
-
-local function draw(type, props)
-    local obj = Drawing.new(type)
-    for k, v in pairs(props) do obj[k] = v end
-    return obj
+local function getEnemyChars()
+    local t = {}
+    for _, v in pairs(plrs:GetPlayers()) do
+        if isTarget(v) and v.Character then
+            table.insert(t, v.Character)
+        end
+    end
+    return t
 end
 
-local BOX_CONNECTIONS = {{1,2},{2,4},{4,3},{3,1}, {5,6},{6,8},{8,7},{7,5}, {1,5},{2,6},{3,7},{4,8}}
+-- Raycast Redirection Hook (Hitbox Expansion through code)
+if hookmetamethod then
+    local old_rc
+    old_rc = hookmetamethod(workspace, "__namecall", newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        
+        if not checkcaller() and method == "Raycast" and ts.HitboxExpander.Value then
+            local origin, direction = args[1], args[2]
+            local params = args[3]
+            
+            local radius = os.HitboxSize.Value
+            local cast = workspace:Spherecast(origin, radius, direction, params)
+            
+            if cast and cast.Instance then
+                return cast
+            end
+        end
+        return old_rc(self, unpack(args))
+    end))
+end
 
 local function updateBoxESP(b, char, boxType)
     local cf, sz = char:GetBoundingBox()
@@ -94,6 +118,7 @@ local function updateBoxESP(b, char, boxType)
             cf * CFrame.new(-sz.X/2, sz.Y/2, -sz.Z/2), cf * CFrame.new(sz.X/2, sz.Y/2, -sz.Z/2),
             cf * CFrame.new(-sz.X/2, -sz.Y/2, -sz.Z/2), cf * CFrame.new(sz.X/2, -sz.Y/2, -sz.Z/2)
         }
+        local BOX_CONNECTIONS = {{1,2},{2,4},{4,3},{3,1}, {5,6},{6,8},{8,7},{7,5}, {1,5},{2,6},{3,7},{4,8}}
         for i, conn in ipairs(BOX_CONNECTIONS) do
             if not b.b3d[i] then
                 b.b3d[i] = draw("Line", { Thickness = 1, Color = Color3.new(1,1,1), Visible = false })
@@ -135,21 +160,17 @@ local loop = rs.RenderStepped:Connect(function()
         local mousePos = uis:GetMouseLocation()
         local ray = cam:ViewportPointToRay(mousePos.X, mousePos.Y)
         local params = RaycastParams.new()
-        local enemies = {}
-        for i, v in pairs(plrs:GetPlayers()) do
-            if isEnemy(v) and v.Character then
-                table.insert(enemies, v.Character)
-            end
-        end
-        params.FilterDescendantsInstances = enemies
+        params.FilterDescendantsInstances = getEnemyChars()
         params.FilterType = Enum.RaycastFilterType.Include
 
-        local radius = ts.HitboxExpander.Value and os.HitboxSize.Value or 0.1
-        local result = workspace:Spherecast(ray.Origin, radius, ray.Direction * 1000, params)
+        local radius = ts.HitboxExpander.Value and os.HitboxSize.Value or 1
+        local cast = workspace:Spherecast(ray.Origin, radius, ray.Direction * 1000, params)
 
-                if result and result.Instance then
-            mouse1click()
-            lastT = tick()
+        if cast and cast.Instance then
+            if mouse1click then
+                mouse1click()
+                lastT = tick()
+            end
         end
     end
 
@@ -162,7 +183,8 @@ local loop = rs.RenderStepped:Connect(function()
     end
 
     for _, plr in pairs(plrs:GetPlayers()) do
-        if not isEnemy(plr) then
+        local char = plr.Character
+        if not isTarget(plr) or not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then
             if heads[plr] then heads[plr].Visible = false end
             if boxes[plr] then
                 boxes[plr].b2d.Visible = false
@@ -171,7 +193,6 @@ local loop = rs.RenderStepped:Connect(function()
             if skeletons[plr] then
                 for _, l in pairs(skeletons[plr]) do l.Visible = false end
             end
-            local char = plr.Character
             if char then
                 local c = char:FindFirstChild("AxisC")
                 if c then c.Enabled = false end
@@ -179,23 +200,19 @@ local loop = rs.RenderStepped:Connect(function()
             continue
         end
         
-        local char = plr.Character
-        if not char then continue end
-        local hum = char:FindFirstChild("Humanoid")
-        if not hum or hum.Health <= 0 then continue end
-        
-        local c = char:FindFirstChild("AxisC")
+        local highlight = char:FindFirstChild("AxisC")
         if ts.Chams.Value then
-            if not c then
-                c = Instance.new("Highlight", char)
-                c.Name = "AxisC"
-                c.OutlineTransparency = 0
-                c.FillTransparency = 0.5
+            if not highlight then
+                highlight = Instance.new("Highlight")
+                highlight.Name = "AxisC"
+                highlight.OutlineTransparency = 0
+                highlight.FillTransparency = 0.5
+                highlight.Parent = char
             end
-            c.FillColor = os.ChamsColor.Value
-            c.Enabled = true
-        elseif c then
-            c.Enabled = false
+            highlight.FillColor = os.ChamsColor.Value
+            highlight.Enabled = true
+        elseif highlight then
+            highlight.Enabled = false
         end
 
         if ts.HeadESP.Value then
@@ -246,7 +263,6 @@ save:BuildConfigSection(sTab)
 theme:ApplyToTab(sTab)
 save:LoadAutoloadConfig()
 
-
 lib:OnUnload(function()
     loop:Disconnect()
     hitbox_visualizer:Remove()
@@ -254,4 +270,3 @@ lib:OnUnload(function()
     for _, b in pairs(boxes) do b.b2d:Remove() for _, l in pairs(b.b3d) do l:Remove() end end
     for _, s in pairs(skeletons) do for _, l in pairs(s) do l:Remove() end end
 end)
-
