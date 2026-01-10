@@ -5,8 +5,8 @@ local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
 local plrs = game:GetService("Players")
 local rs = game:GetService("RunService")
+local uis = game:GetService("UserInputService")
 local lp = plrs.LocalPlayer
-local mouse = lp:GetMouse()
 local cam = workspace.CurrentCamera
 
 local ts, os = lib.Toggles, lib.Options
@@ -32,9 +32,7 @@ status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 aiming:AddToggle("Triggerbot", { Text = "Triggerbot", Default = false })
 aiming:AddSlider("TriggerDelay", { Text = "Triggerbot Delay", Default = 0.1, Min = 0.1, Max = 1, Rounding = 1, Compact = true })
 aiming:AddToggle("HitboxExpander", { Text = "Hitbox Expander", Default = false })
-aiming:AddSlider("HitboxTransparency", { Text = "Hitbox Transparency", Default = 0.5, Min = 0.1, Max = 1, Rounding = 1, Compact = true })
 aiming:AddSlider("HitboxSize", { Text = "Hitbox Size", Default = 1, Min = 1, Max = 15, Rounding = 0, Compact = true })
-aiming:AddDropdown("Hitboxes", { Values = { "Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "LeftArm", "RightArm", "LeftLeg", "RightLeg", "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm", "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg", "LeftFoot", "RightFoot", "LeftHand", "RightHand", "All" }, Default = "All", Multi = true, Text = "Hitboxes" })
 
 visuals:AddToggle("Chams", { Text = "Chams", Default = false }):AddColorPicker("ChamsColor", { Default = Color3.fromRGB(0, 170, 255), Title = "Chams Color" })
 visuals:AddToggle("BoxESP", { Text = "Box ESP", Default = false })
@@ -43,6 +41,7 @@ visuals:AddToggle("SkeletonESP", { Text = "Skeleton ESP", Default = false })
 visuals:AddToggle("HeadESP", { Text = "Head ESP", Default = false })
 
 local heads, boxes, skeletons, originals = {}, {}, {}, {}
+local hitbox_visualizer = draw("Circle", { Thickness = 1, Color = Color3.new(1,1,1), Filled = false, Visible = false, Radius = 10, NumSides = 24 })
 
 local BONE_PAIRS = {
     {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
@@ -60,106 +59,8 @@ local function isEnemy(p)
     return lp.Team ~= p.Team
 end
 
-local function apply(limb, size, trans)
-    if not originals[limb] then
-        originals[limb] = {size = limb.Size, trans = limb.Transparency, collide = limb.CanCollide}
-    end
-    limb.Size = Vector3.new(size, size, size)
-    limb.Transparency = trans
-    limb.CanCollide = false
-    
-    local viz = limb:FindFirstChild("Handle")
-    if not viz then
-        viz = Instance.new("SelectionBox")
-        viz.Name = "Handle"
-        viz.Adornee = limb
-        viz.LineAlpha = 0
-        viz.SurfaceColor3 = Color3.new(1, 1, 1)
-        viz.SurfaceTransparency = 0.5
-        viz.Parent = limb
-    end
-end
 
-local function reset(limb)
-    if originals[limb] then
-        limb.Size = originals[limb].size
-        limb.Transparency = originals[limb].trans
-        limb.CanCollide = originals[limb].collide
-        originals[limb] = nil
-    end
-    local viz = limb:FindFirstChild("Handle")
-    if viz then viz:Destroy() end
-end
 
-local function updateHitboxes()
-    local enabled, hbSize, hbTrans, selected = ts.HitboxExpander.Value, os.HitboxSize.Value, os.HitboxTransparency.Value, os.Hitboxes.Value
-    if not enabled then
-        for _, plr in pairs(plrs:GetPlayers()) do
-            local char = plr.Character
-            if char then
-                for _, limbName in pairs(LIMB_NAMES) do
-                    local limb = char:FindFirstChild(limbName)
-                    if limb and limb:IsA("BasePart") then
-                        reset(limb)
-                    end
-                end
-            end
-        end
-        return
-    end
-    
-    for _, plr in pairs(plrs:GetPlayers()) do
-        if not isEnemy(plr) then continue end
-        local char = plr.Character
-        if not char then continue end
-        local hum = char:FindFirstChild("Humanoid")
-        if not hum or hum.Health <= 0 then continue end
-        
-        for _, limbName in pairs(LIMB_NAMES) do
-            local limb = char:FindFirstChild(limbName)
-            if limb and limb:IsA("BasePart") then
-                if selected["All"] or selected[limbName] then
-                    apply(limb, hbSize, hbTrans)
-                else
-                    reset(limb)
-                end
-            end
-        end
-    end
-end
-
-local function bypass()
-    if not getrawmetatable then return end
-    local g = game
-    local gm = getrawmetatable(g)
-    local old_idx = gm.__index
-    local old_nc = gm.__namecall
-    
-    setreadonly(gm, false)
-    
-    gm.__index = newcclosure(function(self, k)
-        if not checkcaller() and typeof(self) == "Instance" and self:IsA("BasePart") then
-            local data = originals[self]
-            if data then
-                if k == "Size" then return data.size
-                elseif k == "Transparency" then return data.trans
-                elseif k == "CanCollide" then return data.collide
-                end
-            end
-        end
-        return old_idx(self, k)
-    end)
-    
-    gm.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if not checkcaller() and (method == "Kick" or method == "kick") and self == lp then
-            return nil
-        end
-        return old_nc(self, ...)
-    end)
-    
-    setreadonly(gm, true)
-end
 
 local function draw(type, props)
     local obj = Drawing.new(type)
@@ -230,16 +131,35 @@ end
 
 local lastT = 0
 local loop = rs.RenderStepped:Connect(function()
-    if ts.Triggerbot.Value and mouse.Target then
-        local model = mouse.Target:FindFirstAncestorOfClass("Model")
-        local p = model and plrs:GetPlayerFromCharacter(model)
-        if p and isEnemy(p) and (tick() - lastT >= os.TriggerDelay.Value) then
+    if ts.Triggerbot.Value and (tick() - lastT >= os.TriggerDelay.Value) then
+        local mousePos = uis:GetMouseLocation()
+        local ray = cam:ViewportPointToRay(mousePos.X, mousePos.Y)
+        local params = RaycastParams.new()
+        local enemies = {}
+        for i, v in pairs(plrs:GetPlayers()) do
+            if isEnemy(v) and v.Character then
+                table.insert(enemies, v.Character)
+            end
+        end
+        params.FilterDescendantsInstances = enemies
+        params.FilterType = Enum.RaycastFilterType.Include
+
+        local radius = ts.HitboxExpander.Value and os.HitboxSize.Value or 0.1
+        local result = workspace:Spherecast(ray.Origin, radius, ray.Direction * 1000, params)
+
+                if result and result.Instance then
             mouse1click()
             lastT = tick()
         end
     end
 
-    updateHitboxes()
+    if ts.HitboxExpander.Value then
+        hitbox_visualizer.Visible = true
+        hitbox_visualizer.Radius = os.HitboxSize.Value * 5
+        hitbox_visualizer.Position = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+    else
+        hitbox_visualizer.Visible = false
+    end
 
     for _, plr in pairs(plrs:GetPlayers()) do
         if not isEnemy(plr) then
@@ -326,18 +246,12 @@ save:BuildConfigSection(sTab)
 theme:ApplyToTab(sTab)
 save:LoadAutoloadConfig()
 
+
 lib:OnUnload(function()
     loop:Disconnect()
+    hitbox_visualizer:Remove()
     for _, h in pairs(heads) do h:Remove() end
     for _, b in pairs(boxes) do b.b2d:Remove() for _, l in pairs(b.b3d) do l:Remove() end end
     for _, s in pairs(skeletons) do for _, l in pairs(s) do l:Remove() end end
-    for limb, data in pairs(originals) do
-        if limb and limb.Parent then
-            limb.Size = data.size
-            limb.Transparency = data.trans
-            limb.CanCollide = data.collide
-        end
-    end
 end)
 
-pcall(bypass)
