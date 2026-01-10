@@ -26,17 +26,7 @@ local function bypass()
             if k == "Drawing" then return nil end
         end
         return old_idx(self, k)
-    end)
-    
-
-    
-
-    
-    
-
-
-
-    
+    end) 
     setreadonly(gm, true)
 end
 
