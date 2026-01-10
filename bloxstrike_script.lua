@@ -28,14 +28,35 @@ vis:AddToggle("he", {Text="Head ESP",Default=false})
 
 local hd, bx, ch, og = {}, {}, {}, {}
 
-if getrawmetatable and setreadonly and newcclosure then
+local _idx, _nc
+if getrawmetatable and setreadonly and newcclosure and checkcaller then
     local mt = getrawmetatable(game)
-    local nc = mt.__namecall
+    _idx = mt.__index
+    _nc = mt.__namecall
     setreadonly(mt, false)
+    
+    mt.__index = newcclosure(function(s, k)
+        if not checkcaller() then
+            local d = og[s]
+            if d then
+                if k == "Size" then return d.s end
+                if k == "Transparency" then return d.t end
+            end
+        end
+        return _idx(s, k)
+    end)
+    
     mt.__namecall = newcclosure(function(s, ...)
         local nm = getnamecallmethod()
-        if (nm == "Kick" or nm == "kick") and s == lp then return wait(9e9) end
-        return nc(s, ...)
+        if not checkcaller() then
+            if (nm == "Kick" or nm == "kick") and s == lp then return wait(9e9) end
+            local d = og[s]
+            if d and nm == "GetPropertyChangedSignal" then
+                local prop = ...
+                if prop == "Size" or prop == "Transparency" then return Instance.new("BindableEvent").Event end
+            end
+        end
+        return _nc(s, ...)
     end)
     setreadonly(mt, true)
 end
