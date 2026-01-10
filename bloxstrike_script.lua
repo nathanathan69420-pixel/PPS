@@ -40,6 +40,25 @@ visuals:AddToggle("HeadESP", { Text = "Head ESP", Default = false })
 
 local heads, boxes, chams, originals = {}, {}, {}, {}
 
+local function setupBypass()
+    if not getrawmetatable or not setreadonly or not newcclosure then return end
+    
+    local mt = getrawmetatable(game)
+    local oldNamecall = mt.__namecall
+    
+    setreadonly(mt, false)
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        if method == "Kick" or method == "kick" then
+            if self == lp then
+                return wait(9e9)
+            end
+        end
+        return oldNamecall(self, ...)
+    end)
+    setreadonly(mt, true)
+end
+
 local function draw(t, p)
     local o = Drawing.new(t)
     for k, v in pairs(p) do o[k] = v end
@@ -164,3 +183,5 @@ lib:OnUnload(function()
         end
     end
 end)
+
+setupBypass()
