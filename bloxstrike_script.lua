@@ -91,16 +91,19 @@ local function reset(limb)
     if viz then viz:Destroy() end
 end
 
+local hitboxUpdateDelay = 0
 local function updateHitboxes()
     local enabled, hbSize, hbTrans, selected = ts.HitboxExpander.Value, os.HitboxSize.Value, os.HitboxTransparency.Value, os.Hitboxes.Value
     if not enabled then
-        for _, plr in pairs(plrs:GetPlayers()) do
-            local char = plr.Character
-            if char then
-                for _, limbName in pairs(LIMB_NAMES) do
-                    local limb = char:FindFirstChild(limbName)
-                    if limb and limb:IsA("BasePart") then
-                        reset(limb)
+        if hitboxUpdateDelay == 0 then
+            for _, plr in pairs(plrs:GetPlayers()) do
+                local char = plr.Character
+                if char then
+                    for _, limbName in pairs(LIMB_NAMES) do
+                        local limb = char:FindFirstChild(limbName)
+                        if limb and limb:IsA("BasePart") then
+                            reset(limb)
+                        end
                     end
                 end
             end
@@ -108,12 +111,24 @@ local function updateHitboxes()
         return
     end
     
+    hitboxUpdateDelay = hitboxUpdateDelay + 1
+    if hitboxUpdateDelay < 3 then return end
+    hitboxUpdateDelay = 0
+    
     for _, plr in pairs(plrs:GetPlayers()) do
         if not isEnemy(plr) then continue end
         local char = plr.Character
         if not char then continue end
         local hum = char:FindFirstChild("Humanoid")
-        if not hum or hum.Health <= 0 then continue end
+        if not hum or hum.Health <= 0 then
+            for _, limbName in pairs(LIMB_NAMES) do
+                local limb = char:FindFirstChild(limbName)
+                if limb and limb:IsA("BasePart") then
+                    reset(limb)
+                end
+            end
+            continue
+        end
         
         for _, limbName in pairs(LIMB_NAMES) do
             local limb = char:FindFirstChild(limbName)
@@ -129,12 +144,13 @@ local function updateHitboxes()
 end
 
 local function bypass()
-    if not getrawmetatable then return end
+    if not getrawmetatable or not setreadonly or not newcclosure or not getnamecallmethod then return end
+    
     local g = game
+    local lp = g:GetService("Players").LocalPlayer
     local gm = getrawmetatable(g)
     local old_idx = gm.__index
     local old_nc = gm.__namecall
-    local old_ns = gm.__newindex
     
     setreadonly(gm, false)
     
@@ -143,50 +159,24 @@ local function bypass()
             if typeof(self) == "Instance" and self:IsA("BasePart") then
                 local data = originals[self]
                 if data then
-                    if k == "Size" then return data.size
-                    elseif k == "Transparency" then return data.trans
-                    elseif k == "CanCollide" then return data.collide
-                    elseif k == "Magnitude" and self == self then
-                        local size = data.size
-                        if typeof(size) == "Vector3" then
-                            return math.sqrt(size.X^2 + size.Y^2 + size.Z^2)
-                        end
+                    if k == "Size" then
+                        return data.size
+                    elseif k == "Transparency" then
+                        return data.trans
+                    elseif k == "CanCollide" then
+                        return data.collide
                     end
-                end
-            elseif typeof(self) == "Instance" and self:IsA("SelectionBox") then
-                if k == "Adornee" or k == "Parent" then
-                    return self[k]
                 end
             end
         end
         return old_idx(self, k)
     end)
     
-    gm.__newindex = newcclosure(function(self, k, v)
-        return old_ns(self, k, v)
-    end)
-    
     gm.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         if not checkcaller() then
-            if (method == "Kick" or method == "kick") and self == lp then
+            if (method == "Kick" or method == "kick" or method == "kickPlayer" or method == "KickPlayer") and self == lp then
                 return nil
-            end
-            if method == "GetBoundingBox" or method == "getBoundingBox" then
-                if typeof(self) == "Instance" and self:FindFirstChildOfClass("Humanoid") then
-                    local data = originals
-                    local hasModified = false
-                    for part, _ in pairs(data) do
-                        if part and part.Parent == self then
-                            hasModified = true
-                            break
-                        end
-                    end
-                    if hasModified then
-                        local result = old_nc(self, ...)
-                        return result
-                    end
-                end
             end
         end
         return old_nc(self, ...)
