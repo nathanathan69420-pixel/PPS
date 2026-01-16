@@ -16,7 +16,7 @@ theme.BuiltInThemes["Default"][2] = {
 
 local win = lib:CreateWindow({
     Title = "Axis Hub - Unsupported.lua",
-    Footer = "by RwalDev & Plow | 1.9.5 | Discord: .gg/UuyxhqgEVs",
+    Footer = "by RwalDev & Plow | 1.9.6 | Discord: .gg/UuyxhqgEVs",
     NotifySide = "Right",
     ShowCustomCursor = true,
 })
