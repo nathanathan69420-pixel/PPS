@@ -32,9 +32,7 @@ status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 aiming:AddToggle("Triggerbot", { Text = "Triggerbot", Default = false })
 aiming:AddSlider("TriggerDelay", { Text = "Triggerbot Delay", Default = 0.1, Min = 0.1, Max = 1, Rounding = 1, Compact = true })
 aiming:AddToggle("HitboxExpander", { Text = "Hitbox Expander", Default = false })
-aiming:AddSlider("HitboxTransparency", { Text = "Hitbox Transparency", Default = 0.5, Min = 0.1, Max = 1, Rounding = 1, Compact = true })
-aiming:AddSlider("HitboxSize", { Text = "Hitbox Size", Default = 1, Min = 1, Max = 15, Rounding = 0, Compact = true })
-aiming:AddDropdown("Hitboxes", { Values = { "Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm", "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg", "LeftFoot", "RightFoot", "LeftHand", "RightHand", "All" }, Default = "All", Multi = true, Text = "Hitboxes" })
+aiming:AddSlider("HitboxSize", { Text = "Hitbox Size", Default = 5, Min = 1, Max = 15, Rounding = 0, Compact = true })
 
 visuals:AddToggle("Chams", { Text = "Chams", Default = false }):AddColorPicker("ChamsColor", { Default = Color3.fromRGB(0, 170, 255), Title = "Chams Color" })
 visuals:AddToggle("BoxESP", { Text = "Box ESP", Default = false })
@@ -42,7 +40,7 @@ visuals:AddDropdown("BoxType", { Values = { "2D", "3D" }, Default = "2D", Text =
 visuals:AddToggle("SkeletonESP", { Text = "Skeleton ESP", Default = false })
 visuals:AddToggle("HeadESP", { Text = "Head ESP", Default = false })
 
-local heads, boxes, skeletons, originals, chams = {}, {}, {}, {}, {}
+local heads, boxes, skeletons, chams, proxies = {}, {}, {}, {}, {}
 
 local BONE_PAIRS = {
     {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
@@ -52,7 +50,11 @@ local BONE_PAIRS = {
     {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"}
 }
 
-local LIMB_NAMES = {"Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm", "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg", "LeftFoot", "RightFoot", "LeftHand", "RightHand"}
+local BOX_CONNECTIONS = {{1,2},{2,4},{4,3},{3,1}, {5,6},{6,8},{8,7},{7,5}, {1,5},{2,6},{3,7},{4,8}}
+
+local proxyFolder = Instance.new("Folder")
+proxyFolder.Name = "AxisProxy"
+proxyFolder.Parent = workspace
 
 local function isEnemy(p)
     if not p or p == lp then return false end
@@ -60,45 +62,11 @@ local function isEnemy(p)
     return lp.Team ~= p.Team
 end
 
-local function apply(limb, size, trans)
-    if not originals[limb] then
-        originals[limb] = {size = limb.Size, trans = limb.Transparency, collide = limb.CanCollide}
-    end
-    limb.Size = Vector3.new(size, size, size)
-    limb.Transparency = trans
-    limb.CanCollide = false
-end
-
-local function reset(limb)
-    if originals[limb] then
-        limb.Size = originals[limb].size
-        limb.Transparency = originals[limb].trans
-        limb.CanCollide = originals[limb].collide
-        originals[limb] = nil
-    end
-end
-
 local function setupBypass()
     if not getrawmetatable or not setreadonly or not newcclosure or not checkcaller then return end
-    
     local gm = getrawmetatable(game)
-    local old_idx = gm.__index
     local old_nc = gm.__namecall
-    
     setreadonly(gm, false)
-    
-    gm.__index = newcclosure(function(self, k)
-        if not checkcaller() and typeof(self) == "Instance" and self:IsA("BasePart") then
-            local data = originals[self]
-            if data then
-                if k == "Size" then return data.size end
-                if k == "Transparency" then return data.trans end
-                if k == "CanCollide" then return data.collide end
-            end
-        end
-        return old_idx(self, k)
-    end)
-    
     gm.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         if not checkcaller() and self == lp and (method == "Kick" or method == "kick") then
@@ -106,7 +74,6 @@ local function setupBypass()
         end
         return old_nc(self, ...)
     end)
-    
     setreadonly(gm, true)
 end
 
@@ -116,42 +83,105 @@ local function draw(type, props)
     return obj
 end
 
-local BOX_CONNECTIONS = {{1,2},{2,4},{4,3},{3,1}, {5,6},{6,8},{8,7},{7,5}, {1,5},{2,6},{3,7},{4,8}}
+local function createProxy(plr, char)
+    if proxies[plr] then return proxies[plr] end
+    
+    local proxyModel = Instance.new("Model")
+    proxyModel.Name = plr.Name
+    proxyModel.Parent = proxyFolder
+    
+    local head = char:FindFirstChild("Head")
+    if head then
+        local p = Instance.new("Part")
+        p.Name = "Head"
+        p.Size = Vector3.new(5, 5, 5)
+        p.Transparency = 1
+        p.CanCollide = false
+        p.CanQuery = true
+        p.CanTouch = false
+        p.Anchored = true
+        p.Parent = proxyModel
+    end
+    
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        local p = Instance.new("Part")
+        p.Name = "HumanoidRootPart"
+        p.Size = Vector3.new(5, 5, 5)
+        p.Transparency = 1
+        p.CanCollide = false
+        p.CanQuery = true
+        p.CanTouch = false
+        p.Anchored = true
+        p.Parent = proxyModel
+    end
+    
+    local hum = Instance.new("Humanoid")
+    hum.Parent = proxyModel
+    
+    proxies[plr] = proxyModel
+    return proxyModel
+end
+
+local function updateProxy(plr, char, size)
+    local proxy = proxies[plr]
+    if not proxy or not proxy.Parent then
+        proxy = createProxy(plr, char)
+    end
+    
+    local head = char:FindFirstChild("Head")
+    local proxyHead = proxy:FindFirstChild("Head")
+    if head and proxyHead then
+        proxyHead.Size = Vector3.new(size, size, size)
+        proxyHead.CFrame = head.CFrame
+    end
+    
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local proxyHrp = proxy:FindFirstChild("HumanoidRootPart")
+    if hrp and proxyHrp then
+        proxyHrp.Size = Vector3.new(size, size, size)
+        proxyHrp.CFrame = hrp.CFrame
+    end
+end
+
+local function removeProxy(plr)
+    if proxies[plr] then
+        proxies[plr]:Destroy()
+        proxies[plr] = nil
+    end
+end
 
 local lastT, lastHb = 0, 0
 local loop = rs.RenderStepped:Connect(function()
     local now = tick()
     
-    if now - lastHb >= 0.1 then
+    local hbEnabled = ts.HitboxExpander and ts.HitboxExpander.Value
+    local hbSize = os.HitboxSize and os.HitboxSize.Value or 5
+    
+    if now - lastHb >= 0.05 then
         lastHb = now
-        local enabled = ts.HitboxExpander and ts.HitboxExpander.Value
-        local hbSize = os.HitboxSize and os.HitboxSize.Value or 5
-        local hbTrans = os.HitboxTransparency and os.HitboxTransparency.Value or 0.5
-        local selected = os.Hitboxes and os.Hitboxes.Value or {}
-        
         for _, plr in pairs(plrs:GetPlayers()) do
             if plr == lp then continue end
             local char = plr.Character
-            if not char then continue end
-            local hum = char:FindFirstChild("Humanoid")
-            local alive = hum and hum.Health > 0
+            local hum = char and char:FindFirstChild("Humanoid")
             
-            for _, limbName in pairs(LIMB_NAMES) do
-                local limb = char:FindFirstChild(limbName)
-                if limb and limb:IsA("BasePart") then
-                    if enabled and alive and isEnemy(plr) and (selected["All"] or selected[limbName]) then
-                        apply(limb, hbSize, hbTrans)
-                    else
-                        reset(limb)
-                    end
-                end
+            if hbEnabled and char and hum and hum.Health > 0 and isEnemy(plr) then
+                updateProxy(plr, char, hbSize)
+            else
+                removeProxy(plr)
             end
         end
     end
     
     if ts.Triggerbot and ts.Triggerbot.Value and mouse.Target then
-        local model = mouse.Target:FindFirstAncestorOfClass("Model")
+        local target = mouse.Target
+        local model = target:FindFirstAncestorOfClass("Model")
         local p = model and plrs:GetPlayerFromCharacter(model)
+        
+        if not p and model and model.Parent == proxyFolder then
+            p = plrs:FindFirstChild(model.Name)
+        end
+        
         if p and isEnemy(p) and (now - lastT >= os.TriggerDelay.Value) then
             mouse1click()
             lastT = now
@@ -303,17 +333,11 @@ save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
     loop:Disconnect()
+    proxyFolder:Destroy()
     for _, h in pairs(heads) do h:Remove() end
     for _, b in pairs(boxes) do b.b2d:Remove() for _, l in pairs(b.b3d) do l:Remove() end end
     for _, s in pairs(skeletons) do for _, l in pairs(s) do l:Remove() end end
     for _, c in pairs(chams) do if c then c:Destroy() end end
-    for limb, data in pairs(originals) do
-        if limb and limb.Parent then
-            limb.Size = data.size
-            limb.Transparency = data.trans
-            limb.CanCollide = data.collide
-        end
-    end
 end)
 
 setupBypass()
