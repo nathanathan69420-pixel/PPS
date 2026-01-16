@@ -91,29 +91,22 @@ local function reset(limb)
     if viz then viz:Destroy() end
 end
 
-local hitboxUpdateDelay = 0
 local function updateHitboxes()
     local enabled, hbSize, hbTrans, selected = ts.HitboxExpander.Value, os.HitboxSize.Value, os.HitboxTransparency.Value, os.Hitboxes.Value
     if not enabled then
-        if hitboxUpdateDelay == 0 then
-            for _, plr in pairs(plrs:GetPlayers()) do
-                local char = plr.Character
-                if char then
-                    for _, limbName in pairs(LIMB_NAMES) do
-                        local limb = char:FindFirstChild(limbName)
-                        if limb and limb:IsA("BasePart") then
-                            reset(limb)
-                        end
+        for _, plr in pairs(plrs:GetPlayers()) do
+            local char = plr.Character
+            if char then
+                for _, limbName in pairs(LIMB_NAMES) do
+                    local limb = char:FindFirstChild(limbName)
+                    if limb and limb:IsA("BasePart") then
+                        reset(limb)
                     end
                 end
             end
         end
         return
     end
-    
-    hitboxUpdateDelay = hitboxUpdateDelay + 1
-    if hitboxUpdateDelay < 3 then return end
-    hitboxUpdateDelay = 0
     
     for _, plr in pairs(plrs:GetPlayers()) do
         if not isEnemy(plr) then continue end
@@ -175,7 +168,7 @@ local function bypass()
     gm.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         if not checkcaller() then
-            if (method == "Kick" or method == "kick" or method == "kickPlayer" or method == "KickPlayer") and self == lp then
+            if self == lp and (method == "Kick" or method == "kick" or method == "kickPlayer" or method == "KickPlayer") then
                 return nil
             end
         end
@@ -183,6 +176,15 @@ local function bypass()
     end)
     
     setreadonly(gm, true)
+    
+    if hookmetamethod then
+        hookmetamethod(game, "__namecall", function(self, ...)
+            local method = getnamecallmethod()
+            if not checkcaller() and self == lp and (method == "Kick" or method == "kick") then
+                return nil
+            end
+        end)
+    end
 end
 
 local function draw(type, props)
@@ -252,6 +254,10 @@ local function updateSkeletonESP(skelData, char)
     end
 end
 
+local hitboxLoop = rs.Heartbeat:Connect(function()
+    updateHitboxes()
+end)
+
 local lastT = 0
 local loop = rs.RenderStepped:Connect(function()
     if ts.Triggerbot.Value and mouse.Target then
@@ -262,8 +268,6 @@ local loop = rs.RenderStepped:Connect(function()
             lastT = tick()
         end
     end
-
-    updateHitboxes()
 
     for _, plr in pairs(plrs:GetPlayers()) do
         if not isEnemy(plr) then
@@ -387,7 +391,8 @@ for _, plr in pairs(plrs:GetPlayers()) do
 end
 
 lib:OnUnload(function()
-    loop:Disconnect()
+    if hitboxLoop then hitboxLoop:Disconnect() end
+    if loop then loop:Disconnect() end
     for _, h in pairs(heads) do h:Remove() end
     for _, b in pairs(boxes) do b.b2d:Remove() for _, l in pairs(b.b3d) do l:Remove() end end
     for _, s in pairs(skeletons) do for _, l in pairs(s) do l:Remove() end end
