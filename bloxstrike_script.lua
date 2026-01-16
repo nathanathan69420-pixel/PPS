@@ -16,7 +16,7 @@ theme.BuiltInThemes["Default"][2] = {
 }
 
 local win = lib:CreateWindow({
-    Title = "Axis Hub -\nBloxstrike.lua", Footer = "by RwalDev & Plow | 1.9.6", NotifySide = "Right", ShowCustomCursor = true,
+    Title = "Axis Hub -\nBloxstrike.lua", Footer = "by RwalDev & Plow | 1.9.7", NotifySide = "Right", ShowCustomCursor = true,
 })
 
 local hTab, mTab, sTab = win:AddTab("Home", "house"), win:AddTab("Main", "crosshair"), win:AddTab("Settings", "settings")
@@ -134,26 +134,60 @@ local function bypass()
     local gm = getrawmetatable(g)
     local old_idx = gm.__index
     local old_nc = gm.__namecall
+    local old_ns = gm.__newindex
     
     setreadonly(gm, false)
     
     gm.__index = newcclosure(function(self, k)
-        if not checkcaller() and typeof(self) == "Instance" and self:IsA("BasePart") then
-            local data = originals[self]
-            if data then
-                if k == "Size" then return data.size
-                elseif k == "Transparency" then return data.trans
-                elseif k == "CanCollide" then return data.collide
+        if not checkcaller() then
+            if typeof(self) == "Instance" and self:IsA("BasePart") then
+                local data = originals[self]
+                if data then
+                    if k == "Size" then return data.size
+                    elseif k == "Transparency" then return data.trans
+                    elseif k == "CanCollide" then return data.collide
+                    elseif k == "Magnitude" and self == self then
+                        local size = data.size
+                        if typeof(size) == "Vector3" then
+                            return math.sqrt(size.X^2 + size.Y^2 + size.Z^2)
+                        end
+                    end
+                end
+            elseif typeof(self) == "Instance" and self:IsA("SelectionBox") then
+                if k == "Adornee" or k == "Parent" then
+                    return self[k]
                 end
             end
         end
         return old_idx(self, k)
     end)
     
+    gm.__newindex = newcclosure(function(self, k, v)
+        return old_ns(self, k, v)
+    end)
+    
     gm.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
-        if not checkcaller() and (method == "Kick" or method == "kick") and self == lp then
-            return nil
+        if not checkcaller() then
+            if (method == "Kick" or method == "kick") and self == lp then
+                return nil
+            end
+            if method == "GetBoundingBox" or method == "getBoundingBox" then
+                if typeof(self) == "Instance" and self:FindFirstChildOfClass("Humanoid") then
+                    local data = originals
+                    local hasModified = false
+                    for part, _ in pairs(data) do
+                        if part and part.Parent == self then
+                            hasModified = true
+                            break
+                        end
+                    end
+                    if hasModified then
+                        local result = old_nc(self, ...)
+                        return result
+                    end
+                end
+            end
         end
         return old_nc(self, ...)
     end)
