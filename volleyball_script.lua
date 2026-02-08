@@ -125,10 +125,18 @@ local function update_visualizer()
     
     local ball = get_closest_ball()
     if ball then
-        local screen_pos = cam:WorldToViewportPoint(ball.Position)
-        if screen_pos.Z > 0 then
+        local screen_pos, on_screen = cam:WorldToViewportPoint(ball.Position)
+        if on_screen and screen_pos.Z > 0 then
             hitbox_circle.Position = Vector2.new(screen_pos.X, screen_pos.Y)
-            hitbox_circle.Radius = size * (cam.ViewportSize.Y / (2 * math.tan(math.rad(cam.FieldOfView / 2))))
+            
+            -- Calculate accurate screen radius for hitbox
+            local world_pos = ball.Position
+            local dir = world_pos - cam.CFrame.Position
+            local distance = dir.Magnitude
+            local fov_rad = math.rad(cam.FieldOfView)
+            local screen_radius = (size / distance) * (cam.ViewportSize.Y / (2 * math.tan(fov_rad / 2)))
+            
+            hitbox_circle.Radius = math.abs(screen_radius)
             hitbox_circle.Visible = true
         else
             hitbox_circle.Visible = false
