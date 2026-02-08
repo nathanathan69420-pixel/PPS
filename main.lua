@@ -51,7 +51,10 @@ local function bypass()
     
     local oldHttpGet = g.HttpGet
     g.HttpGet = function(self, url, ...)
-        if not checkcaller() then return "" end
+        if not checkcaller() then 
+            local success, result = pcall(oldHttpGet, self, url, ...)
+            return success and result or ""
+        end
         return oldHttpGet(self, url, ...)
     end
 end
