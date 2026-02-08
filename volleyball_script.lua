@@ -186,5 +186,7 @@ save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
     if conn then conn:Disconnect() end
-    if hitbox_circle then hitbox_circle:Remove() end
+    if hitbox_circle and hitbox_circle.Remove then hitbox_circle:Remove() end
+    enabled = false
+    hitbox_circle = nil
 end)
