@@ -108,6 +108,47 @@ local generatorESPData = {}
 local playerESPData = {}
 local chamsData = {}
 
+-- Helper function to clean up generator ESP data
+local function cleanupGeneratorESP()
+    for gen, data in pairs(generatorESPData) do
+        if data.box and data.box.Remove then
+            data.box:Remove()
+        end
+        if data.highlight and data.highlight.Destroy then
+            data.highlight:Destroy()
+        end
+    end
+    table.clear(generatorESPData)
+end
+
+-- Helper function to clean up player ESP data
+local function cleanupPlayerESP()
+    for player, data in pairs(playerESPData) do
+        if data.box2D and data.box2D.Remove then
+            data.box2D:Remove()
+        end
+        if data.text and data.text.Remove then
+            data.text:Remove()
+        end
+        if data.box3D then
+            for _, line in ipairs(data.box3D) do
+                if line.Remove then line:Remove() end
+            end
+        end
+    end
+    table.clear(playerESPData)
+end
+
+-- Helper function to clean up chams data
+local function cleanupChamsData()
+    for player, highlight in pairs(chamsData) do
+        if highlight and highlight.Destroy then
+            highlight:Destroy()
+        end
+    end
+    table.clear(chamsData)
+end
+
 generatorsBox:AddToggle("GeneratorESP", { Text = "Generator ESP", Default = false }):AddKeyPicker("GeneratorESPKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Generator ESP" }):AddColorPicker("GeneratorESPColor", { Default = Color3.fromRGB(255, 255, 0), Title = "Generator ESP Color" })
 generatorsBox:AddDropdown("GeneratorESPType", { Values = { "Highlight", "Box" }, Default = "Highlight", Text = "ESP Type" })
 
