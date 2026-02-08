@@ -151,6 +151,15 @@ local function removeProxy(plr)
     end
 end
 
+local function safeClick()
+    local vim = game:GetService("VirtualInputManager")
+    if vim then
+        vim:SendMouseButtonEvent(mouse.X, mouse.Y, 0, true, game, 0)
+        task.wait(0.01)
+        vim:SendMouseButtonEvent(mouse.X, mouse.Y, 0, false, game, 0)
+    end
+end
+
 local lastT, lastHb = 0, 0
 local loop = rs.RenderStepped:Connect(function()
     local now = tick()
@@ -183,7 +192,7 @@ local loop = rs.RenderStepped:Connect(function()
         end
         
         if p and isEnemy(p) and (now - lastT >= os.TriggerDelay.Value) then
-            mouse1click()
+            safeClick()
             lastT = now
         end
     end
