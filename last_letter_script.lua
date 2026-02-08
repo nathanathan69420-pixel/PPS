@@ -141,14 +141,22 @@ local function downloadWords()
     }
     
     for i, url in ipairs(urls) do
-        local success, res = pcall(function() return game:HttpGet(url, true) end)
-        if success and res then
-            if url:find("json") then
-                writefile("words_dictionary.json", res)
-            else
-                writefile("words_alpha.txt", res)
+        local success, res = pcall(function()
+            -- Check if HTTP requests are allowed
+            if not isnetworkactive then return nil end
+            return game:HttpGet(url, true)
+        end)
+        if success and res and #res > 0 then
+            local success_write, _ = pcall(function()
+                if url:find("json") then
+                    writefile("words_dictionary.json", res)
+                else
+                    writefile("words_alpha.txt", res)
+                end
+            end)
+            if success_write then
+                break
             end
-            break
         end
     end
 end
