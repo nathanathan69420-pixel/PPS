@@ -158,6 +158,18 @@ visualsBox:AddDropdown("BoxType", { Values = { "2D", "3D" }, Default = "2D", Tex
 visualsBox:AddToggle("KillerESP", { Text = "Killer ESP", Default = false })
 visualsBox:AddToggle("SurvivorESP", { Text = "Survivor ESP", Default = false })
 
+local function cleanupGeneratorData(gen)
+    if generatorESPData[gen] then
+        if generatorESPData[gen].box and generatorESPData[gen].box.Remove then
+            generatorESPData[gen].box:Remove()
+        end
+        if generatorESPData[gen].highlight and generatorESPData[gen].highlight.Destroy then
+            generatorESPData[gen].highlight:Destroy()
+        end
+        generatorESPData[gen] = nil
+    end
+end
+
 local function updateGeneratorESP()
     local enabled = Toggles.GeneratorESP and Toggles.GeneratorESP.Value
     local color = Options.GeneratorESPColor and Options.GeneratorESPColor.Value or Color3.new(1, 1, 0)
@@ -166,6 +178,7 @@ local function updateGeneratorESP()
     if enabled then
         local gens = workspace:FindFirstChild("Generators") or workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Generators")
         local list = gens and gens:GetChildren() or {}
+        local activeGenerators = {}
         
         for _, player in pairs(plrs:GetPlayers()) do
             if player ~= lp and player.Character then
@@ -177,12 +190,14 @@ local function updateGeneratorESP()
 
         for _, gen in pairs(list) do
             if gen:IsA("Model") then
+                activeGenerators[gen] = true
                 if not generatorESPData[gen] then
                     local h = Instance.new("Highlight")
                     h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                     h.FillTransparency = 0.5
                     h.OutlineTransparency = 0
-                    h.Parent = get("CoreGui")
+                    local coreGuiSafe = get("CoreGui")
+                    if coreGuiSafe then h.Parent = coreGuiSafe end
                     
                     generatorESPData[gen] = {
                         box = Drawing.new("Square"),
@@ -216,6 +231,12 @@ local function updateGeneratorESP()
                         end
                     end
                 end
+            end
+        end
+        
+        for gen, _ in pairs(generatorESPData) do
+            if not activeGenerators[gen] or not gen:IsDescendantOf(workspace) then
+                cleanupGeneratorData(gen)
             end
         end
     else
@@ -349,7 +370,8 @@ local function updatePlayerESP()
                         h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                         h.FillTransparency = 0.5
                         h.OutlineTransparency = 0
-                        h.Parent = get("CoreGui")
+                        local coreGui = get("CoreGui")
+                        if coreGui then h.Parent = coreGui end
                         chamsData[player] = h
                     end
                     chamsData[player].Adornee = char
