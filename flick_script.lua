@@ -79,16 +79,6 @@ local function bypass()
     end
 end
 
-local function get(name)
-    local s = game:GetService(name)
-    if not s then return nil end
-    if cloneref then
-        local success, res = pcall(cloneref, s)
-        return success and res or s
-    end
-    return s
-end
-
 local rs = get("RunService")
 local plrs = get("Players")
 local uis = get("UserInputService")
