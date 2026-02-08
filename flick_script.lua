@@ -144,7 +144,8 @@ end
 
 local Storage = Instance.new("Folder")
 Storage.Name = genName()
-Storage.Parent = get("CoreGui")
+local coreGui = get("CoreGui")
+Storage.Parent = coreGui or game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
 
 local espData = {}
 local chamsData = {}
@@ -303,7 +304,7 @@ local mainLoop = rs.RenderStepped:Connect(function()
 
     if aimbotOn then
         local target = getTarget()
-        if target then
+        if target and target.Parent and target:IsA("BasePart") then
             local targetPos = target.Position
             local camPos = cam.CFrame.Position
             local direction = (targetPos - camPos).Unit
