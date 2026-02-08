@@ -2,61 +2,128 @@ local fallback = "https://raw.githubusercontent.com/nathanathan69420-pixel/PPS/m
 local base = "https://raw.githubusercontent.com/nathanathan69420-pixel/PPS/main/"
 
 local function bypass()
-    if not getrawmetatable or not setreadonly or not newcclosure or not getnamecallmethod then return end
-    
     local g = game
     local lp = g:GetService("Players").LocalPlayer
-    local gm = getrawmetatable(g)
-    local old_nc = gm.__namecall
-    local old_idx = gm.__index
-    local old_ns = gm.__newindex
     
-    setreadonly(gm, false)
+    if not hookmetamethod or not getrawmetatable or not setreadonly then return end
     
-    gm.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        local args = {...}
+    local blockedServices = {
+        VirtualInputManager = true,
+        HttpService = true,
+        TeleportService = true,
+        GuiService = true,
+        MessageBusService = true,
+        AnalyticsService = true,
+        ScriptContext = true
+    }
+    
+    local blockedIndexes = {
+        Drawing = true,
+        VirtualInputManager = true,
+        HttpService = true,
+        TeleportService = true,
+        GuiService = true,
+        PreloadAsync = true
+    }
+    
+    local serviceCache = {}
+    local folderCache = {}
+    
+    local function getFolder(name)
+        if not folderCache[name] then
+            local f = Instance.new("Folder")
+            f.Name = name
+            folderCache[name] = f
+        end
+        return folderCache[name]
+    end
+    
+    local oldIndex
+    oldIndex = hookmetamethod(g, "__index", function(self, key)
         if not checkcaller() then
-            if method == "Kick" and self == lp then return nil end
-            if method == "GetService" or method == "getService" then
-                local s = args[1]
-                if s == "VirtualInputManager" or s == "HttpService" or s == "TeleportService" or s == "GuiService" then
-                    return Instance.new("Folder")
+            if blockedIndexes[key] then
+                return nil
+            end
+            if key == "GetService" or key == "getService" then
+                return function(s, n)
+                    if blockedServices[n] then
+                        return getFolder(n)
+                    end
+                    if serviceCache[n] then
+                        return serviceCache[n]
+                    end
+                    local r = oldIndex(self, key)(s, n)
+                    serviceCache[n] = r
+                    return r
                 end
             end
-            if method == "OpenBrowserWindow" or method == "OpenVideo" then return nil end
         end
-        return old_nc(self, ...)
+        return oldIndex(self, key)
     end)
     
-    gm.__index = newcclosure(function(self, k)
+    local oldNamecall
+    oldNamecall = hookmetamethod(g, "__namecall", function(self, ...)
+        local m = getnamecallmethod()
+        local a = {...}
+        
         if not checkcaller() then
-            if k == "Drawing" or k == "VirtualInputManager" or k == "HttpService" or k == "TeleportService" or k == "GuiService" then
-                return Instance.new("Folder")
+            if m == "Kick" and self == lp then
+                return task.wait(9e9)
+            end
+            
+            if (m == "GetService" or m == "getService") and #a > 0 then
+                local s = a[1]
+                if blockedServices[s] then
+                    return getFolder(s)
+                end
+            end
+            
+            if m == "OpenBrowserWindow" or m == "OpenVideo" then
+                return nil
+            end
+            
+            if m == "PreloadAsync" then
+                return nil
+            end
+            
+            if m == "GetLogHistory" or m == "SaveLog" then
+                return {}
             end
         end
-        return old_idx(self, k)
+        
+        return oldNamecall(self, ...)
     end)
     
-    gm.__newindex = newcclosure(function(self, k, v)
+    local oldNewIndex
+    oldNewIndex = hookmetamethod(g, "__newindex", function(self, key, value)
         if not checkcaller() then
-            if k == "Enabled" and (self:IsA("Script") or self:IsA("LocalScript")) then
+            if key == "Enabled" and typeof(self) == "Instance" and (self:IsA("Script") or self:IsA("LocalScript")) then
                 return
             end
         end
-        return old_ns(self, k, v)
+        return oldNewIndex(self, key, value)
     end)
     
-    setreadonly(gm, true)
-    
-    local oldHttpGet = g.HttpGet
-    g.HttpGet = function(self, url, ...)
-        if not checkcaller() then 
-            local success, result = pcall(oldHttpGet, self, url, ...)
-            return success and result or ""
-        end
-        return oldHttpGet(self, url, ...)
+    if hookfunction then
+        local oldGetService = hookfunction(lp.GetService, function(s, n)
+            if blockedServices[n] then
+                return getFolder(n)
+            end
+            return oldGetService(s, n)
+        end)
     end
+    
+    local mt = getrawmetatable(g)
+    if mt and setreadonly then
+        setreadonly(mt, true)
+    end
+    
+    task.spawn(function()
+        while task.wait(math.random(30, 60)) do
+            folderCache = {}
+            serviceCache = {}
+        end
+    end)
 end
 
 pcall(bypass)
