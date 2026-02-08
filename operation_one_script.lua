@@ -118,7 +118,8 @@ end
 
 local Storage = Instance.new("Folder")
 Storage.Name = genName()
-Storage.Parent = get("CoreGui")
+local coreGui = get("CoreGui")
+Storage.Parent = coreGui or game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
 
 local screensize = cam.ViewportSize
 local screenpositions = {
@@ -381,7 +382,10 @@ local mainLoop = rs.RenderStepped:Connect(function()
         alive[e.Name] = true
         mainESP(e)
     end
+    local activeDrones = {}
+    local activeDrones = {}
     for _, d in pairs(drones) do
+        activeDrones[d] = true
         drone_esp(d)
     end
 
@@ -389,7 +393,16 @@ local mainLoop = rs.RenderStepped:Connect(function()
         if not alive[name] then removeplr(name) end
     end
     for drone, _ in pairs(espdrones) do
-        if not drone or not drone:IsDescendantOf(workspace) or not Toggles.DroneESP.Value then
+        if not drone or not drone:IsDescendantOf(workspace) or not Toggles.DroneESP.Value or not activeDrones[drone] then
+            removedrone(drone)
+        end
+    end
+
+    for name, _ in pairs(espboxes) do
+        if not alive[name] then removeplr(name) end
+    end
+    for drone, _ in pairs(espdrones) do
+        if not drone or not drone:IsDescendantOf(workspace) or not Toggles.DroneESP.Value or not activeDrones[drone] then
             removedrone(drone)
         end
     end
