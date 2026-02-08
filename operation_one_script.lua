@@ -139,8 +139,16 @@ local function removeplr(name)
 end
 
 local function removedrone(drone)
-    if espdrones[drone] then espdrones[drone]:Remove() espdrones[drone] = nil end
-    if espdroneoutlines[drone] then espdroneoutlines[drone]:Remove() espdroneoutlines[drone] = nil end
+    if drone then
+        if espdrones[drone] then
+            espdrones[drone]:Remove()
+            espdrones[drone] = nil
+        end
+        if espdroneoutlines[drone] then
+            espdroneoutlines[drone]:Remove()
+            espdroneoutlines[drone] = nil
+        end
+    end
 end
 
 local function getenemies()
