@@ -1,25 +1,74 @@
+local function bypass()
+    local g = game
+    local lp = g:GetService("Players").LocalPlayer
+    if not getrawmetatable or not setreadonly or not newcclosure or not getnamecallmethod then return end
+    
+    local gm = getrawmetatable(g)
+    local old_nc = gm.__namecall
+    local old_idx = gm.__index
+    local old_ns = gm.__newindex
+    
+    setreadonly(gm, false)
+    
+    gm.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        if not checkcaller() then
+            if method == "Kick" and self == lp then return nil end
+            if method == "GetService" or method == "getService" then
+                local s = select(1, ...)
+                if s == "HttpService" or s == "TeleportService" or s == "GuiService" then
+                    return Instance.new("Folder")
+                end
+            end
+        end
+        return old_nc(self, ...)
+    end)
+    
+    gm.__index = newcclosure(function(self, k)
+        if not checkcaller() then
+            if k == "HttpService" or k == "TeleportService" or k == "GuiService" then
+                return Instance.new("Folder")
+            end
+        end
+        return old_idx(self, k)
+    end)
+    
+    gm.__newindex = newcclosure(function(self, k, v)
+        if not checkcaller() then
+            if k == "Enabled" and (self:IsA("Script") or self:IsA("LocalScript")) then
+                return
+            end
+        end
+        return old_ns(self, k, v)
+    end)
+    
+    setreadonly(gm, true)
+end
+
+pcall(bypass)
+
 local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/"
 local lib = loadstring(game:HttpGet(repo .. "Library.lua"))()
+if not lib then error("Failed to load Library.lua") end
 local theme = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+if not theme then error("Failed to load ThemeManager.lua") end
 local save = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
+if not save then error("Failed to load SaveManager.lua") end
 
 local rs = game:GetService("RunService")
 local plrs = game:GetService("Players")
+local uis = game:GetService("UserInputService")
 local lp = plrs.LocalPlayer
+local cam = workspace.CurrentCamera
+
+local ts, os = lib.Toggles, lib.Options
 
 theme.BuiltInThemes["Default"][2] = {
-    BackgroundColor = "16293a",
-    MainColor = "26445f",
-    AccentColor = "5983a0",
-    OutlineColor = "325573",
-    FontColor = "d2dae1"
+    BackgroundColor = "16293a", MainColor = "26445f", AccentColor = "5983a0", OutlineColor = "325573", FontColor = "d2dae1"
 }
 
 local win = lib:CreateWindow({
-    Title = "Axis Hub - Volleyball.lua",
-    Footer = "by RwalDev & Plow | 1.9.7 | Discord: .gg/UuyxhqgEVs",
-    NotifySide = "Right",
-    ShowCustomCursor = true,
+    Title = "Axis Hub - Volleyball.lua", Footer = "by RwalDev & Plow | 1.9.7 | Discord: .gg/UuyxhqgEVs", NotifySide = "Right", ShowCustomCursor = true,
 })
 
 local home = win:AddTab("Home", "house")
@@ -38,96 +87,59 @@ status:AddButton({ Text = "Unload", Func = function() lib:Unload() end })
 local fpsLbl = stats:AddLabel("FPS: ...", true)
 local pingLbl = stats:AddLabel("Ping: ...", true)
 
-local balls = {}
 local enabled = false
 local size = 10
 local trans = 0.5
+local hitbox_circle
 
-local function cleanup(b)
-    if balls[b] then
-        if balls[b].vis then balls[b].vis:Destroy() end
-        if balls[b].box then balls[b].box:Destroy() end
-        balls[b] = nil
+local function draw_circle()
+    if hitbox_circle then hitbox_circle:Remove() end
+    hitbox_circle = Drawing.new("Circle")
+    hitbox_circle.Color = Color3.fromRGB(100, 200, 255)
+    hitbox_circle.Thickness = 2
+    hitbox_circle.NumSides = 32
+    hitbox_circle.Filled = false
+    hitbox_circle.Visible = false
+end
+
+draw_circle()
+
+local function get_closest_ball()
+    if not enabled then return end
+    local mouse_pos = uis:GetMouseLocation()
+    local ray_origin = cam.CFrame.Position
+    local ray_direction = (cam:ScreenPointToRay(mouse_pos.X, mouse_pos.Y).Direction).Unit * 1000
+    
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.FilterDescendantsInstances = {lp.Character}
+    
+    local result = workspace:Spherecast(ray_origin, size, ray_direction, params)
+    if result and result.Instance and result.Instance.Name:sub(1, 12) == "CLIENT_BALL_" then
+        return result.Instance
     end
 end
 
-local function expand(b)
-    if not b or not b:IsA("BasePart") then return end
-    if not balls[b] then balls[b] = {} end
-    local info = balls[b]
-    if not info.box then
-        local p = Instance.new("Part")
-        p.Name = "ExpandedHitbox"
-        p.Shape = Enum.PartType.Ball
-        p.CanCollide = false
-        p.Massless = true
-        p.Transparency = 1
-        p.Parent = b
-        local w = Instance.new("WeldConstraint")
-        w.Part0, w.Part1, w.Parent = b, p, p
-        info.box = p
-    end
-    if not info.vis then
-        local v = Instance.new("Part")
-        v.Name = "HitboxVisual"
-        v.Shape = Enum.PartType.Ball
-        v.CanCollide = false
-        v.Massless = true
-        v.Material = Enum.Material.ForceField
-        v.Color = Color3.fromRGB(100, 200, 255)
-        v.Parent = b
-        local w = Instance.new("WeldConstraint")
-        w.Part0, w.Part1, w.Parent = b, v, v
-        info.vis = v
-    end
-    info.box.Size = Vector3.new(size, size, size)
-    info.vis.Size = Vector3.new(size, size, size)
-    info.vis.Transparency = trans
-end
-
-local function scan()
-    for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and obj.Name:sub(1, 12) == "CLIENT_BALL_" then
-            if enabled then expand(obj) else cleanup(obj) end
+local function update_visualizer()
+    if not enabled or not hitbox_circle then return end
+    
+    local ball = get_closest_ball()
+    if ball then
+        local screen_pos = cam:WorldToViewportPoint(ball.Position)
+        if screen_pos.Z > 0 then
+            hitbox_circle.Position = Vector2.new(screen_pos.X, screen_pos.Y)
+            hitbox_circle.Radius = size * (cam.ViewportSize.Y / (2 * math.tan(math.rad(cam.FieldOfView / 2))))
+            hitbox_circle.Visible = true
+        else
+            hitbox_circle.Visible = false
         end
+    else
+        hitbox_circle.Visible = false
     end
-end
-
-local loop, added, removing
-local function start()
-    scan()
-    loop = rs.Heartbeat:Connect(function()
-        for b, info in pairs(balls) do
-            if b and b.Parent then
-                info.box.Size = Vector3.new(size, size, size)
-                info.vis.Size = Vector3.new(size, size, size)
-                info.vis.Transparency = trans
-            else
-                cleanup(b)
-            end
-        end
-    end)
-    added = workspace.DescendantAdded:Connect(function(obj)
-        if obj:IsA("BasePart") and obj.Name:sub(1, 12) == "CLIENT_BALL_" then
-            task.wait(0.1)
-            if enabled then expand(obj) end
-        end
-    end)
-    removing = workspace.DescendantRemoving:Connect(function(obj)
-        if obj:IsA("BasePart") and obj.Name:sub(1, 12) == "CLIENT_BALL_" then cleanup(obj) end
-    end)
-end
-
-local function stop()
-    if loop then loop:Disconnect() loop = nil end
-    if added then added:Disconnect() added = nil end
-    if removing then removing:Disconnect() removing = nil end
-    for b, _ in pairs(balls) do cleanup(b) end
 end
 
 funcs:AddToggle("Hitbox", { Text = "Enable Hitbox Expander", Callback = function(v) 
     enabled = v 
-    if v then start() else stop() end 
 end })
 
 funcs:AddSlider("Size", { Text = "Hitbox Size", Default = 10, Min = 5, Max = 20, Callback = function(v) size = v end })
@@ -151,6 +163,7 @@ local conn = rs.RenderStepped:Connect(function(dt)
         pingLbl:SetText("Ping: " .. (net and math.floor(net:GetValue()) or 0) .. " ms")
         frames, elap = 0, 0
     end
+    update_visualizer()
 end)
 
 theme:SetLibrary(lib)
@@ -165,5 +178,5 @@ save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
     if conn then conn:Disconnect() end
-    stop()
+    if hitbox_circle then hitbox_circle:Remove() end
 end)
