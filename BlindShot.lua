@@ -314,7 +314,8 @@ local function updatePlayerESP()
                         h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                         h.FillTransparency = 0.5
                         h.OutlineTransparency = 0
-                        h.Parent = get("CoreGui")
+                        local coreGui = get("CoreGui")
+                        if coreGui then h.Parent = coreGui end
                         chamsData[player] = h
                     end
                     chamsData[player].Adornee = char
@@ -397,7 +398,7 @@ task.spawn(function()
             local char = lp.Character
             if char then
                 local fists = char:FindFirstChild("Fists")
-                if fists then
+                if fists and fists:IsA("Tool") and fists.Parent == char then
                     local remote = fists:FindFirstChild("fistremote")
                     if remote then remote:FireServer("lmb") end
                 end
