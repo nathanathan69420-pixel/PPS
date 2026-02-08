@@ -79,7 +79,9 @@ local debugMode = false
 local lastDetected = ""
 local currentLetter = ""
 local waitingAnimation = 0
-local hudGui = Instance.new("ScreenGui", get("CoreGui"))
+local coreGui = get("CoreGui")
+local hudGui = Instance.new("ScreenGui")
+hudGui.Parent = coreGui or game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
 hudGui.Name = "AXISHUD"
 
 local hudFrame = Instance.new("Frame", hudGui)
@@ -142,8 +144,8 @@ local function downloadWords()
     
     for i, url in ipairs(urls) do
         local success, res = pcall(function()
-            -- Check if HTTP requests are allowed
-            if not isnetworkactive then return nil end
+            -- Check if HTTP requests are allowed by attempting a request
+            if not game:HttpGet then return nil end
             return game:HttpGet(url, true)
         end)
         if success and res and #res > 0 then
