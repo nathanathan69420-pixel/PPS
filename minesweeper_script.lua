@@ -793,7 +793,8 @@ pcall(function()
         oldNamecall = hookmetamethod(game, "__namecall", function(self, ...) 
             local methodValue = getnamecallmethod() 
             if self == rValue and (methodValue == "InvokeServer" or methodValue == "FireServer") then 
-                if Toggles.BypassAnticheat and Toggles.BypassAnticheat.Value then return nil end 
+                local bypassToggle = Toggles.BypassAnticheat
+                if bypassToggle and bypassToggle.Value then return nil end 
             end 
             return oldNamecall(self, ...) 
         end) 
