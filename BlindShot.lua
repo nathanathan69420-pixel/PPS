@@ -189,6 +189,31 @@ visualsBox:AddToggle("EnableChams", { Text = "Chams", Default = false }):AddColo
 local playerESPData = {}
 local chamsData = {}
 
+-- Helper function to clean up all ESP data
+local function cleanupAllESP()
+    for player, data in pairs(playerESPData) do
+        if data.box2D and data.box2D.Remove then
+            data.box2D:Remove()
+        end
+        if data.text and data.text.Remove then
+            data.text:Remove()
+        end
+        if data.box3D then
+            for _, line in ipairs(data.box3D) do
+                if line.Remove then line:Remove() end
+            end
+        end
+    end
+    table.clear(playerESPData)
+    
+    for player, highlight in pairs(chamsData) do
+        if highlight and highlight.Destroy then
+            highlight:Destroy()
+        end
+    end
+    table.clear(chamsData)
+end
+
 local function updatePlayerESP()
     local chams = lib.Toggles.EnableChams and lib.Toggles.EnableChams.Value
     local box = lib.Toggles.EnableBox and lib.Toggles.EnableBox.Value
@@ -431,12 +456,7 @@ save:LoadAutoloadConfig()
 
 lib:OnUnload(function()
     if perfConn then perfConn:Disconnect() end
-    for _, data in pairs(playerESPData) do
-        data.box2D:Remove()
-        data.text:Remove()
-        for _, l in pairs(data.box3D) do l:Remove() end
-    end
-    for _, h in pairs(chamsData) do h:Destroy() end
+    cleanupAllESP()
     workspace.Gravity = 196.2
 end)
 
