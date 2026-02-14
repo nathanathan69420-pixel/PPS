@@ -139,6 +139,7 @@ local scripts = {
     ["6298476159"] = "violence_district_script.lua",
     ["7871169780"] = "minesweeper_script.lua",
     ["114234929420007"] = "bloxstrike_script.lua",
+    ["12355337193"] = "mvs_duels_script.lua",
 }
 
 local function notify(title, msg, dur)

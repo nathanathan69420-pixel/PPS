@@ -68,7 +68,7 @@ theme.BuiltInThemes["Default"][2] = {
 }
 
 local win = lib:CreateWindow({
-    Title = "Axis Hub - Volleyball.lua", Footer = "by RwalDev & Plow | 1.9.8 | Discord: .gg/UuyxhqgEVs", NotifySide = "Right", ShowCustomCursor = true,
+    Title = "Axis Hub - Volleyball.lua", Footer = "by RwalDev & Plow | 1.9.9 | Discord: .gg/UuyxhqgEVs", NotifySide = "Right", ShowCustomCursor = true,
 })
 
 local home = win:AddTab("Home", "house")

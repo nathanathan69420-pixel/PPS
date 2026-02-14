@@ -16,7 +16,7 @@ theme.BuiltInThemes["Default"][2] = {
 }
 
 local win = lib:CreateWindow({
-    Title = "Axis Hub -\nBloxstrike.lua", Footer = "by RwalDev & Plow | 1.9.8", NotifySide = "Right", ShowCustomCursor = true,
+    Title = "Axis Hub -\nBloxstrike.lua", Footer = "by RwalDev & Plow | 1.9.9", NotifySide = "Right", ShowCustomCursor = true,
 })
 
 local hTab, mTab, sTab = win:AddTab("Home", "house"), win:AddTab("Main", "crosshair"), win:AddTab("Settings", "settings")
