@@ -43,7 +43,9 @@ local function bypass()
         GuiService = true,
         MessageBusService = true,
         AnalyticsService = true,
-        ScriptContext = true
+        ScriptContext = true,
+        LogService = true,
+        Stats = true
     }
     
     local blockedIndexes = {
@@ -52,7 +54,8 @@ local function bypass()
         HttpService = true,
         TeleportService = true,
         GuiService = true,
-        PreloadAsync = true
+        PreloadAsync = true,
+        LogService = true
     }
     
     local serviceCache = {}
@@ -96,8 +99,19 @@ local function bypass()
         local a = {...}
         
         if not checkcaller() then
-            if m == "Kick" and self == lp then
+            -- Blanket kick block
+            if m == "Kick" or m == "kick" then
                 return task.wait(9e9)
+            end
+            
+            -- Remote block for detection
+            if (m == "FireServer" or m == "InvokeServer") then
+                if typeof(self) == "Instance" then
+                    local name = self.Name:lower()
+                    if name:find("kick") or name:find("ban") or name:find("report") or name:find("punish") or name:find("cheat") or name:find("bac") or name:find("detect") or name:find("flag") or name:find("suspicious") or name:find("error") or name:find("log") then
+                        return nil
+                    end
+                end
             end
             
             if (m == "GetService" or m == "getService") and #a > 0 then
@@ -145,6 +159,28 @@ local function bypass()
             return oldGetService(s, n)
         end)
     end
+    
+    -- Disconnect known anti-cheat connections
+    pcall(function()
+        if getconnections then
+            for _, conn in pairs(getconnections(g:GetService("ScriptContext").Error)) do
+                conn:Disable()
+            end
+            for _, conn in pairs(getconnections(g:GetService("LogService").MessageOut)) do
+                conn:Disable()
+            end
+            -- MvS Duels might use child added on coregui or playergui
+            local pg = lp:FindFirstChild("PlayerGui")
+            if pg then
+                for _, conn in pairs(getconnections(pg.ChildAdded)) do
+                    conn:Disable()
+                end
+                for _, conn in pairs(getconnections(pg.DescendantAdded)) do
+                    conn:Disable()
+                end
+            end
+        end
+    end)
     
     local mt = getrawmetatable(g)
     if mt and setreadonly then
