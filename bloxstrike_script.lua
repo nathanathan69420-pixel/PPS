@@ -42,6 +42,23 @@ visuals:AddToggle("HeadESP", { Text = "Head ESP", Default = false })
 
 local heads, boxes, skeletons, chams, proxies = {}, {}, {}, {}, {}
 
+local function cleanup(plr)
+    if heads[plr] then heads[plr]:Remove() heads[plr] = nil end
+    if boxes[plr] then
+        boxes[plr].b2d:Remove()
+        for _, l in pairs(boxes[plr].b3d) do l:Remove() end
+        boxes[plr] = nil
+    end
+    if skeletons[plr] then
+        for _, l in pairs(skeletons[plr]) do l:Remove() end
+        skeletons[plr] = nil
+    end
+    if chams[plr] then chams[plr]:Destroy() chams[plr] = nil end
+    if proxies[plr] then proxies[plr]:Destroy() proxies[plr] = nil end
+end
+
+plrs.PlayerRemoving:Connect(cleanup)
+
 local BONE_PAIRS = {
     {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
     {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
@@ -246,24 +263,25 @@ local loop = rs.RenderStepped:Connect(function()
                 heads[plr] = draw("Circle", { Thickness = 1, NumSides = 12, Radius = 5, Filled = true, Visible = false })
             end
             local head = char:FindFirstChild("Head")
-            if head then
-                local pos, vis = cam:WorldToViewportPoint(head.Position)
-                heads[plr].Position = Vector2.new(pos.X, pos.Y)
-                heads[plr].Color = Color3.new(1, 0, 0)
-                heads[plr].Visible = vis
-            else
-                heads[plr].Visible = false
-            end
-        elseif heads[plr] then
+        if head then
+            local pos, vis = cam:WorldToViewportPoint(head.Position)
+            heads[plr].Position = Vector2.new(pos.X, pos.Y)
+            heads[plr].Color = Color3.new(1, 0, 0)
+            heads[plr].Visible = vis
+        else
             heads[plr].Visible = false
         end
+    elseif heads[plr] then
+        heads[plr].Visible = false
+    end
 
-        if ts.BoxESP and ts.BoxESP.Value then
-            if not boxes[plr] then
-                boxes[plr] = { b2d = draw("Square", { Thickness = 1, Filled = false, Visible = false }), b3d = {} }
-            end
-            local cf, sz = char:GetBoundingBox()
-            if os.BoxType.Value == "2D" then
+    if ts.BoxESP and ts.BoxESP.Value then
+        if not boxes[plr] then
+            boxes[plr] = { b2d = draw("Square", { Thickness = 1, Filled = false, Visible = false }), b3d = {} }
+        end
+        local cf, sz = char:GetBoundingBox()
+        if not cf or not sz then return end
+        if os.BoxType.Value == "2D" then
                 for _, l in pairs(boxes[plr].b3d) do l.Visible = false end
                 local t, on1 = cam:WorldToViewportPoint((cf * CFrame.new(0, sz.Y/2, 0)).Position)
                 local bot, on2 = cam:WorldToViewportPoint((cf * CFrame.new(0, -sz.Y/2, 0)).Position)
@@ -306,26 +324,26 @@ local loop = rs.RenderStepped:Connect(function()
         end
 
         if ts.SkeletonESP and ts.SkeletonESP.Value then
-            if not skeletons[plr] then skeletons[plr] = {} end
-            for i, pair in ipairs(BONE_PAIRS) do
-                if not skeletons[plr][i] then
-                    skeletons[plr][i] = draw("Line", { Thickness = 1, Color = Color3.new(1,1,1), Visible = false })
-                end
-                local b1, b2 = char:FindFirstChild(pair[1]), char:FindFirstChild(pair[2])
-                if b1 and b2 then
-                    local p1, v1 = cam:WorldToViewportPoint(b1.Position)
-                    local p2, v2 = cam:WorldToViewportPoint(b2.Position)
-                    skeletons[plr][i].From = Vector2.new(p1.X, p1.Y)
-                    skeletons[plr][i].To = Vector2.new(p2.X, p2.Y)
-                    skeletons[plr][i].Visible = v1 and v2
-                else
-                    skeletons[plr][i].Visible = false
-                end
+        if not skeletons[plr] then skeletons[plr] = {} end
+        for i, pair in ipairs(BONE_PAIRS) do
+            if not skeletons[plr][i] then
+                skeletons[plr][i] = draw("Line", { Thickness = 1, Color = Color3.new(1,1,1), Visible = false })
             end
-        elseif skeletons[plr] then
-            for _, l in pairs(skeletons[plr]) do l.Visible = false end
+            local b1, b2 = char:FindFirstChild(pair[1]), char:FindFirstChild(pair[2])
+            if b1 and b2 then
+                local p1, v1 = cam:WorldToViewportPoint(b1.Position)
+                local p2, v2 = cam:WorldToViewportPoint(b2.Position)
+                skeletons[plr][i].From = Vector2.new(p1.X, p1.Y)
+                skeletons[plr][i].To = Vector2.new(p2.X, p2.Y)
+                skeletons[plr][i].Visible = v1 and v2
+            else
+                skeletons[plr][i].Visible = false
+            end
         end
+    elseif skeletons[plr] then
+        for _, l in pairs(skeletons[plr]) do l.Visible = false end
     end
+end
 end)
 
 cfgBox:AddToggle("KeyMenu", { Default = lib.KeybindFrame.Visible, Text = "Keybind Menu", Callback = function(v) lib.KeybindFrame.Visible = v end })
